@@ -47,9 +47,12 @@ export default function Home() {
             votre marque.
           </p>
           <div className="flex flex-wrap gap-3">
-            <span className="rounded-lg bg-emerald-300 px-5 py-3 text-sm font-bold text-emerald-950">
-              Premier scan bientôt disponible
-            </span>
+            <a
+              href="/sign-in"
+              className="rounded-lg bg-emerald-300 px-5 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-200"
+            >
+              Accéder au pilote
+            </a>
             <a
               href="/api/health"
               className="rounded-lg border border-white/15 px-5 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:text-white"
