@@ -1,9 +1,9 @@
 import * as dbSchema from "@agency-saas/db";
-import { createDatabase } from "@agency-saas/db";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
+import { db } from "./database";
 import { sendAuthOtpEmail } from "./email";
 
 function requiredEnv(name: string): string {
@@ -13,9 +13,6 @@ function requiredEnv(name: string): string {
   }
   return value;
 }
-
-const databaseUrl = requiredEnv("DATABASE_URL");
-const { db } = createDatabase(databaseUrl);
 
 const authSchema = {
   users: dbSchema.users,
