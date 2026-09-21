@@ -152,6 +152,13 @@ export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
   const startedAt = performance.now();
 
   return new Promise<RawProbeResponse>((resolve, reject) => {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const clearRequestTimeout = () => {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    };
+
     const request = transport.request(
       target.url,
       {
@@ -176,17 +183,22 @@ export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
           tls,
         };
 
+        clearRequestTimeout();
         response.destroy();
         resolve(result);
       },
     );
 
-    request.setTimeout(timeoutMs, () => {
+    timeoutHandle = setTimeout(() => {
       const error = new Error("HTTP probe timed out") as NodeJS.ErrnoException;
       error.code = "ETIMEDOUT";
       request.destroy(error);
+    }, timeoutMs);
+
+    request.once("error", (error) => {
+      clearRequestTimeout();
+      reject(error);
     });
-    request.once("error", reject);
     request.end();
   });
 };
@@ -212,12 +224,15 @@ function networkFailure(
       ? error.code
       : null;
 
+  const isTlsError =
+    code !== null &&
+    (tlsErrorCodes.has(code) ||
+      code.startsWith("ERR_TLS_") ||
+      code.includes("CERT") ||
+      code.startsWith("UNABLE_TO_"));
+
   const kind =
-    code === "ETIMEDOUT"
-      ? "timeout"
-      : code && tlsErrorCodes.has(code)
-        ? "tls"
-        : "network";
+    code === "ETIMEDOUT" ? "timeout" : isTlsError ? "tls" : "network";
 
   return {
     ok: false,

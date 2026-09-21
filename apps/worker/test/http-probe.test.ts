@@ -178,3 +178,25 @@ describe("probeHttpTarget", () => {
     });
   });
 });
+
+describe("probe failure classification", () => {
+  it("classifies certificate failures as TLS errors", async () => {
+    const requester: HttpRequester = async () => {
+      const error = new Error("certificate detail") as NodeJS.ErrnoException;
+      error.code = "CERT_NOT_YET_VALID";
+      throw error;
+    };
+
+    const result = await probeHttpTarget("https://example.com", {
+      resolver: publicResolver,
+      requester,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      targetUrl: "https://example.com/",
+      redirects: [],
+      error: { kind: "tls", code: "CERT_NOT_YET_VALID" },
+    });
+  });
+});
