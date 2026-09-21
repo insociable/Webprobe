@@ -1,0 +1,32 @@
+{
+  "name": "agency-saas",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose --env-file .env -f infra/compose.yaml up -d",
+    "infra:down": "docker compose --env-file .env -f infra/compose.yaml down",
+    "infra:logs": "docker compose --env-file .env -f infra/compose.yaml logs -f"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2",
+    "turbo": "2.11.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "msgpackr-extract",
+      "unrs-resolver"
+    ]
+  }
+}
