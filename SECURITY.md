@@ -42,6 +42,27 @@ Le groupe Unix `docker` confère pratiquement les privilèges root.
 La connexion SSH par mot de passe est temporairement conservée jusqu'à ce
 qu'une clé soit installée et testée. Le compte root n'est pas autorisé en SSH.
 
+## Authentification du pilote
+
+L'authentification applicative utilise un OTP envoyé par e-mail, sans mot de
+passe géré par le SaaS. Les OTP expirent après cinq minutes, sont limités à trois
+essais et sont stockés sous forme hachée. L'envoi est limité à trois demandes
+par minute et par client au niveau de Better Auth. Les adresses e-mail sont
+normalisées avant recherche et création.
+
+Mailpit est uniquement un transport de développement. La limitation de débit
+actuelle utilise la mémoire du processus et devra passer sur un stockage partagé
+avant tout déploiement multi-instance.
+
+## Dépendances connues
+
+`pnpm audit --prod` signale actuellement `GHSA-67mh-4wv8-2f99`, de sévérité
+modérée, sur `esbuild 0.18.20` via l'outillage `drizzle-kit`. Cette alerte concerne
+le serveur de développement esbuild. Ce serveur n'est ni utilisé ni exposé par
+le SaaS, et les services de développement restent liés à `127.0.0.1`. Le paquet
+parent impose `esbuild ~0.18.20`; aucun override incompatible n'est appliqué.
+Cette dépendance doit être réévaluée lors des mises à jour de Drizzle.
+
 ## Limites du produit
 
 Ce service détecte des défauts observables d'un site web. Il ne constitue ni un

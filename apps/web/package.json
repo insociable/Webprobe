@@ -10,13 +10,18 @@
   },
   "dependencies": {
     "@agency-saas/db": "workspace:*",
+    "@better-auth/drizzle-adapter": "1.7.5",
+    "@better-auth/utils": "0.4.2",
+    "better-auth": "1.7.5",
     "next": "16.3.5",
+    "nodemailer": "10.0.10",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.10.1",
+    "@types/nodemailer": "8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -3,7 +3,18 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "dist/**"]
+      "outputs": [".next/**", "dist/**"],
+      "env": ["BETTER_AUTH_URL"],
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "BETTER_AUTH_SECRET",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_FROM",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "SMTP_SECURE"
+      ]
     },
     "dev": {
       "cache": false,

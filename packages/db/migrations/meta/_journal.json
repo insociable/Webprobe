@@ -15,6 +15,13 @@
       "when": 1790023505690,
       "tag": "0001_last_carmella_unuscione",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790025008571,
+      "tag": "0002_gifted_revanche",
+      "breakpoints": true
     }
   ]
 }
