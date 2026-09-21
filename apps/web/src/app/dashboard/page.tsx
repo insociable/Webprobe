@@ -1,16 +1,21 @@
-import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
-import { SignOutButton } from "./sign-out-button";
+import { requireCurrentSession } from "@/lib/current-session";
+import { getUserMemberships } from "@/lib/membership-context";
+import { SignOutButton } from "@/components/sign-out-button";
+
+const roleLabels = {
+  owner: "Propriétaire",
+  admin: "Administrateur",
+  member: "Membre",
+} as const;
 
 export default async function DashboardPage() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const session = await requireCurrentSession();
+  const userMemberships = await getUserMemberships(session.user.id);
 
-  if (!session) {
-    redirect("/sign-in");
+  if (userMemberships.length === 0) {
+    redirect("/onboarding");
   }
 
   return (
@@ -36,8 +41,8 @@ export default async function DashboardPage() {
             Bonjour {session.user.name}
           </h1>
           <p className="mt-4 max-w-xl leading-7 text-white/55">
-            Votre espace est protégé par une session validée côté serveur.
-            L’étape suivante reliera ici vos organisations et leurs sites.
+            Votre session et vos droits d’organisation sont vérifiés côté
+            serveur avant l’affichage de cet espace.
           </p>
         </div>
 
@@ -52,13 +57,29 @@ export default async function DashboardPage() {
         </aside>
       </section>
 
-      <section className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-8">
-        <p className="text-sm text-white/45">
-          Aucune organisation affichée ici pour le moment.
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-          La couche organisation / sites arrive ensuite.
-        </h2>
+      <section className="space-y-4">
+        <div>
+          <p className="text-sm text-white/45">Organisations autorisées</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            Vos espaces
+          </h2>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {userMemberships.map((membership) => (
+            <article
+              key={membership.membershipId}
+              className="rounded-2xl border border-white/10 bg-white/[0.035] p-6"
+            >
+              <p className="text-lg font-semibold">
+                {membership.organizationName}
+              </p>
+              <p className="mt-2 text-sm text-white/45">
+                {roleLabels[membership.role]}
+              </p>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );
