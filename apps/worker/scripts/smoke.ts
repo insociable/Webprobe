@@ -53,10 +53,15 @@ try {
     throw new Error("Private target was unexpectedly accepted");
   }
 
+  if (!publicResult.http?.ok) {
+    throw new Error("Public target probe did not succeed");
+  }
+
   console.log(
     JSON.stringify({
       ok: true,
-      publicTarget: publicResult.targetUrl,
+      publicTarget: publicResult.http.finalUrl,
+      publicStatus: publicResult.http.statusCode,
       privateTargetRejected,
     }),
   );

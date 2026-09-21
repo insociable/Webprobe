@@ -7,7 +7,7 @@ import {
   ScanJobSchema,
   type ScanJob,
 } from "@agency-saas/contracts";
-import { assertPublicHttpUrl } from "@agency-saas/security";
+import { probeHttpTarget } from "./http-probe.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 
@@ -26,22 +26,25 @@ const worker = new Worker<ScanJob>(
   SCAN_QUEUE_NAME,
   async (job) => {
     const payload = ScanJobSchema.parse(job.data);
-    const target = await assertPublicHttpUrl(payload.targetUrl);
+    const httpProbe = await probeHttpTarget(payload.targetUrl);
 
     logger.info(
       {
         jobId: job.id,
         scanId: payload.scanId,
-        hostname: target.hostname,
-        addresses: target.addresses,
+        ok: httpProbe.ok,
+        statusCode: httpProbe.ok ? httpProbe.statusCode : undefined,
+        failureKind: httpProbe.ok ? undefined : httpProbe.error.kind,
+        redirects: httpProbe.redirects.length,
       },
-      "scan target accepted",
+      "HTTP probe completed",
     );
 
     return {
       scanId: payload.scanId,
-      acceptedAt: new Date().toISOString(),
-      targetUrl: target.url.toString(),
+      completedAt: new Date().toISOString(),
+      targetUrl: payload.targetUrl,
+      http: httpProbe,
     };
   },
   { connection, concurrency: 2 },
