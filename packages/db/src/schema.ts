@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -34,6 +36,34 @@ export const severity = pgEnum("severity", [
   "critical",
 ]);
 
+export const organizationRole = pgEnum("organization_role", [
+  "owner",
+  "admin",
+  "member",
+]);
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: text("email").notNull(),
+    displayName: text("display_name"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("users_email_unique").on(table.email),
+    check(
+      "users_email_normalized",
+      sql`${table.email} = lower(btrim(${table.email}))`,
+    ),
+  ],
+);
+
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -44,6 +74,30 @@ export const organizations = pgTable("organizations", {
     .defaultNow()
     .notNull(),
 });
+
+export const memberships = pgTable(
+  "memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: organizationRole("role").default("member").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("memberships_org_user_unique").on(
+      table.organizationId,
+      table.userId,
+    ),
+    index("memberships_user_idx").on(table.userId),
+  ],
+);
 
 export const sites = pgTable(
   "sites",
