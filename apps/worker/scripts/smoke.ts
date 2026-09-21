@@ -5,7 +5,12 @@ import { SCAN_QUEUE_NAME } from "@agency-saas/contracts";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 
-const redisUrl = new URL(process.env.REDIS_URL);
+const redisUrlValue = process.env.REDIS_URL;
+if (!redisUrlValue) {
+  throw new Error("REDIS_URL is required");
+}
+
+const redisUrl = new URL(redisUrlValue);
 const connection = {
   host: redisUrl.hostname,
   port: Number(redisUrl.port || 6379),
