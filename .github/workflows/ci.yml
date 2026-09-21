@@ -17,15 +17,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: pnpm
       - name: Enable pnpm
         run: |
           corepack enable
           corepack prepare pnpm@10.17.1 --activate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
