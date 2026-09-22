@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getUserMemberships } from "@/lib/membership-context";
 import { SignOutButton } from "@/components/sign-out-button";
+import { OrganizationForm } from "./organization-form";
 
 export default async function OnboardingPage() {
   const session = await requireCurrentSession();
@@ -41,15 +42,16 @@ export default async function OnboardingPage() {
 
         <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.035] p-7">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
-            Prochaine étape
+            Première organisation
           </p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-            Créer l’organisation et attribuer le rôle propriétaire
+            Créez votre espace agence
           </h2>
           <p className="mt-3 max-w-2xl leading-7 text-white/50">
-            La création sera effectuée en une seule transaction : organisation
-            puis membership propriétaire pour votre utilisateur courant.
+            La création est atomique : l’organisation et votre rôle propriétaire
+            sont enregistrés ensemble.
           </p>
+          <OrganizationForm />
         </div>
       </section>
     </main>
