@@ -47,6 +47,7 @@ const worker = new Worker<ScanJob>(
         statusCode: result.http.ok ? result.http.statusCode : undefined,
         failureKind: result.http.ok ? undefined : result.http.error.kind,
         redirects: result.http.redirects.length,
+        pagesVisited: result.pagesVisited,
         findings: result.findings.length,
       },
       "scan completed",

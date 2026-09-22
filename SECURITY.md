@@ -75,6 +75,10 @@ activé. Chaque session crée un proxy HTTP local éphémère obligatoire :
 Le smoke navigateur démarre également un serveur sentinelle sur loopback et
 vérifie qu'un Chromium ayant accès à un site public ne peut pas l'atteindre.
 
+Les contrôles navigateur ne persistent pas les messages JavaScript, piles
+d'erreur, sélecteurs axe ou extraits DOM. Les résultats conservés sont limités
+aux URLs de rapport sans query/fragment, codes/règles, impacts et compteurs.
+
 Cette défense vise le contenu web hostile dans le pilote privé. Elle ne remplace
 pas une politique egress noyau/conteneur face à une hypothétique évasion complète
 du sandbox Chromium ; cette couche restera requise avant une exposition de

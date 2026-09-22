@@ -12,7 +12,7 @@ export type GeneratedFinding = {
   evidence: Record<string, unknown>;
 };
 
-function fingerprint(
+export function createFindingFingerprint(
   category: FindingCategory,
   code: string,
   pageUrl: string,
@@ -27,7 +27,11 @@ function finding(
 ): GeneratedFinding {
   return {
     ...input,
-    fingerprint: fingerprint(input.category, input.code, input.pageUrl),
+    fingerprint: createFindingFingerprint(
+      input.category,
+      input.code,
+      input.pageUrl,
+    ),
   };
 }
 
