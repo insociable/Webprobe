@@ -140,6 +140,7 @@ describeDatabase("scan history tenant scoping", () => {
           severity: "medium",
         }),
       ]);
+      expect(details?.comparison).toBeNull();
 
       await expect(
         getScanDetailsForSite(
@@ -149,6 +150,136 @@ describeDatabase("scan history tenant scoping", () => {
           fixture.scanIds[1]!,
         ),
       ).resolves.toBeNull();
+    } finally {
+      await cleanupFixture(fixture.organizationId, fixture.userId);
+    }
+  });
+
+  it("compares against the immediately previous completed scan of the same site", async () => {
+    const fixture = await createFixture();
+    const previousScanId = randomUUID();
+    const currentScanId = randomUUID();
+
+    try {
+      await db.insert(scans).values([
+        {
+          id: previousScanId,
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteIds[0]!,
+          status: "completed",
+          trigger: "manual",
+          pageCount: 1,
+          queuedAt: new Date("2026-09-22T07:00:00Z"),
+          completedAt: new Date("2026-09-22T07:00:02Z"),
+        },
+        {
+          id: currentScanId,
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteIds[0]!,
+          status: "completed",
+          trigger: "manual",
+          pageCount: 1,
+          queuedAt: new Date("2026-09-22T08:00:00Z"),
+          completedAt: new Date("2026-09-22T08:00:02Z"),
+        },
+      ]);
+
+      const previous = [
+        ["c".repeat(64), "medium", "comparison.worse", "Worse"],
+        ["d".repeat(64), "high", "comparison.better", "Better"],
+        ["e".repeat(64), "low", "comparison.same", "Same"],
+        ["f".repeat(64), "critical", "comparison.gone", "Gone"],
+      ] as const;
+
+      await db.insert(findings).values(
+        previous.map(([fingerprint, severity, code, title]) => ({
+          organizationId: fixture.organizationId,
+          scanId: previousScanId,
+          category: "availability",
+          severity,
+          code,
+          title,
+          pageUrl: "https://example.com/",
+          fingerprint,
+          evidence: {},
+        })),
+      );
+
+      await db.insert(findings).values([
+        {
+          organizationId: fixture.organizationId,
+          scanId: currentScanId,
+          category: "availability",
+          severity: "high",
+          code: "comparison.worse",
+          title: "Worse",
+          pageUrl: "https://example.com/",
+          fingerprint: "c".repeat(64),
+          evidence: {},
+        },
+        {
+          organizationId: fixture.organizationId,
+          scanId: currentScanId,
+          category: "availability",
+          severity: "medium",
+          code: "comparison.better",
+          title: "Better",
+          pageUrl: "https://example.com/",
+          fingerprint: "d".repeat(64),
+          evidence: {},
+        },
+        {
+          organizationId: fixture.organizationId,
+          scanId: currentScanId,
+          category: "availability",
+          severity: "low",
+          code: "comparison.same",
+          title: "Same",
+          pageUrl: "https://example.com/",
+          fingerprint: "e".repeat(64),
+          evidence: {},
+        },
+        {
+          organizationId: fixture.organizationId,
+          scanId: currentScanId,
+          category: "availability",
+          severity: "medium",
+          code: "comparison.new",
+          title: "New",
+          pageUrl: "https://example.com/",
+          fingerprint: "g".repeat(64),
+          evidence: {},
+        },
+      ]);
+
+      const details = await getScanDetailsForSite(
+        fixture.userId,
+        fixture.organizationId,
+        fixture.siteIds[0]!,
+        currentScanId,
+      );
+
+      expect(details?.comparison?.previousScanId).toBe(previousScanId);
+      expect(details?.comparison?.counts).toEqual({
+        new: 1,
+        worsened: 1,
+        improved: 1,
+        unchanged: 1,
+        resolved: 1,
+      });
+      expect(details?.comparison?.changesByFingerprint["c".repeat(64)]).toEqual(
+        {
+          change: "worsened",
+          previousSeverity: "medium",
+        },
+      );
+      expect(details?.comparison?.resolvedFindings).toEqual([
+        expect.objectContaining({
+          fingerprint: "f".repeat(64),
+          severity: "critical",
+          code: "comparison.gone",
+        }),
+      ]);
     } finally {
       await cleanupFixture(fixture.organizationId, fixture.userId);
     }

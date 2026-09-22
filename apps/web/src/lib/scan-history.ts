@@ -1,10 +1,11 @@
 import { findings, scans } from "@agency-saas/db";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
 import { db } from "./database";
 import {
   getSiteForOrganization,
   requireOrganizationAccess,
 } from "./organization-site-service";
+import { compareScanFindings } from "./scan-comparison";
 
 export async function getSiteScanHistory(
   userId: string,
@@ -84,10 +85,52 @@ export async function getScanDetailsForSite(
     )
     .orderBy(findings.createdAt);
 
+  let comparison = null;
+
+  if (scan.status === "completed" && scan.completedAt) {
+    const [previousScan] = await db
+      .select({
+        id: scans.id,
+        completedAt: scans.completedAt,
+      })
+      .from(scans)
+      .where(
+        and(
+          eq(scans.organizationId, organizationId),
+          eq(scans.siteId, siteId),
+          eq(scans.status, "completed"),
+          isNotNull(scans.completedAt),
+          lt(scans.completedAt, scan.completedAt),
+        ),
+      )
+      .orderBy(desc(scans.completedAt), desc(scans.queuedAt))
+      .limit(1);
+
+    if (previousScan) {
+      const previousFindings = await db
+        .select()
+        .from(findings)
+        .where(
+          and(
+            eq(findings.organizationId, organizationId),
+            eq(findings.scanId, previousScan.id),
+          ),
+        )
+        .orderBy(findings.createdAt);
+
+      comparison = {
+        previousScanId: previousScan.id,
+        previousCompletedAt: previousScan.completedAt,
+        ...compareScanFindings(scanFindings, previousFindings),
+      };
+    }
+  }
+
   return {
     access,
     site,
     scan,
     findings: scanFindings,
+    comparison,
   };
 }

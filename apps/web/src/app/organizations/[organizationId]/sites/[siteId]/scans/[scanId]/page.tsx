@@ -42,6 +42,13 @@ const severityRank = {
   info: 1,
 } as const;
 
+const findingChangeLabels = {
+  new: "Nouveau",
+  worsened: "Aggravé",
+  improved: "Amélioré",
+  unchanged: "Inchangé",
+} as const;
+
 function formatDate(value: Date | null): string {
   if (!value) {
     return "—";
@@ -127,6 +134,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const orderedFindings = [...details.findings].sort(
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
+  const comparison = details.comparison;
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8 lg:px-10">
@@ -198,6 +206,49 @@ export default async function ScanPage({ params }: ScanPageProps) {
         ) : null}
       </section>
 
+      {comparison ? (
+        <section className="border-b border-white/10 py-10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm text-white/45">Évolution</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+                Depuis le scan précédent
+              </h2>
+              <p className="mt-2 text-sm text-white/40">
+                Baseline terminée le{" "}
+                {formatDate(comparison.previousCompletedAt)}
+              </p>
+            </div>
+            <Link
+              href={`/organizations/${organizationId}/sites/${siteId}/scans/${comparison.previousScanId}`}
+              className="text-sm text-emerald-300 transition hover:text-emerald-200"
+            >
+              Voir le scan précédent →
+            </Link>
+          </div>
+
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {[
+              ["Nouveaux", comparison.counts.new],
+              ["Aggravés", comparison.counts.worsened],
+              ["Améliorés", comparison.counts.improved],
+              ["Résolus", comparison.counts.resolved],
+              ["Inchangés", comparison.counts.unchanged],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+              >
+                <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                  {label}
+                </dt>
+                <dd className="mt-2 text-2xl font-semibold">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
       <section className="py-10">
         <p className="text-sm text-white/45">Analyse</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -215,6 +266,8 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <div className="mt-6 space-y-4">
             {orderedFindings.map((finding) => {
               const evidence = visibleEvidence(finding.evidence);
+              const change =
+                comparison?.changesByFingerprint[finding.fingerprint];
               return (
                 <article
                   key={finding.id}
@@ -234,9 +287,20 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         </p>
                       ) : null}
                     </div>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">
-                      {severityLabels[finding.severity]}
-                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {change ? (
+                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1 text-xs text-emerald-200">
+                          {findingChangeLabels[change.change]}
+                          {change.previousSeverity &&
+                          change.previousSeverity !== finding.severity
+                            ? ` · ${severityLabels[change.previousSeverity]} → ${severityLabels[finding.severity]}`
+                            : ""}
+                        </span>
+                      ) : null}
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">
+                        {severityLabels[finding.severity]}
+                      </span>
+                    </div>
                   </div>
 
                   {evidence.length > 0 ? (
@@ -259,6 +323,42 @@ export default async function ScanPage({ params }: ScanPageProps) {
             })}
           </div>
         )}
+
+        {comparison && comparison.resolvedFindings.length > 0 ? (
+          <div className="mt-10">
+            <p className="text-sm text-white/45">Rétablissements</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight">
+              {comparison.resolvedFindings.length} finding
+              {comparison.resolvedFindings.length > 1 ? "s" : ""} résolu
+              {comparison.resolvedFindings.length > 1 ? "s" : ""}
+            </h2>
+            <div className="mt-4 space-y-3">
+              {comparison.resolvedFindings.map((finding) => (
+                <article
+                  key={finding.fingerprint}
+                  className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] p-5"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/60">
+                        Résolu · {finding.code}
+                      </p>
+                      <h3 className="mt-2 font-medium">{finding.title}</h3>
+                      {finding.pageUrl ? (
+                        <p className="mt-2 break-all text-sm text-white/40">
+                          {finding.pageUrl}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/55">
+                      Ancienne sévérité : {severityLabels[finding.severity]}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
     </main>
   );
