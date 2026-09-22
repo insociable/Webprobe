@@ -24,46 +24,62 @@ type ValkeyProbeResult = {
   heartbeat: string | null;
 };
 
+let healthDatabase: ReturnType<typeof createDatabase> | null = null;
+
 async function probeDatabase(): Promise<"up" | "down"> {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (!databaseUrl) return "down";
 
-  const { client } = createDatabase(databaseUrl);
   try {
-    await client`select 1 as healthy`;
+    healthDatabase ??= createDatabase(databaseUrl);
+    await healthDatabase.client`select 1 as healthy`;
     return "up";
   } catch {
+    if (healthDatabase) {
+      await healthDatabase.client.end({ timeout: 1 }).catch(() => undefined);
+      healthDatabase = null;
+    }
     return "down";
-  } finally {
-    await client.end({ timeout: 1 });
   }
 }
 
-async function probeValkey(): Promise<ValkeyProbeResult> {
+let healthRedis: Redis | null = null;
+
+function getHealthRedis(): Redis | null {
   const redisUrl = process.env.REDIS_URL?.trim();
-  if (!redisUrl) {
+  if (!redisUrl) return null;
+
+  if (!healthRedis || healthRedis.status === "end") {
+    healthRedis = new Redis(redisUrl, {
+      lazyConnect: true,
+      connectTimeout: 2_000,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      retryStrategy: () => null,
+    });
+  }
+  return healthRedis;
+}
+
+async function probeValkey(): Promise<ValkeyProbeResult> {
+  const redis = getHealthRedis();
+  if (!redis) {
     return { status: "down", heartbeat: null };
   }
 
-  const redis = new Redis(redisUrl, {
-    lazyConnect: true,
-    connectTimeout: 2_000,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    retryStrategy: () => null,
-  });
-
   try {
-    await redis.connect();
+    if (redis.status === "wait") {
+      await redis.connect();
+    }
     await redis.ping();
     return {
       status: "up",
       heartbeat: await redis.get(WORKER_HEALTH_KEY),
     };
   } catch {
-    return { status: "down", heartbeat: null };
-  } finally {
     redis.disconnect();
+    healthRedis = null;
+    return { status: "down", heartbeat: null };
   }
 }
 
@@ -89,12 +105,16 @@ export function parseFreshWorkerHeartbeat(
   }
 }
 
-export async function collectPublicReadiness(
-  now = new Date(),
+const readinessCacheTtlMs = 2_000;
+let cachedReadiness: { expiresAt: number; value: PublicReadiness } | undefined;
+let readinessInFlight: Promise<PublicReadiness> | undefined;
+
+async function collectReadiness(
+  now: Date,
   probes: {
     database?: () => Promise<"up" | "down">;
     valkey?: () => Promise<ValkeyProbeResult>;
-  } = {},
+  },
 ): Promise<PublicReadiness> {
   const [database, valkeyResult] = await Promise.all([
     (probes.database ?? probeDatabase)(),
@@ -121,4 +141,39 @@ export async function collectPublicReadiness(
     checks,
     checkedAt: now.toISOString(),
   };
+}
+
+export async function collectPublicReadiness(
+  now = new Date(),
+  probes: {
+    database?: () => Promise<"up" | "down">;
+    valkey?: () => Promise<ValkeyProbeResult>;
+  } = {},
+): Promise<PublicReadiness> {
+  const hasCustomProbes = Boolean(probes.database || probes.valkey);
+  if (hasCustomProbes) {
+    return collectReadiness(now, probes);
+  }
+
+  const nowMs = now.getTime();
+  if (cachedReadiness && cachedReadiness.expiresAt > nowMs) {
+    return cachedReadiness.value;
+  }
+  if (readinessInFlight) {
+    return readinessInFlight;
+  }
+
+  readinessInFlight = collectReadiness(now, {})
+    .then((value) => {
+      cachedReadiness = {
+        expiresAt: Date.now() + readinessCacheTtlMs,
+        value,
+      };
+      return value;
+    })
+    .finally(() => {
+      readinessInFlight = undefined;
+    });
+
+  return readinessInFlight;
 }

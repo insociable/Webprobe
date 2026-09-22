@@ -4,6 +4,7 @@ import { ProductMark } from "@/components/product-shell";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import { getPublicReportByToken } from "@/lib/public-report-service";
+import { scannerV2Quality } from "@/lib/scanner-v2-quality";
 
 export const metadata: Metadata = {
   title: "Rapport de surveillance",
@@ -31,6 +32,19 @@ const severityStyles = {
   critical: "border-[#a44355] bg-[#301017] text-[#ff7185]",
 } as const;
 
+const scannerV2AnalyzerLabels = {
+  crawl: "Crawl",
+  network: "Réseau",
+  performance: "Performance",
+  seo: "SEO",
+} as const;
+
+const scannerV2StatusLabels = {
+  complete: "Complet",
+  partial: "Partiel",
+  unavailable: "Indisponible",
+} as const;
+
 function formatDate(value: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "long",
@@ -54,6 +68,10 @@ export default async function PublicReportPage({
     (a, b) => rank[b.severity] - rank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(findings);
+  const quality = scannerV2Quality(report.scan.summary);
+  const hasIncompleteAnalysis =
+    quality !== null &&
+    Object.values(quality).some((status) => status !== "complete");
 
   return (
     <main className="min-h-screen">
@@ -110,6 +128,38 @@ export default async function PublicReportPage({
             </div>
           </div>
         </section>
+
+        {quality ? (
+          <section className="border-t border-[#242d40] py-9">
+            <p className="am-kicker">Qualité de l’analyse</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+              Couverture Scanner V2
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
+              Un état partiel ou indisponible décrit la qualité de collecte. Il
+              ne transforme pas le scan en échec.
+            </p>
+            <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Object.entries(quality).map(([analyzer, status]) => (
+                <div
+                  key={analyzer}
+                  className="border border-[#242d40] bg-[#0d111a] p-4"
+                >
+                  <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
+                    {
+                      scannerV2AnalyzerLabels[
+                        analyzer as keyof typeof scannerV2AnalyzerLabels
+                      ]
+                    }
+                  </dt>
+                  <dd className="mt-2 text-sm font-semibold text-[#d5dbe7]">
+                    {scannerV2StatusLabels[status]}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
 
         {counts ? (
           <section className="border-t border-[#242d40] py-9">
@@ -171,7 +221,9 @@ export default async function PublicReportPage({
 
           {findings.length === 0 ? (
             <div className="mt-6 border-l-2 border-[#51d3a5] bg-[#0d1715] p-6 text-[#a9cabb]">
-              Aucun finding enregistré pour ce scan.
+              {hasIncompleteAnalysis
+                ? "Aucun problème détecté dans les données collectées. Certaines analyses sont partielles ou indisponibles : l’absence de finding ne vaut pas confirmation sur ces zones."
+                : "Aucun finding enregistré pour ce scan."}
             </div>
           ) : (
             <div className="mt-6 space-y-4">
