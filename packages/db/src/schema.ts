@@ -43,6 +43,11 @@ export const organizationRole = pgEnum("organization_role", [
   "member",
 ]);
 
+export const notificationDeliveryStatus = pgEnum(
+  "notification_delivery_status",
+  ["pending", "sending", "sent"],
+);
+
 export const users = pgTable(
   "users",
   {
@@ -342,6 +347,71 @@ export const findings = pgTable(
     uniqueIndex("findings_scan_fingerprint_unique").on(
       table.scanId,
       table.fingerprint,
+    ),
+  ],
+);
+
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientEmail: text("recipient_email").notNull(),
+    kind: text("kind").default("scan-degradation").notNull(),
+    status: notificationDeliveryStatus("status").default("pending").notNull(),
+    payload: jsonb("payload")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("notification_deliveries_scan_recipient_kind_unique").on(
+      table.scanId,
+      table.recipientUserId,
+      table.kind,
+    ),
+    index("notification_deliveries_org_idx").on(table.organizationId),
+    index("notification_deliveries_due_idx")
+      .on(table.nextAttemptAt)
+      .where(sql`${table.status} = 'pending'`),
+    index("notification_deliveries_lease_idx")
+      .on(table.leaseUntil)
+      .where(sql`${table.status} = 'sending'`),
+    check(
+      "notification_deliveries_kind_supported",
+      sql`${table.kind} = 'scan-degradation'`,
+    ),
+    check(
+      "notification_deliveries_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "notification_deliveries_recipient_email_not_blank",
+      sql`length(btrim(${table.recipientEmail})) > 0`,
     ),
   ],
 );
