@@ -7,7 +7,7 @@ import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
-import { ScanStatusRefresher } from "./scan-status-refresher";
+import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 
 type SitePageProps = {
   params: Promise<{
@@ -201,7 +201,7 @@ export default async function SitePage({ params }: SitePageProps) {
                 <Link
                   key={scan.id}
                   href={`/organizations/${organizationId}/sites/${siteId}/scans/${scan.id}`}
-                  className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-white/20 md:grid-cols-[1fr_auto_auto]"
+                  className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-white/20 md:grid-cols-[1fr_auto_auto_auto]"
                 >
                   <div>
                     <p className="font-medium">
@@ -220,6 +220,13 @@ export default async function SitePage({ params }: SitePageProps) {
                   </div>
                   <span className="rounded-full border border-white/10 px-3 py-1 text-center text-xs text-white/60">
                     {scanStatusLabels[scan.status]}
+                  </span>
+                  <span className="self-center text-sm font-semibold text-sky-200">
+                    {scan.status === "completed"
+                      ? "Voir le rapport →"
+                      : scan.status === "queued" || scan.status === "running"
+                        ? "Suivre →"
+                        : "Voir le détail →"}
                   </span>
                 </Link>
               );
