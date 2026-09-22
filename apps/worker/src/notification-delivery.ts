@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { notificationDeliveries, scans, sites } from "@agency-saas/db";
+import {
+  notificationDeliveries,
+  recipientFindingIncidents,
+  scans,
+  sites,
+} from "@agency-saas/db";
 import { and, asc, eq, isNotNull, lte, or, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
@@ -16,11 +21,23 @@ const degradationSchema = z.object({
   pageUrl: z.string().min(1),
 });
 
-const payloadSchema = z.object({
+const degradationPayloadSchema = z.object({
   degradations: z.array(degradationSchema).min(1),
 });
 
-export type ClaimedNotificationDelivery = {
+const recoveryItemSchema = z.object({
+  fingerprint: z.string().min(1),
+  severity: z.enum(["info", "low", "medium", "high", "critical"]),
+  code: z.string().min(1),
+  title: z.string().min(1),
+  pageUrl: z.string().min(1),
+});
+
+const recoveryPayloadSchema = z.object({
+  resolved: z.array(recoveryItemSchema).min(1),
+});
+
+type ClaimedNotificationDeliveryBase = {
   id: string;
   organizationId: string;
   siteId: string;
@@ -31,8 +48,46 @@ export type ClaimedNotificationDelivery = {
   siteName: string;
   siteUrl: string;
   completedAt: Date | null;
-  payload: z.infer<typeof payloadSchema>;
 };
+
+export type ClaimedNotificationDelivery =
+  | (ClaimedNotificationDeliveryBase & {
+      kind: "scan-degradation";
+      payload: z.infer<typeof degradationPayloadSchema>;
+    })
+  | (ClaimedNotificationDeliveryBase & {
+      kind: "scan-recovery";
+      payload: z.infer<typeof recoveryPayloadSchema>;
+    });
+
+function parseNotificationPayload(
+  kind: string,
+  payload: unknown,
+):
+  | {
+      kind: "scan-degradation";
+      payload: z.infer<typeof degradationPayloadSchema>;
+    }
+  | {
+      kind: "scan-recovery";
+      payload: z.infer<typeof recoveryPayloadSchema>;
+    } {
+  if (kind === "scan-degradation") {
+    return {
+      kind,
+      payload: degradationPayloadSchema.parse(payload),
+    };
+  }
+
+  if (kind === "scan-recovery") {
+    return {
+      kind,
+      payload: recoveryPayloadSchema.parse(payload),
+    };
+  }
+
+  throw new Error("Unsupported notification kind");
+}
 
 export type NotificationSender = (
   delivery: ClaimedNotificationDelivery,
@@ -83,6 +138,7 @@ export async function claimDueNotificationDeliveries(
         scanId: notificationDeliveries.scanId,
         recipientUserId: notificationDeliveries.recipientUserId,
         recipientEmail: notificationDeliveries.recipientEmail,
+        kind: notificationDeliveries.kind,
         payload: notificationDeliveries.payload,
         siteName: sites.name,
         siteUrl: sites.canonicalUrl,
@@ -147,6 +203,8 @@ export async function claimDueNotificationDeliveries(
         continue;
       }
 
+      const parsed = parseNotificationPayload(row.kind, row.payload);
+
       claimed.push({
         id: row.id,
         organizationId: row.organizationId,
@@ -158,7 +216,7 @@ export async function claimDueNotificationDeliveries(
         siteName: row.siteName,
         siteUrl: row.siteUrl,
         completedAt: row.completedAt,
-        payload: payloadSchema.parse(row.payload),
+        ...parsed,
       });
     }
 
@@ -172,25 +230,100 @@ async function markNotificationSent(
 ): Promise<boolean> {
   const { db } = getDatabase();
 
-  const updated = await db
-    .update(notificationDeliveries)
-    .set({
-      status: "sent",
-      sentAt: now,
-      leaseUntil: null,
-      lastErrorCode: null,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(notificationDeliveries.id, delivery.id),
-        eq(notificationDeliveries.status, "sending"),
-        eq(notificationDeliveries.attemptCount, delivery.attemptCount),
-      ),
-    )
-    .returning({ id: notificationDeliveries.id });
+  return db.transaction(async (tx) => {
+    const updated = await tx
+      .update(notificationDeliveries)
+      .set({
+        status: "sent",
+        sentAt: now,
+        leaseUntil: null,
+        lastErrorCode: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(notificationDeliveries.id, delivery.id),
+          eq(notificationDeliveries.status, "sending"),
+          eq(notificationDeliveries.attemptCount, delivery.attemptCount),
+        ),
+      )
+      .returning({ id: notificationDeliveries.id });
 
-  return updated.length === 1;
+    if (updated.length !== 1) {
+      return false;
+    }
+
+    if (delivery.kind === "scan-degradation") {
+      for (const degradation of delivery.payload.degradations) {
+        await tx
+          .insert(recipientFindingIncidents)
+          .values({
+            organizationId: delivery.organizationId,
+            siteId: delivery.siteId,
+            recipientUserId: delivery.recipientUserId,
+            fingerprint: degradation.fingerprint,
+            code: degradation.code,
+            title: degradation.title,
+            pageUrl: degradation.pageUrl,
+            active: true,
+            lastAlertedSeverity: degradation.severity,
+            openedScanId: delivery.scanId,
+            openedAt: now,
+            resolvedScanId: null,
+            resolvedAt: null,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [
+              recipientFindingIncidents.recipientUserId,
+              recipientFindingIncidents.siteId,
+              recipientFindingIncidents.fingerprint,
+            ],
+            set: {
+              organizationId: delivery.organizationId,
+              code: degradation.code,
+              title: degradation.title,
+              pageUrl: degradation.pageUrl,
+              active: true,
+              lastAlertedSeverity: degradation.severity,
+              openedScanId: delivery.scanId,
+              openedAt: now,
+              resolvedScanId: null,
+              resolvedAt: null,
+              updatedAt: now,
+            },
+          });
+      }
+    } else {
+      for (const resolved of delivery.payload.resolved) {
+        await tx
+          .update(recipientFindingIncidents)
+          .set({
+            active: false,
+            resolvedScanId: delivery.scanId,
+            resolvedAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(
+                recipientFindingIncidents.organizationId,
+                delivery.organizationId,
+              ),
+              eq(recipientFindingIncidents.siteId, delivery.siteId),
+              eq(
+                recipientFindingIncidents.recipientUserId,
+                delivery.recipientUserId,
+              ),
+              eq(recipientFindingIncidents.fingerprint, resolved.fingerprint),
+              eq(recipientFindingIncidents.active, true),
+            ),
+          );
+      }
+    }
+
+    return true;
+  });
 }
 
 async function markNotificationRetry(

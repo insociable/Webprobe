@@ -407,7 +407,7 @@ export const notificationDeliveries = pgTable(
       .where(sql`${table.status} = 'sending'`),
     check(
       "notification_deliveries_kind_supported",
-      sql`${table.kind} = 'scan-degradation'`,
+      sql`${table.kind} in ('scan-degradation', 'scan-recovery')`,
     ),
     check(
       "notification_deliveries_attempt_count_nonnegative",
@@ -416,6 +416,54 @@ export const notificationDeliveries = pgTable(
     check(
       "notification_deliveries_recipient_email_not_blank",
       sql`length(btrim(${table.recipientEmail})) > 0`,
+    ),
+  ],
+);
+
+export const recipientFindingIncidents = pgTable(
+  "recipient_finding_incidents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    fingerprint: text("fingerprint").notNull(),
+    code: text("code").notNull(),
+    title: text("title").notNull(),
+    pageUrl: text("page_url").notNull(),
+    active: boolean("active").default(true).notNull(),
+    lastAlertedSeverity: severity("last_alerted_severity").notNull(),
+    openedScanId: uuid("opened_scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    openedAt: timestamp("opened_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    resolvedScanId: uuid("resolved_scan_id").references(() => scans.id, {
+      onDelete: "set null",
+    }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex(
+      "recipient_finding_incidents_recipient_site_fingerprint_unique",
+    ).on(table.recipientUserId, table.siteId, table.fingerprint),
+    index("recipient_finding_incidents_active_site_idx")
+      .on(table.siteId, table.recipientUserId)
+      .where(sql`${table.active} = true`),
+    index("recipient_finding_incidents_org_idx").on(table.organizationId),
+    check(
+      "recipient_finding_incidents_fingerprint_not_blank",
+      sql`length(btrim(${table.fingerprint})) > 0`,
     ),
   ],
 );
