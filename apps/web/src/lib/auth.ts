@@ -107,8 +107,8 @@ export const auth = betterAuth({
       allowedAttempts: 3,
       storeOTP: "hashed",
       resendStrategy: "rotate",
-      async sendVerificationOTP({ email, otp, type }) {
-        await deliverAuthOtpEmail({ email, otp, type });
+      async sendVerificationOTP({ email, otp, type }, ctx) {
+        await deliverAuthOtpEmail({ email, otp, type }, ctx);
       },
     }),
   ],

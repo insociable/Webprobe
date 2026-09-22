@@ -18,30 +18,41 @@ describe("auth OTP email delivery", () => {
 
   it("waits for successful SMTP delivery", async () => {
     mocks.sendAuthOtpEmail.mockResolvedValue(undefined);
+    const context = { setStatus: vi.fn() };
 
     await expect(
-      deliverAuthOtpEmail({
-        email: "user@example.invalid",
-        otp: "123456",
-        type: "sign-in",
-      }),
+      deliverAuthOtpEmail(
+        {
+          email: "user@example.invalid",
+          otp: "123456",
+          type: "sign-in",
+        },
+        context,
+      ),
     ).resolves.toBeUndefined();
 
     expect(mocks.sendAuthOtpEmail).toHaveBeenCalledOnce();
+    expect(context.setStatus).not.toHaveBeenCalled();
   });
 
-  it("propagates SMTP failure instead of reporting a false success", async () => {
+  it("marks the response unavailable and propagates SMTP failure", async () => {
     const failure = new Error("smtp unavailable");
     mocks.sendAuthOtpEmail.mockRejectedValue(failure);
+    const context = { setStatus: vi.fn() };
 
     await expect(
-      deliverAuthOtpEmail({
-        email: "user@example.invalid",
-        otp: "123456",
-        type: "sign-in",
-      }),
+      deliverAuthOtpEmail(
+        {
+          email: "user@example.invalid",
+          otp: "123456",
+          type: "sign-in",
+        },
+        context,
+      ),
     ).rejects.toBe(failure);
 
+    expect(context.setStatus).toHaveBeenCalledOnce();
+    expect(context.setStatus).toHaveBeenCalledWith(503);
     expect(console.error).toHaveBeenCalledWith(
       "Authentication email delivery failed",
     );
