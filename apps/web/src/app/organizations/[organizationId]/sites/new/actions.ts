@@ -10,19 +10,11 @@ import {
   createSiteForOrganization,
   OrganizationAccessError,
 } from "@/lib/organization-site-service";
+import { hasPostgresErrorCode } from "@/lib/postgres-error";
 
 export type CreateSiteActionState = {
   error: string | null;
 };
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "23505"
-  );
-}
 
 export async function createSiteAction(
   organizationId: string,
@@ -56,7 +48,7 @@ export async function createSiteAction(
       return { error: "Vous n’êtes pas autorisé à ajouter un site." };
     }
 
-    if (isUniqueViolation(error)) {
+    if (hasPostgresErrorCode(error, "23505")) {
       return { error: "Ce site existe déjà dans cette organisation." };
     }
 

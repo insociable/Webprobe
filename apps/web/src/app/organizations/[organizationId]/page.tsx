@@ -8,6 +8,7 @@ import {
   listSitesForOrganization,
   requireOrganizationAccess,
 } from "@/lib/organization-site-service";
+import { ManualScanButton } from "./manual-scan-button";
 
 type OrganizationPageProps = {
   params: Promise<{ organizationId: string }>;
@@ -115,6 +116,13 @@ export default async function OrganizationPage({
                 >
                   Vérifier le domaine
                 </Link>
+              ) : null}
+
+              {site.status === "active" && access.role !== "member" ? (
+                <ManualScanButton
+                  organizationId={organizationId}
+                  siteId={site.id}
+                />
               ) : null}
             </article>
           ))}

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "scans_site_active_unique" ON "scans" USING btree ("site_id") WHERE "scans"."status" in ('queued', 'running');
