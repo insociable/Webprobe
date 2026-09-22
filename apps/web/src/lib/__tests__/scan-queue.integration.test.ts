@@ -47,6 +47,7 @@ describeRedis("scan queue producer", () => {
     });
 
     try {
+      await observer.pause();
       await enqueueScanJob(payload);
 
       const job = await observer.getJob(payload.scanId);
@@ -56,6 +57,7 @@ describeRedis("scan queue producer", () => {
 
       await job?.remove();
     } finally {
+      await observer.resume();
       await observer.close();
     }
   });
