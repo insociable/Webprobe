@@ -43,32 +43,59 @@ function changeLabel(value: "new" | "worsened"): string {
   return value === "new" ? "nouveau" : "aggravé";
 }
 
-export async function sendScanDegradationEmail(
-  delivery: ClaimedNotificationDelivery,
-): Promise<void> {
-  const scanDate = delivery.completedAt
+function scanDate(delivery: ClaimedNotificationDelivery): string {
+  return delivery.completedAt
     ? new Intl.DateTimeFormat("fr-FR", {
         dateStyle: "short",
         timeStyle: "short",
         timeZone: "Europe/Paris",
       }).format(delivery.completedAt)
     : "date inconnue";
+}
 
-  const lines = delivery.payload.degradations.flatMap((item) => [
-    `- [${severityLabel(item.severity)}] ${item.title} (${changeLabel(item.change)})`,
+export async function sendScanNotificationEmail(
+  delivery: ClaimedNotificationDelivery,
+): Promise<void> {
+  if (delivery.kind === "scan-degradation") {
+    const lines = delivery.payload.degradations.flatMap((item) => [
+      `- [${severityLabel(item.severity)}] ${item.title} (${changeLabel(item.change)})`,
+      `  ${item.pageUrl}`,
+    ]);
+
+    await getTransporter().sendMail({
+      from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
+      to: delivery.recipientEmail,
+      messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
+      subject: `[Agency Monitor] Dégradation détectée — ${delivery.siteName}`,
+      text: [
+        `Agency Monitor a détecté ${delivery.payload.degradations.length} dégradation(s) sur ${delivery.siteName}.`,
+        "",
+        `Site : ${delivery.siteUrl}`,
+        `Scan : ${scanDate(delivery)}`,
+        "",
+        ...lines,
+        "",
+        "Consultez Agency Monitor pour le détail complet du scan.",
+      ].join("\n"),
+    });
+    return;
+  }
+
+  const lines = delivery.payload.resolved.flatMap((item) => [
+    `- [${severityLabel(item.severity)}] ${item.title} (résolu)`,
     `  ${item.pageUrl}`,
   ]);
 
   await getTransporter().sendMail({
     from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
     to: delivery.recipientEmail,
-    messageId: `<agency-monitor-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
-    subject: `[Agency Monitor] Dégradation détectée — ${delivery.siteName}`,
+    messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
+    subject: `[Agency Monitor] Rétablissement détecté — ${delivery.siteName}`,
     text: [
-      `Agency Monitor a détecté ${delivery.payload.degradations.length} dégradation(s) sur ${delivery.siteName}.`,
+      `Agency Monitor a détecté le rétablissement de ${delivery.payload.resolved.length} incident(s) sur ${delivery.siteName}.`,
       "",
       `Site : ${delivery.siteUrl}`,
-      `Scan : ${scanDate}`,
+      `Scan : ${scanDate(delivery)}`,
       "",
       ...lines,
       "",

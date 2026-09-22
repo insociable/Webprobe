@@ -9,7 +9,7 @@
     "start": "node dist/index.js",
     "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests --no-file-parallelism"
   },
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",

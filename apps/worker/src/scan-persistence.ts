@@ -2,6 +2,7 @@ import {
   findings,
   memberships,
   notificationDeliveries,
+  recipientFindingIncidents,
   scanSchedules,
   scans,
   sites,
@@ -44,6 +45,33 @@ export type ValidatedScanContext = {
 };
 
 const runnableStatuses = ["queued", "running", "failed"] as const;
+
+function recoveryFingerprintKey(
+  recipientUserId: string,
+  fingerprint: string,
+): string {
+  return `${recipientUserId}\u0000${fingerprint}`;
+}
+
+function recoveryPayloadFingerprints(payload: unknown): string[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+
+  const resolved = (payload as { resolved?: unknown }).resolved;
+  if (!Array.isArray(resolved)) {
+    return [];
+  }
+
+  return resolved.flatMap((item) =>
+    typeof item === "object" &&
+    item !== null &&
+    typeof (item as { fingerprint?: unknown }).fingerprint === "string"
+      ? [(item as { fingerprint: string }).fingerprint]
+      : [],
+  );
+}
+
 export async function validateScanContext(
   payload: ScanJob,
 ): Promise<ValidatedScanContext> {
@@ -276,31 +304,24 @@ export async function persistScanCompletion(
       .orderBy(desc(scans.completedAt), desc(scans.queuedAt))
       .limit(1);
 
-    if (!previousScan) {
-      return;
-    }
+    const previousFindings = previousScan
+      ? await tx
+          .select({
+            fingerprint: findings.fingerprint,
+            severity: findings.severity,
+          })
+          .from(findings)
+          .where(
+            and(
+              eq(findings.organizationId, context.organizationId),
+              eq(findings.scanId, previousScan.id),
+            ),
+          )
+      : [];
 
-    const previousFindings = await tx
-      .select({
-        fingerprint: findings.fingerprint,
-        severity: findings.severity,
-      })
-      .from(findings)
-      .where(
-        and(
-          eq(findings.organizationId, context.organizationId),
-          eq(findings.scanId, previousScan.id),
-        ),
-      );
-
-    const degradations = detectScanDegradations(
-      generatedFindings,
-      previousFindings,
-    );
-
-    if (degradations.length === 0) {
-      return;
-    }
+    const degradations = previousScan
+      ? detectScanDegradations(generatedFindings, previousFindings)
+      : [];
 
     const recipients = await tx
       .select({
@@ -319,7 +340,11 @@ export async function persistScanCompletion(
         ),
       );
 
-    const deliveries = recipients.flatMap((recipient) => {
+    if (recipients.length === 0) {
+      return;
+    }
+
+    const degradationDeliveries = recipients.flatMap((recipient) => {
       if (
         recipient.minimumSeverity !== "medium" &&
         recipient.minimumSeverity !== "high" &&
@@ -344,19 +369,144 @@ export async function persistScanCompletion(
           scanId: context.scanId,
           recipientUserId: recipient.userId,
           recipientEmail: recipient.email,
+          kind: "scan-degradation",
           payload: { degradations: recipientDegradations },
         },
       ];
     });
 
-    if (deliveries.length === 0) {
-      return;
+    const activeIncidents =
+      recipients.length === 0
+        ? []
+        : await tx
+            .select({
+              recipientUserId: recipientFindingIncidents.recipientUserId,
+              fingerprint: recipientFindingIncidents.fingerprint,
+              severity: recipientFindingIncidents.lastAlertedSeverity,
+              code: recipientFindingIncidents.code,
+              title: recipientFindingIncidents.title,
+              pageUrl: recipientFindingIncidents.pageUrl,
+            })
+            .from(recipientFindingIncidents)
+            .where(
+              and(
+                eq(
+                  recipientFindingIncidents.organizationId,
+                  context.organizationId,
+                ),
+                eq(recipientFindingIncidents.siteId, context.siteId),
+                eq(recipientFindingIncidents.active, true),
+                inArray(
+                  recipientFindingIncidents.recipientUserId,
+                  recipients.map((recipient) => recipient.userId),
+                ),
+              ),
+            );
+
+    const outstandingRecoveryDeliveries = await tx
+      .select({
+        recipientUserId: notificationDeliveries.recipientUserId,
+        payload: notificationDeliveries.payload,
+      })
+      .from(notificationDeliveries)
+      .where(
+        and(
+          eq(notificationDeliveries.organizationId, context.organizationId),
+          eq(notificationDeliveries.siteId, context.siteId),
+          eq(notificationDeliveries.kind, "scan-recovery"),
+          inArray(notificationDeliveries.status, ["pending", "sending"]),
+          inArray(
+            notificationDeliveries.recipientUserId,
+            recipients.map((recipient) => recipient.userId),
+          ),
+        ),
+      );
+
+    const outstandingRecoveryKeys = new Set(
+      outstandingRecoveryDeliveries.flatMap((delivery) =>
+        recoveryPayloadFingerprints(delivery.payload).map((fingerprint) =>
+          recoveryFingerprintKey(delivery.recipientUserId, fingerprint),
+        ),
+      ),
+    );
+
+    const currentFingerprints = new Set(
+      generatedFindings.map((finding) => finding.fingerprint),
+    );
+    const recipientByUserId = new Map(
+      recipients.map((recipient) => [recipient.userId, recipient]),
+    );
+    const resolvedByRecipient = new Map<
+      string,
+      Array<{
+        fingerprint: string;
+        severity: Severity;
+        code: string;
+        title: string;
+        pageUrl: string;
+      }>
+    >();
+
+    for (const incident of activeIncidents) {
+      if (currentFingerprints.has(incident.fingerprint)) {
+        continue;
+      }
+
+      if (
+        outstandingRecoveryKeys.has(
+          recoveryFingerprintKey(
+            incident.recipientUserId,
+            incident.fingerprint,
+          ),
+        )
+      ) {
+        continue;
+      }
+
+      const items = resolvedByRecipient.get(incident.recipientUserId) ?? [];
+      items.push({
+        fingerprint: incident.fingerprint,
+        severity: incident.severity,
+        code: incident.code,
+        title: incident.title,
+        pageUrl: incident.pageUrl,
+      });
+      resolvedByRecipient.set(incident.recipientUserId, items);
     }
 
-    await tx
-      .insert(notificationDeliveries)
-      .values(deliveries)
-      .onConflictDoNothing();
+    const recoveryDeliveries = Array.from(
+      resolvedByRecipient.entries(),
+      ([recipientUserId, resolved]) => {
+        const recipient = recipientByUserId.get(recipientUserId);
+        if (!recipient) {
+          return null;
+        }
+
+        return {
+          organizationId: context.organizationId,
+          siteId: context.siteId,
+          scanId: context.scanId,
+          recipientUserId,
+          recipientEmail: recipient.email,
+          kind: "scan-recovery",
+          payload: { resolved },
+        };
+      },
+    ).filter((delivery) => delivery !== null);
+
+    if (degradationDeliveries.length > 0) {
+      await tx
+        .insert(notificationDeliveries)
+        .values(degradationDeliveries)
+        .onConflictDoNothing();
+    }
+
+    if (recoveryDeliveries.length > 0) {
+      await tx
+        .insert(notificationDeliveries)
+        .values(recoveryDeliveries)
+        .onConflictDoNothing();
+    }
   });
 }
 
