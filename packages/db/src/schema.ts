@@ -94,6 +94,10 @@ export const memberships = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: organizationRole("role").default("member").notNull(),
+    scanAlertEnabled: boolean("scan_alert_enabled").default(true).notNull(),
+    scanAlertMinimumSeverity: severity("scan_alert_minimum_severity")
+      .default("medium")
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

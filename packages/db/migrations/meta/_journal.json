@@ -57,6 +57,13 @@
       "when": 1790069064851,
       "tag": "0007_wealthy_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790070053155,
+      "tag": "0008_milky_ultimates",
+      "breakpoints": true
     }
   ]
 }

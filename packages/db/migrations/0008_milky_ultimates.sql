@@ -1,0 +1,2 @@
+ALTER TABLE "memberships" ADD COLUMN "scan_alert_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "memberships" ADD COLUMN "scan_alert_minimum_severity" "severity" DEFAULT 'medium' NOT NULL;

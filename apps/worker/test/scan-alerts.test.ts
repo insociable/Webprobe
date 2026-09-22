@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { GeneratedFinding } from "../src/findings.js";
-import { detectScanDegradations } from "../src/scan-alerts.js";
+import {
+  detectScanDegradations,
+  filterDegradationsByMinimumSeverity,
+} from "../src/scan-alerts.js";
 
 function finding(
   input: Partial<GeneratedFinding> &
@@ -55,6 +58,28 @@ describe("scan degradation detection", () => {
         previousSeverity: "medium",
       }),
     ]);
+  });
+
+  it("filters degradations by the recipient minimum severity", () => {
+    const degradations = detectScanDegradations(
+      [
+        finding({ fingerprint: "medium", severity: "medium" }),
+        finding({ fingerprint: "high", severity: "high" }),
+        finding({ fingerprint: "critical", severity: "critical" }),
+      ],
+      [],
+    );
+
+    expect(
+      filterDegradationsByMinimumSeverity(degradations, "high").map(
+        (item) => item.severity,
+      ),
+    ).toEqual(["high", "critical"]);
+    expect(
+      filterDegradationsByMinimumSeverity(degradations, "critical").map(
+        (item) => item.severity,
+      ),
+    ).toEqual(["critical"]);
   });
 
   it("treats a reappearing finding after a clean baseline as new", () => {

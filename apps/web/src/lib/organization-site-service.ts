@@ -35,6 +35,8 @@ export async function getOrganizationAccess(
       organizationId: organizations.id,
       organizationName: organizations.name,
       role: memberships.role,
+      scanAlertEnabled: memberships.scanAlertEnabled,
+      scanAlertMinimumSeverity: memberships.scanAlertMinimumSeverity,
     })
     .from(memberships)
     .innerJoin(organizations, eq(memberships.organizationId, organizations.id))
