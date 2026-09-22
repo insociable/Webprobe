@@ -2,6 +2,7 @@
 
 import { OrganizationReadSchema, SiteReadSchema } from "@agency-saas/contracts";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
 import { createManualScanForSite, ManualScanError } from "@/lib/manual-scan";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
@@ -9,13 +10,11 @@ import { OrganizationAccessError } from "@/lib/organization-site-service";
 export type ManualScanActionState = {
   error: string | null;
   message: string | null;
-  scanId: string | null;
 };
 
 const initialManualScanActionState: ManualScanActionState = {
   error: null,
   message: null,
-  scanId: null,
 };
 
 function humanScanError(error: unknown): string {
@@ -60,24 +59,21 @@ export async function startManualScanAction(
 
   const session = await requireCurrentSession();
 
+  let scan: Awaited<ReturnType<typeof createManualScanForSite>>;
   try {
-    const scan = await createManualScanForSite(
+    scan = await createManualScanForSite(
       session.user.id,
       organizationId,
       siteId,
     );
-
-    revalidatePath(`/organizations/${organizationId}`);
-
-    return {
-      error: null,
-      message: "Scan ajouté à la file d’exécution.",
-      scanId: scan.id,
-    };
   } catch (error) {
     return {
       ...initialManualScanActionState,
       error: humanScanError(error),
     };
   }
+
+  revalidatePath(`/organizations/${organizationId}`);
+  revalidatePath(`/organizations/${organizationId}/sites/${siteId}`);
+  redirect(`/organizations/${organizationId}/sites/${siteId}/scans/${scan.id}`);
 }
