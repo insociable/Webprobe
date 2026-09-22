@@ -2,34 +2,324 @@
 
 :root {
   color-scheme: dark;
-  --background: #07110f;
-  --foreground: #f4f7f5;
+  --background: #080a10;
+  --surface: #0d111a;
+  --surface-2: #121826;
+  --surface-3: #182033;
+  --line: #242d40;
+  --line-strong: #33405a;
+  --foreground: #f3f6ff;
+  --muted: #8d98ad;
+  --muted-strong: #b6c0d2;
+  --accent: #6d7cff;
+  --accent-strong: #8d98ff;
+  --signal: #39c7ff;
+  --success: #51d3a5;
+  --warning: #ffb45f;
+  --danger: #ff667a;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   min-height: 100vh;
   margin: 0;
   background:
+    linear-gradient(rgba(109, 124, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(109, 124, 255, 0.035) 1px, transparent 1px),
     radial-gradient(
-      circle at 85% 10%,
-      rgba(72, 187, 143, 0.13),
-      transparent 30rem
-    ),
-    radial-gradient(
-      circle at 10% 80%,
-      rgba(52, 211, 153, 0.08),
-      transparent 26rem
+      circle at 72% -10%,
+      rgba(57, 199, 255, 0.1),
+      transparent 28rem
     ),
     var(--background);
+  background-size:
+    64px 64px,
+    64px 64px,
+    auto,
+    auto;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    "Segoe UI Variable",
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+
+a,
+button,
+input,
+select {
+  font: inherit;
 }
 
 ::selection {
-  background: #45d39b;
-  color: #04100c;
+  background: rgba(109, 124, 255, 0.75);
+  color: #ffffff;
+}
+
+.am-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(
+    180deg,
+    rgba(18, 24, 38, 0.92),
+    rgba(11, 15, 24, 0.96)
+  );
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+}
+
+.am-panel-soft {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(13, 17, 26, 0.72);
+}
+
+.am-kicker {
+  color: var(--signal);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.am-muted {
+  color: var(--muted);
+}
+
+.am-button-primary {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px solid rgba(141, 152, 255, 0.55);
+  border-radius: 7px;
+  background: linear-gradient(135deg, #7280ff, #5968ed);
+  padding: 0.68rem 1rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: 160ms ease;
+}
+
+.am-button-primary:hover {
+  border-color: rgba(179, 187, 255, 0.85);
+  background: linear-gradient(135deg, #8290ff, #6876f6);
+}
+
+.am-button-secondary {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: rgba(13, 17, 26, 0.7);
+  padding: 0.68rem 1rem;
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+  font-weight: 650;
+  transition: 160ms ease;
+}
+
+.am-button-secondary:hover {
+  border-color: #4d5d7d;
+  color: #ffffff;
+  background: rgba(24, 32, 51, 0.9);
+}
+
+.am-field {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #0a0e17;
+  padding: 0.76rem 0.9rem;
+  color: var(--foreground);
+  outline: none;
+  transition: 160ms ease;
+}
+
+.am-field:focus {
+  border-color: var(--accent-strong);
+  box-shadow: 0 0 0 3px rgba(109, 124, 255, 0.12);
+}
+
+.am-field::placeholder {
+  color: #59647a;
+}
+
+.am-workspace {
+  min-height: 100vh;
+}
+
+.am-rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  display: none;
+  width: 244px;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: rgba(8, 10, 16, 0.92);
+  padding: 22px 18px;
+  backdrop-filter: blur(18px);
+}
+
+.am-workspace-main {
+  min-height: 100vh;
+}
+
+.am-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: flex;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(8, 10, 16, 0.84);
+  padding: 0 24px;
+  backdrop-filter: blur(16px);
+}
+
+.am-content {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 34px 0 70px;
+}
+
+.am-brand-mark {
+  position: relative;
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #46557a;
+  border-radius: 7px;
+  background: #0f1522;
+}
+
+.am-brand-mark::before,
+.am-brand-mark::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  height: 1px;
+  background: var(--accent-strong);
+  box-shadow:
+    0 6px 0 rgba(57, 199, 255, 0.75),
+    0 -6px 0 rgba(109, 124, 255, 0.45);
+}
+
+.am-brand-mark::after {
+  inset: 7px auto 7px 50%;
+  width: 1px;
+  height: auto;
+  box-shadow:
+    -6px 0 0 rgba(109, 124, 255, 0.45),
+    6px 0 0 rgba(57, 199, 255, 0.55);
+}
+
+.am-brand-dot {
+  position: relative;
+  z-index: 2;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 18px rgba(57, 199, 255, 0.9);
+}
+
+.am-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--success);
+  box-shadow: 0 0 12px rgba(81, 211, 165, 0.65);
+}
+
+.am-metric-grid {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(13, 17, 26, 0.78);
+}
+
+.am-metric-cell {
+  min-width: 0;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.am-metric-cell:last-child {
+  border-bottom: 0;
+}
+
+.am-metric-label {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.am-metric-value {
+  margin-top: 8px;
+  font-size: 1.65rem;
+  font-weight: 680;
+  letter-spacing: -0.035em;
+}
+
+.am-divider {
+  border-color: var(--line);
+}
+
+@media (min-width: 768px) {
+  .am-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .am-metric-cell {
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+
+  .am-metric-cell:last-child {
+    border-right: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .am-rail {
+    display: flex;
+  }
+
+  .am-workspace-main {
+    margin-left: 244px;
+  }
+
+  .am-content {
+    width: min(1180px, calc(100% - 64px));
+    padding-top: 42px;
+  }
+
+  .am-topbar {
+    padding: 0 32px;
+  }
 }

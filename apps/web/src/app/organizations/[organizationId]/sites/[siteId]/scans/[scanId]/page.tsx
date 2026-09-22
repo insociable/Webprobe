@@ -5,6 +5,7 @@ import {
 } from "@agency-saas/contracts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
@@ -43,6 +44,14 @@ const severityRank = {
   medium: 3,
   low: 2,
   info: 1,
+} as const;
+
+const severityStyles = {
+  info: "border-[#33405a] bg-[#111827] text-[#aeb9cc]",
+  low: "border-[#39455c] bg-[#121722] text-[#c0c8d7]",
+  medium: "border-[#7b5b32] bg-[#21180f] text-[#ffc47f]",
+  high: "border-[#7a3f49] bg-[#251217] text-[#ff8e9d]",
+  critical: "border-[#a44355] bg-[#301017] text-[#ff7185]",
 } as const;
 
 const findingChangeLabels = {
@@ -154,36 +163,38 @@ export default async function ScanPage({ params }: ScanPageProps) {
       : [];
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-8 lg:px-10">
+    <WorkspaceShell
+      trail={[
+        {
+          label: details.site.name,
+          href: "/organizations/" + organizationId + "/sites/" + siteId,
+        },
+        { label: "Rapport de scan" },
+      ]}
+    >
       <ScanStatusRefresher active={pending} />
 
-      <Link
-        href={`/organizations/${organizationId}/sites/${siteId}`}
-        className="text-sm text-white/45 transition hover:text-white/70"
-      >
-        ← Retour à {details.site.name}
-      </Link>
-
-      <section className="border-b border-white/10 py-10">
+      <section className="border-b border-[#242d40] pb-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
-              Résultat du scan
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+            <p className="am-kicker">Résultat du scan</p>
+            <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
               {details.site.name}
             </h1>
             <p className="mt-3 break-all text-white/45">
               {details.site.canonicalUrl}
             </p>
           </div>
-          <span className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/60">
+          <span className="inline-flex items-center gap-2 rounded-md border border-[#33405a] bg-[#101622] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#aeb8ca]">
+            {pending ? (
+              <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+            ) : null}
             {scanStatusLabels[details.scan.status]}
           </span>
         </div>
 
         <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Déclenchement
             </dt>
@@ -191,7 +202,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               {details.scan.trigger === "manual" ? "Manuel" : "Planifié"}
             </dd>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Mis en file
             </dt>
@@ -199,7 +210,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               {formatDate(details.scan.queuedAt)}
             </dd>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Terminé
             </dt>
@@ -207,7 +218,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               {formatDate(details.scan.completedAt)}
             </dd>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Pages observées
             </dt>
@@ -219,11 +230,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <div
             aria-live="polite"
             aria-busy="true"
-            className="mt-6 rounded-2xl border border-sky-300/15 bg-sky-300/[0.05] p-5"
+            className="mt-6 border-l-2 border-[#39c7ff] bg-[#0b141d] p-5"
           >
             <div className="flex items-center gap-3">
-              <span className="size-2.5 animate-pulse rounded-full bg-sky-300" />
-              <p className="font-semibold text-sky-50">
+              <span className="size-2.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+              <p className="font-semibold text-[#dff7ff]">
                 {details.scan.status === "queued"
                   ? "Scan en attente de démarrage"
                   : "Scan en cours d’analyse"}
@@ -264,7 +275,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <p className="mt-2 text-sm text-white/40">
             Capture bornée au viewport du navigateur au moment du scan.
           </p>
-          <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+          <div className="mt-6 overflow-hidden rounded-lg border border-[#242d40] bg-[#080b12]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`/api/organizations/${organizationId}/sites/${siteId}/scans/${scanId}/screenshot`}
@@ -290,7 +301,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
             </div>
             <Link
               href={`/organizations/${organizationId}/sites/${siteId}/scans/${comparison.previousScanId}`}
-              className="text-sm text-emerald-300 transition hover:text-emerald-200"
+              className="text-sm font-semibold text-[#7d8aff] transition hover:text-[#aab2ff]"
             >
               Voir le scan précédent →
             </Link>
@@ -304,10 +315,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               ["Résolus", comparison.counts.resolved],
               ["Inchangés", comparison.counts.unchanged],
             ].map(([label, value]) => (
-              <div
-                key={label}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
-              >
+              <div key={label} className="am-panel-soft p-4">
                 <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
                   {label}
                 </dt>
@@ -326,7 +334,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </h2>
 
         {orderedFindings.length === 0 ? (
-          <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-black/10 p-8">
+          <div className="mt-6 border-l-2 border-[#46557a] bg-[#0d121d] p-8">
             <p className="text-white/50">
               Aucun finding enregistré pour ce scan.
             </p>
@@ -341,7 +349,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               return (
                 <article
                   key={finding.id}
-                  className="rounded-2xl border border-white/10 bg-white/[0.035] p-6"
+                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
@@ -359,7 +367,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {change ? (
-                        <span className="rounded-full border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-1 text-xs text-emerald-200">
+                        <span className="rounded-md border border-[#49558b] bg-[#151a31] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aab2ff]">
                           {findingChangeLabels[change.change]}
                           {change.previousSeverity &&
                           change.previousSeverity !== finding.severity
@@ -367,7 +375,12 @@ export default async function ScanPage({ params }: ScanPageProps) {
                             : ""}
                         </span>
                       ) : null}
-                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60">
+                      <span
+                        className={
+                          "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
+                          severityStyles[finding.severity]
+                        }
+                      >
                         {severityLabels[finding.severity]}
                       </span>
                     </div>
@@ -390,11 +403,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
                   ) : null}
 
                   {remediation ? (
-                    <div className="mt-5 rounded-xl border border-sky-300/15 bg-sky-300/[0.045] p-5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-200/70">
+                    <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                         Comment corriger
                       </p>
-                      <h4 className="mt-2 font-semibold text-sky-50">
+                      <h4 className="mt-2 font-semibold text-[#eef1ff]">
                         {remediation.title}
                       </h4>
                       <p className="mt-2 text-sm leading-6 text-white/55">
@@ -403,7 +416,9 @@ export default async function ScanPage({ params }: ScanPageProps) {
                       <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
                         {remediation.steps.map((step, index) => (
                           <li key={step} className="flex gap-3">
-                            <span className="text-sky-300">{index + 1}.</span>
+                            <span className="font-mono text-[#7f8cff]">
+                              {index + 1}.
+                            </span>
                             <span>{step}</span>
                           </li>
                         ))}
@@ -434,11 +449,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
               {comparison.resolvedFindings.map((finding) => (
                 <article
                   key={finding.fingerprint}
-                  className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] p-5"
+                  className="rounded-lg border border-[#285747] bg-[#0d1715] p-5"
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.14em] text-emerald-200/60">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#72c6a5]">
                         Résolu · {finding.code}
                       </p>
                       <h3 className="mt-2 font-medium">{finding.title}</h3>
@@ -458,6 +473,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
           </div>
         ) : null}
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }

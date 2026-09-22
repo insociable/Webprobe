@@ -22,7 +22,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
           maxLength={160}
           name="name"
           placeholder="Site vitrine"
-          className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none transition focus:border-emerald-300/60"
+          className="am-field"
         />
       </label>
       <label className="block">
@@ -34,7 +34,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
           inputMode="url"
           name="canonicalUrl"
           placeholder="https://www.exemple.fr"
-          className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none transition focus:border-emerald-300/60"
+          className="am-field"
         />
         <span className="mt-2 block text-xs leading-5 text-white/35">
           HTTP(S) uniquement, sans paramètres, fragment, identifiants ou port
@@ -44,7 +44,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
 
       <button
         disabled={pending}
-        className="rounded-xl bg-emerald-300 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending ? "Ajout…" : "Ajouter le site"}
       </button>
