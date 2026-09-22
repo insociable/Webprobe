@@ -27,7 +27,7 @@ export function ReportBrandingPanel({
   );
 
   return (
-    <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+    <section className="am-panel mb-6 p-6">
       <p className="text-sm text-white/45">Rapports clients</p>
       <h2 className="mt-2 text-xl font-semibold tracking-tight">
         Branding agence
@@ -48,7 +48,7 @@ export function ReportBrandingPanel({
             defaultValue={brandName ?? ""}
             maxLength={80}
             placeholder="Nom de l’agence"
-            className="mt-2 block w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+            className="am-field mt-2"
           />
         </label>
 
@@ -64,14 +64,14 @@ export function ReportBrandingPanel({
 
         <button
           disabled={pending}
-          className="rounded-xl bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:opacity-50"
+          className="am-button-primary disabled:opacity-50"
         >
           {pending ? "Enregistrement…" : "Enregistrer"}
         </button>
       </form>
 
       {state.message ? (
-        <p aria-live="polite" className="mt-4 text-sm text-emerald-200">
+        <p aria-live="polite" className="mt-4 text-sm text-[#51d3a5]">
           {state.message}
         </p>
       ) : null}

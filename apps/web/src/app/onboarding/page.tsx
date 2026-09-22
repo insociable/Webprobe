@@ -1,8 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getUserMemberships } from "@/lib/membership-context";
-import { SignOutButton } from "@/components/sign-out-button";
 import { OrganizationForm } from "./organization-form";
 
 export default async function OnboardingPage() {
@@ -14,46 +13,39 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-8 lg:px-10">
-      <nav className="flex items-center justify-between border-b border-white/10 pb-6">
-        <Link href="/" className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-emerald-300 font-black text-emerald-950">
-            A
-          </span>
-          <div>
-            <p className="font-semibold tracking-tight">Agency Monitor</p>
-            <p className="text-xs text-white/45">Configuration initiale</p>
-          </div>
-        </Link>
-        <SignOutButton />
-      </nav>
-      <section className="py-14">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
-          Compte vérifié
-        </p>
-        <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-tight">
-          Configurez votre première agence.
+    <WorkspaceShell trail={[{ label: "Configuration initiale" }]}>
+      <section className="max-w-3xl">
+        <p className="am-kicker">Première mise en route</p>
+        <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
+          Créez votre espace agence.
         </h1>
-        <p className="mt-4 max-w-2xl leading-7 text-white/55">
-          Votre compte {session.user.email} est authentifié, mais il n’est
-          encore rattaché à aucune organisation. Cet écran devient donc le seul
-          point d’entrée autorisé avant la création de votre espace agence.
+        <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
+          Le compte <span className="text-[#c5cedd]">{session.user.email}</span>{" "}
+          est vérifié. Il reste à créer l’organisation qui regroupera vos sites,
+          vos scans et vos rapports.
         </p>
+      </section>
 
-        <div className="mt-10 rounded-2xl border border-white/10 bg-white/[0.035] p-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
-            Première organisation
-          </p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-            Créez votre espace agence
-          </h2>
-          <p className="mt-3 max-w-2xl leading-7 text-white/50">
-            La création est atomique : l’organisation et votre rôle propriétaire
-            sont enregistrés ensemble.
-          </p>
-          <OrganizationForm />
+      <section className="am-panel mt-10 max-w-3xl p-6 sm:p-8">
+        <div className="grid gap-6 sm:grid-cols-[150px_1fr]">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#627087]">
+              Étape 01 / 01
+            </p>
+            <div className="mt-4 h-px w-12 bg-[#6d7cff]" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold tracking-[-0.03em]">
+              Votre première organisation
+            </h2>
+            <p className="mt-3 leading-7 text-[#7f8a9f]">
+              L’organisation et votre rôle propriétaire sont créés ensemble.
+              Vous pourrez ensuite ajouter le premier site à superviser.
+            </p>
+            <OrganizationForm />
+          </div>
         </div>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }

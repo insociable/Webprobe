@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ProductMark } from "@/components/product-shell";
 import { authClient } from "@/lib/auth-client";
 
 type Step = "email" | "otp";
@@ -58,106 +59,138 @@ export default function SignInPage() {
     router.replace("/dashboard");
     router.refresh();
   }
+
   return (
-    <main className="mx-auto grid min-h-screen max-w-6xl place-items-center px-6 py-12">
-      <section className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.04] p-7 shadow-2xl shadow-black/20">
-        <div className="mb-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-3 text-sm text-white/55 transition hover:text-white"
-          >
-            <span className="grid size-9 place-items-center rounded-lg bg-emerald-300 font-black text-emerald-950">
-              A
-            </span>
-            Agency Monitor
-          </Link>
-          <h1 className="mt-8 text-3xl font-semibold tracking-tight">
-            Connexion au pilote
+    <main className="grid min-h-screen lg:grid-cols-[0.92fr_1.08fr]">
+      <section className="relative hidden overflow-hidden border-r border-[#242d40] bg-[#0a0d14] p-10 lg:flex lg:flex-col">
+        <Link href="/" className="inline-flex">
+          <ProductMark />
+        </Link>
+        <div className="my-auto max-w-xl py-16">
+          <p className="am-kicker">Accès sécurisé</p>
+          <h1 className="mt-5 text-5xl font-semibold leading-[1.02] tracking-[-0.05em]">
+            Reprenez le contrôle de votre parc web.
           </h1>
-          <p className="mt-3 leading-7 text-white/50">
-            Aucun mot de passe. Nous vous envoyons un code temporaire par
-            e-mail.
+          <p className="mt-6 text-lg leading-8 text-[#8995aa]">
+            Une session suffit pour retrouver vos sites, les scans en cours, les
+            régressions et les rapports à partager.
           </p>
+          <div className="mt-10 divide-y divide-[#242d40] border-y border-[#242d40]">
+            {[
+              ["01", "Sites", "Vue multi-client et statut immédiat"],
+              ["02", "Scans", "Suivi live jusqu’au rapport"],
+              ["03", "Remédiation", "Chaque finding mène à une action"],
+            ].map(([index, title, detail]) => (
+              <div
+                key={title}
+                className="grid grid-cols-[40px_110px_1fr] gap-3 py-4 text-sm"
+              >
+                <span className="font-mono text-[#56627a]">{index}</span>
+                <span className="font-semibold">{title}</span>
+                <span className="text-[#7f8a9f]">{detail}</span>
+              </div>
+            ))}
+          </div>
         </div>
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#58647a]">
+          OTP · aucune authentification par mot de passe
+        </p>
+      </section>
 
-        {step === "email" ? (
-          <form className="space-y-5" onSubmit={sendOtp}>
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-white/70">
-                Adresse e-mail
-              </span>
-              <input
-                autoComplete="email"
-                autoFocus
-                required
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none transition focus:border-emerald-300/60"
-                placeholder="vous@agence.fr"
-              />
-            </label>
-            <button
-              disabled={pending || !normalizedEmail}
-              className="w-full rounded-xl bg-emerald-300 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pending ? "Envoi…" : "Recevoir mon code"}
-            </button>
-          </form>
-        ) : (
-          <form className="space-y-5" onSubmit={verifyOtp}>
-            <div className="rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] px-4 py-3 text-sm text-white/60">
-              Code envoyé à <strong className="text-white/85">{email}</strong>
-            </div>
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-white/70">
-                Code à 6 chiffres
-              </span>
-              <input
-                autoComplete="one-time-code"
-                autoFocus
-                inputMode="numeric"
-                maxLength={6}
-                minLength={6}
-                pattern="[0-9]{6}"
-                required
-                value={otp}
-                onChange={(event) =>
-                  setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
-                }
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-center font-mono text-2xl tracking-[0.3em] outline-none transition focus:border-emerald-300/60"
-                placeholder="000000"
-              />
-            </label>
-            <button
-              disabled={pending || otp.length !== 6}
-              className="w-full rounded-xl bg-emerald-300 px-4 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pending ? "Vérification…" : "Se connecter"}
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setOtp("");
-                setMessage(null);
-                setStep("email");
-              }}
-              className="w-full px-4 py-2 text-sm text-white/45 transition hover:text-white/70"
-            >
-              Utiliser une autre adresse
-            </button>
-          </form>
-        )}
-
-        {message ? (
-          <p
-            aria-live="polite"
-            className="mt-5 rounded-xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-white/60"
-          >
-            {message}
+      <section className="grid place-items-center px-6 py-10">
+        <div className="w-full max-w-md">
+          <Link href="/" className="mb-12 inline-flex lg:hidden">
+            <ProductMark />
+          </Link>
+          <p className="am-kicker">Session agence</p>
+          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
+            {step === "email" ? "Connexion" : "Vérifiez votre e-mail"}
+          </h2>
+          <p className="mt-3 leading-7 text-[#8793a8]">
+            {step === "email"
+              ? "Saisissez votre adresse. Nous envoyons un code temporaire à usage unique."
+              : "Entrez le code à 6 chiffres reçu par e-mail."}
           </p>
-        ) : null}
+
+          {step === "email" ? (
+            <form className="mt-8 space-y-5" onSubmit={sendOtp}>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#b8c1d2]">
+                  Adresse e-mail
+                </span>
+                <input
+                  autoComplete="email"
+                  autoFocus
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="am-field"
+                  placeholder="vous@agence.fr"
+                />
+              </label>
+              <button
+                disabled={pending || !normalizedEmail}
+                className="am-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pending ? "Envoi…" : "Recevoir mon code"}
+              </button>
+            </form>
+          ) : (
+            <form className="mt-8 space-y-5" onSubmit={verifyOtp}>
+              <div className="am-panel-soft px-4 py-3 text-sm text-[#9ba7bc]">
+                Code envoyé à <strong className="text-white">{email}</strong>
+              </div>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-[#b8c1d2]">
+                  Code à 6 chiffres
+                </span>
+                <input
+                  autoComplete="one-time-code"
+                  autoFocus
+                  inputMode="numeric"
+                  maxLength={6}
+                  minLength={6}
+                  pattern="[0-9]{6}"
+                  required
+                  value={otp}
+                  onChange={(event) =>
+                    setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  className="am-field text-center font-mono text-2xl tracking-[0.32em]"
+                  placeholder="000000"
+                />
+              </label>
+              <button
+                disabled={pending || otp.length !== 6}
+                className="am-button-primary w-full disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pending ? "Vérification…" : "Se connecter"}
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  setOtp("");
+                  setMessage(null);
+                  setStep("email");
+                }}
+                className="w-full px-4 py-2 text-sm text-[#748097] transition hover:text-[#b9c3d4]"
+              >
+                Utiliser une autre adresse
+              </button>
+            </form>
+          )}
+
+          {message ? (
+            <p
+              aria-live="polite"
+              className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] px-4 py-3 text-sm text-[#aab5c9]"
+            >
+              {message}
+            </p>
+          ) : null}
+        </div>
       </section>
     </main>
   );

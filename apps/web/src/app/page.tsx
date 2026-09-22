@@ -1,120 +1,162 @@
+import Link from "next/link";
+import { ProductMark } from "@/components/product-shell";
+
 const signals = [
   { label: "Sites suivis", value: "20 max.", detail: "périmètre pilote" },
-  { label: "Fréquence", value: "7 jours", detail: "et scans manuels" },
-  { label: "Contrôles", value: "7 familles", detail: "un seul rapport" },
+  { label: "Cadence", value: "7 jours", detail: "+ scans manuels" },
+  { label: "Contrôles", value: "7 familles", detail: "dans un même rapport" },
 ];
 
 const checks = [
-  ["Disponibilité & HTTP", "Statuts, ressources et liens cassés"],
-  ["TLS & en-têtes", "Expiration et configuration observable"],
-  ["JavaScript", "Erreurs réellement vues dans le navigateur"],
-  ["Accessibilité", "Contrôles axe-core priorisés"],
-  ["Captures", "Preuve visuelle et comparaison"],
-  ["Rapport de marque", "Partage client simple et lisible"],
+  ["Disponibilité", "HTTP, ressources, redirections et liens cassés"],
+  ["Surface web", "TLS, CSP, HSTS et en-têtes de sécurité"],
+  ["Navigateur", "Erreurs JavaScript et rendu réellement observé"],
+  ["Accessibilité", "Contrôles axe-core et défauts priorisés"],
+  ["Historique", "Comparaison avec le scan précédent et rétablissements"],
+  ["Rapport client", "Preuves, remédiations et partage à votre marque"],
 ];
 
 export default function Home() {
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-8 lg:px-10">
-      <nav className="flex items-center justify-between border-b border-white/10 pb-6">
+    <main className="min-h-screen">
+      <nav className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center justify-between border-b border-[#242d40] py-5">
+        <ProductMark />
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-emerald-300 font-black text-emerald-950">
-            A
+          <span className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[#718097] sm:flex">
+            <span className="am-status-dot" />
+            Pilote opérationnel
           </span>
-          <div>
-            <p className="font-semibold tracking-tight">Agency Monitor</p>
-            <p className="text-xs text-white/45">Nom de travail</p>
-          </div>
+          <Link href="/sign-in" className="am-button-secondary">
+            Connexion
+          </Link>
         </div>
-        <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-3 py-1 text-xs font-medium text-emerald-200">
-          Pilote technique
-        </span>
       </nav>
 
-      <section className="grid gap-12 py-16 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
+      <section className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-12 py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
         <div>
-          <p className="mb-5 text-sm font-semibold uppercase tracking-[0.22em] text-emerald-300">
-            La maintenance qui se voit
-          </p>
-          <h1 className="max-w-4xl text-5xl font-semibold leading-[0.98] tracking-[-0.045em] sm:text-6xl lg:text-7xl">
-            Détectez les problèmes avant vos clients.
+          <p className="am-kicker">Surveillance multi-site pour agences</p>
+          <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[0.96] tracking-[-0.055em] text-[#f7f9ff] sm:text-6xl lg:text-[4.9rem]">
+            Voyez ce qui change.
+            <span className="block text-[#7f8cff]">
+              Agissez avant le client.
+            </span>
           </h1>
-        </div>
-        <div className="space-y-6 text-lg leading-8 text-white/60">
-          <p>
-            Une vue multi-site pour repérer les régressions invisibles,
-            documenter le travail effectué et livrer des rapports qui portent
-            votre marque.
+          <p className="mt-7 max-w-2xl text-lg leading-8 text-[#97a2b7]">
+            Agency Monitor transforme chaque scan en signal exploitable : état
+            du site, dérives, preuves, remédiations et rapport partageable.
           </p>
-          <div className="flex flex-wrap gap-3">
-            <a
-              href="/sign-in"
-              className="rounded-lg bg-emerald-300 px-5 py-3 text-sm font-bold text-emerald-950 transition hover:bg-emerald-200"
-            >
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/sign-in" className="am-button-primary">
               Accéder au pilote
-            </a>
-            <a
-              href="/api/health"
-              className="rounded-lg border border-white/15 px-5 py-3 text-sm font-semibold text-white/80 transition hover:border-white/30 hover:text-white"
-            >
-              État de la plateforme
+              <span aria-hidden="true">→</span>
+            </Link>
+            <a href="/api/health" className="am-button-secondary">
+              Vérifier la plateforme
             </a>
           </div>
         </div>
-      </section>
-      <section className="grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] sm:grid-cols-3">
-        {signals.map((signal) => (
-          <article
-            key={signal.label}
-            className="border-b border-white/10 p-6 last:border-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
-          >
-            <p className="text-sm text-white/45">{signal.label}</p>
-            <p className="mt-3 text-3xl font-semibold tracking-tight">
-              {signal.value}
-            </p>
-            <p className="mt-1 text-sm text-emerald-200/70">{signal.detail}</p>
-          </article>
-        ))}
-      </section>
 
-      <section className="grid gap-10 py-16 lg:grid-cols-[0.7fr_1.3fr]">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/40">
-            Signal utile
-          </p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-tight">
-            Moins de bruit, plus de preuves.
-          </h2>
-          <p className="mt-4 max-w-md leading-7 text-white/55">
-            Chaque anomalie doit être actionnable, comparée au scan précédent et
-            présentable à un client sans traduction technique.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {checks.map(([title, description], index) => (
-            <article
-              key={title}
-              className="group rounded-xl border border-white/10 bg-black/10 p-5 transition hover:border-emerald-300/25 hover:bg-emerald-300/[0.04]"
-            >
-              <div className="flex items-start gap-4">
-                <span className="mt-0.5 text-xs font-bold text-emerald-300/60">
+        <div className="am-panel overflow-hidden">
+          <div className="flex items-center justify-between border-b border-[#242d40] px-5 py-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#68758c]">
+                Dernier signal
+              </p>
+              <p className="mt-1 font-semibold">client.example.fr</p>
+            </div>
+            <span className="rounded-md border border-[#31435a] bg-[#0a1720] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#68d7ff]">
+              Scan terminé
+            </span>
+          </div>
+          <div className="grid border-b border-[#242d40] sm:grid-cols-4">
+            {[
+              ["HTTP", "200", "#51d3a5"],
+              ["Pages", "16", "#dfe5f2"],
+              ["Findings", "08", "#ffb45f"],
+              ["Critical", "00", "#dfe5f2"],
+            ].map(([label, value, color]) => (
+              <div
+                key={label}
+                className="border-b border-[#242d40] px-4 py-5 last:border-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
+              >
+                <p className="font-mono text-[10px] uppercase tracking-[0.13em] text-[#66738a]">
+                  {label}
+                </p>
+                <p className="mt-2 text-2xl font-semibold" style={{ color }}>
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1 p-3">
+            {[
+              ["CSP absente", "Medium", "Nouveau"],
+              ["Contraste insuffisant", "Medium", "Stable"],
+              ["Heading order", "Low", "Nouveau"],
+              ["Certificat à surveiller", "Low", "Stable"],
+            ].map(([title, severity, state], index) => (
+              <div
+                key={title}
+                className="grid grid-cols-[28px_1fr_auto] items-center gap-3 rounded-md border border-transparent px-3 py-3 hover:border-[#283248] hover:bg-[#101621]"
+              >
+                <span className="font-mono text-xs text-[#536079]">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <div>
-                  <h3 className="font-semibold">{title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/45">
-                    {description}
-                  </p>
+                  <p className="text-sm font-medium text-[#e2e7f2]">{title}</p>
+                  <p className="mt-1 text-xs text-[#657188]">{state}</p>
                 </div>
+                <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#a7b1c5]">
+                  {severity}
+                </span>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto w-[min(1240px,calc(100%-32px))] pb-16">
+        <div className="am-metric-grid">
+          {signals.map((signal) => (
+            <article key={signal.label} className="am-metric-cell">
+              <p className="am-metric-label">{signal.label}</p>
+              <p className="am-metric-value">{signal.value}</p>
+              <p className="mt-1 text-sm text-[#748097]">{signal.detail}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <footer className="flex flex-col gap-2 border-t border-white/10 py-6 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between">
-        <p>Socle pilote — aucun scan public activé.</p>
-        <p>HTTP · TLS · JS · Accessibilité · Historique · Rapports</p>
+      <section className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-10 border-t border-[#242d40] py-16 lg:grid-cols-[0.72fr_1.28fr]">
+        <div>
+          <p className="am-kicker">Du signal à la correction</p>
+          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
+            Un cockpit, pas une collection de voyants.
+          </h2>
+          <p className="mt-4 max-w-md leading-7 text-[#8793a8]">
+            Le parcours reste linéaire : choisir un site, lancer ou suivre un
+            scan, comprendre le résultat, corriger puis partager.
+          </p>
+        </div>
+        <div className="divide-y divide-[#242d40] border-y border-[#242d40]">
+          {checks.map(([title, description], index) => (
+            <article
+              key={title}
+              className="grid gap-3 py-4 sm:grid-cols-[48px_180px_1fr] sm:items-center"
+            >
+              <span className="font-mono text-xs text-[#56627a]">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <h3 className="font-semibold text-[#e8ecf5]">{title}</h3>
+              <p className="text-sm leading-6 text-[#7f8a9f]">{description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <footer className="mx-auto flex w-[min(1240px,calc(100%-32px))] flex-col gap-2 border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176] sm:flex-row sm:items-center sm:justify-between">
+        <p>Agency Monitor — pilote technique</p>
+        <p>HTTP · TLS · JS · A11Y · Historique · Rapports</p>
       </footer>
     </main>
   );

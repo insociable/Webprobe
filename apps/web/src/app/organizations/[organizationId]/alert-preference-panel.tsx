@@ -33,7 +33,7 @@ export function AlertPreferencePanel({
   );
 
   return (
-    <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+    <section className="am-panel mb-6 p-6">
       <p className="text-sm text-white/45">Notifications</p>
       <h2 className="mt-2 text-xl font-semibold tracking-tight">
         Alertes de dégradation
@@ -53,7 +53,7 @@ export function AlertPreferencePanel({
             name="enabled"
             type="checkbox"
             defaultChecked={enabled}
-            className="h-4 w-4 accent-emerald-300"
+            className="h-4 w-4 accent-[#6d7cff]"
           />
           Activer mes alertes e-mail
         </label>
@@ -63,7 +63,7 @@ export function AlertPreferencePanel({
           <select
             name="minimumSeverity"
             defaultValue={minimumSeverity}
-            className="mt-2 block min-w-52 rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+            className="am-field mt-2 min-w-52"
           >
             {Object.entries(severityLabels).map(([value, label]) => (
               <option key={value} value={value}>
@@ -75,14 +75,14 @@ export function AlertPreferencePanel({
 
         <button
           disabled={pending}
-          className="rounded-xl bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Enregistrement…" : "Enregistrer"}
         </button>
       </form>
 
       {state.message ? (
-        <p aria-live="polite" className="mt-4 text-sm text-emerald-200">
+        <p aria-live="polite" className="mt-4 text-sm text-[#51d3a5]">
           {state.message}
         </p>
       ) : null}

@@ -1,7 +1,7 @@
 import { OrganizationReadSchema } from "@agency-saas/contracts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SignOutButton } from "@/components/sign-out-button";
+import { WorkspaceShell } from "@/components/product-shell";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getOrganizationOverview } from "@/lib/organization-overview";
@@ -68,221 +68,262 @@ export default async function OrganizationPage({
   );
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-8 lg:px-10">
+    <WorkspaceShell trail={[{ label: overview.access.organizationName }]}>
       <ScanStatusRefresher active={scansInProgress > 0} />
-      <nav className="flex items-center justify-between border-b border-white/10 pb-6">
-        <Link href="/dashboard" className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-emerald-300 font-black text-emerald-950">
-            A
-          </span>
-          <div>
-            <p className="font-semibold tracking-tight">Agency Monitor</p>
-            <p className="text-xs text-white/45">Retour au tableau de bord</p>
-          </div>
-        </Link>
-        <SignOutButton />
-      </nav>
 
-      <section className="flex flex-col gap-6 py-12 md:flex-row md:items-end md:justify-between">
+      <section className="flex flex-col gap-6 border-b border-[#242d40] pb-9 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">
-            Organisation
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">
+          <p className="am-kicker">Organisation</p>
+          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
             {overview.access.organizationName}
           </h1>
-          <p className="mt-3 text-white/50">
+          <p className="mt-4 text-[#8793a8]">
             {overview.sites.length} site
             {overview.sites.length > 1 ? "s" : ""} configuré
-            {overview.sites.length > 1 ? "s" : ""}
+            {overview.sites.length > 1 ? "s" : ""}.
           </p>
         </div>
 
         {overview.access.role !== "member" ? (
           <Link
-            href={`/organizations/${organizationId}/sites/new`}
-            className="rounded-xl bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200"
+            href={"/organizations/" + organizationId + "/sites/new"}
+            className="am-button-primary"
           >
             Ajouter un site
+            <span aria-hidden="true">+</span>
           </Link>
         ) : null}
       </section>
-      <section className="mb-8 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-white/35">
-            Sites actifs
-          </p>
-          <p className="mt-2 text-2xl font-semibold">{activeSites}</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-white/35">
-            Scans en cours
-          </p>
-          <p className="mt-2 text-2xl font-semibold">{scansInProgress}</p>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
-          <p className="text-xs uppercase tracking-[0.15em] text-white/35">
-            Findings high / critical
-          </p>
-          <p className="mt-2 text-2xl font-semibold">{majorFindings}</p>
+
+      <section className="py-8">
+        <div className="am-metric-grid">
+          <div className="am-metric-cell">
+            <p className="am-metric-label">Sites actifs</p>
+            <p className="am-metric-value">{activeSites}</p>
+          </div>
+          <div className="am-metric-cell">
+            <p className="am-metric-label">Scans en cours</p>
+            <p className="am-metric-value">{scansInProgress}</p>
+          </div>
+          <div className="am-metric-cell">
+            <p className="am-metric-label">High / critical</p>
+            <p className="am-metric-value">{majorFindings}</p>
+          </div>
         </div>
       </section>
 
-      {overview.access.role !== "member" ? (
-        <ReportBrandingPanel
-          organizationId={organizationId}
-          brandName={overview.access.reportBrandName}
-          accentColor={overview.access.reportAccentColor}
-        />
-      ) : null}
+      <section className="border-t border-[#242d40] pt-8">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Workflow principal
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Parc surveillé
+            </h2>
+          </div>
+          <span className="font-mono text-xs text-[#657188]">
+            {String(overview.sites.length).padStart(2, "0")} sites
+          </span>
+        </div>
 
-      {overview.access.role !== "member" ? (
-        <AlertPreferencePanel
-          organizationId={organizationId}
-          enabled={overview.access.scanAlertEnabled}
-          minimumSeverity={
-            overview.access.scanAlertMinimumSeverity === "high" ||
-            overview.access.scanAlertMinimumSeverity === "critical"
-              ? overview.access.scanAlertMinimumSeverity
-              : "medium"
-          }
-        />
-      ) : null}
+        {overview.sites.length === 0 ? (
+          <div className="mt-6 border-l-2 border-[#6d7cff] bg-[#0d121d] p-7">
+            <p className="text-sm text-[#7f8a9f]">Aucun site enregistré.</p>
+            <h3 className="mt-2 text-xl font-semibold">
+              Ajoutez le premier site à superviser.
+            </h3>
+          </div>
+        ) : (
+          <div className="mt-6 divide-y divide-[#242d40] border-y border-[#242d40]">
+            {overview.sites.map((site, index) => {
+              const scanActive =
+                site.latestScan?.status === "queued" ||
+                site.latestScan?.status === "running";
 
-      {overview.sites.length === 0 ? (
-        <section className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-8">
-          <p className="text-sm text-white/45">Aucun site enregistré.</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-            Ajoutez le premier site à superviser.
-          </h2>
-        </section>
-      ) : (
-        <section className="grid gap-4 md:grid-cols-2">
-          {overview.sites.map((site) => {
-            const scanActive =
-              site.latestScan?.status === "queued" ||
-              site.latestScan?.status === "running";
+              return (
+                <article key={site.id} className="py-6">
+                  <div className="grid gap-5 lg:grid-cols-[48px_1fr_0.85fr_auto] lg:items-start">
+                    <span className="font-mono text-xs text-[#56627a]">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
 
-            return (
-              <article
-                key={site.id}
-                className="rounded-2xl border border-white/10 bg-white/[0.035] p-6"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="text-lg font-semibold">
-                      <Link
-                        href={`/organizations/${organizationId}/sites/${site.id}`}
-                        className="transition hover:text-emerald-200"
-                      >
-                        {site.name}
-                      </Link>
-                    </h2>
-                    <p className="mt-2 break-all text-sm text-white/45">
-                      {site.canonicalUrl}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/45">
-                    {site.status === "active"
-                      ? "Actif"
-                      : site.status === "paused"
-                        ? "En pause"
-                        : "À vérifier"}
-                  </span>
-                </div>
-
-                <div className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4">
-                  {site.latestScan ? (
-                    <>
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium">Dernier scan</p>
-                        <span className="text-xs text-white/45">
-                          {scanStatusLabels[site.latestScan.status]}
+                    <div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3 className="text-lg font-semibold">
+                          <Link
+                            href={
+                              "/organizations/" +
+                              organizationId +
+                              "/sites/" +
+                              site.id
+                            }
+                            className="transition hover:text-[#9ba5ff]"
+                          >
+                            {site.name}
+                          </Link>
+                        </h3>
+                        <span className="rounded-md border border-[#303a50] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#8290a6]">
+                          {site.status === "active"
+                            ? "Actif"
+                            : site.status === "paused"
+                              ? "En pause"
+                              : "À vérifier"}
                         </span>
                       </div>
-                      <p className="mt-2 text-xs text-white/40">
-                        {formatDate(site.latestScan.queuedAt)}
+                      <p className="mt-2 break-all text-sm text-[#6f7b91]">
+                        {site.canonicalUrl}
                       </p>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-xs text-white/35">Findings</p>
-                          <p className="mt-1">
-                            {site.latestScan.findingCount ?? "—"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-white/35">
-                            High / critical
-                          </p>
-                          <p className="mt-1">
-                            {site.latestScan.highCount} /{" "}
-                            {site.latestScan.criticalCount}
-                          </p>
-                        </div>
+
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        {site.status === "pending_verification" &&
+                        overview.access.role !== "member" ? (
+                          <Link
+                            href={
+                              "/organizations/" +
+                              organizationId +
+                              "/sites/" +
+                              site.id +
+                              "/verify"
+                            }
+                            className="am-button-secondary"
+                          >
+                            Vérifier le domaine
+                          </Link>
+                        ) : null}
+
+                        {scanActive && site.latestScan ? (
+                          <Link
+                            href={
+                              "/organizations/" +
+                              organizationId +
+                              "/sites/" +
+                              site.id +
+                              "/scans/" +
+                              site.latestScan.id
+                            }
+                            className="am-button-primary"
+                          >
+                            Suivre le scan
+                            <span aria-hidden="true">→</span>
+                          </Link>
+                        ) : null}
+
+                        {site.latestScan?.status === "completed" ? (
+                          <Link
+                            href={
+                              "/organizations/" +
+                              organizationId +
+                              "/sites/" +
+                              site.id +
+                              "/scans/" +
+                              site.latestScan.id
+                            }
+                            className="am-button-secondary"
+                          >
+                            Voir le rapport
+                          </Link>
+                        ) : null}
+
+                        {site.status === "active" &&
+                        overview.access.role !== "member" &&
+                        !scanActive ? (
+                          <ManualScanButton
+                            organizationId={organizationId}
+                            siteId={site.id}
+                          />
+                        ) : null}
                       </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-white/45">
-                      Aucun scan enregistré.
-                    </p>
-                  )}
-                </div>
-
-                {site.status === "pending_verification" &&
-                overview.access.role !== "member" ? (
-                  <Link
-                    href={`/organizations/${organizationId}/sites/${site.id}/verify`}
-                    className="mt-5 inline-flex rounded-lg border border-emerald-300/20 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.05]"
-                  >
-                    Vérifier le domaine
-                  </Link>
-                ) : null}
-
-                {scanActive ? (
-                  <div className="mt-5 rounded-xl border border-sky-300/15 bg-sky-300/[0.05] px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <span className="size-2 animate-pulse rounded-full bg-sky-300" />
-                      <p className="text-sm font-medium text-sky-100">
-                        Scan en cours
-                      </p>
                     </div>
-                    <p className="mt-2 text-xs leading-5 text-white/45">
-                      Le statut se met à jour automatiquement. Vous pouvez
-                      ouvrir le suivi détaillé.
-                    </p>
-                    {site.latestScan ? (
-                      <Link
-                        href={`/organizations/${organizationId}/sites/${site.id}/scans/${site.latestScan.id}`}
-                        className="mt-3 inline-flex text-sm font-semibold text-sky-200 transition hover:text-sky-100"
-                      >
-                        Suivre le scan →
-                      </Link>
-                    ) : null}
+
+                    <div className="border-l border-[#2b354b] pl-4">
+                      <p className="font-mono text-[10px] uppercase tracking-[0.13em] text-[#66738a]">
+                        Dernier scan
+                      </p>
+                      {site.latestScan ? (
+                        <>
+                          <div className="mt-2 flex items-center gap-2">
+                            {scanActive ? (
+                              <span className="size-2 animate-pulse rounded-sm bg-[#39c7ff]" />
+                            ) : null}
+                            <p className="text-sm font-medium text-[#cdd5e4]">
+                              {scanStatusLabels[site.latestScan.status]}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-[#67738a]">
+                            {formatDate(site.latestScan.queuedAt)}
+                          </p>
+                          <div className="mt-4 grid grid-cols-2 gap-5">
+                            <div>
+                              <p className="font-mono text-[10px] uppercase text-[#5f6b81]">
+                                Findings
+                              </p>
+                              <p className="mt-1 text-lg font-semibold">
+                                {site.latestScan.findingCount ?? "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="font-mono text-[10px] uppercase text-[#5f6b81]">
+                                H / C
+                              </p>
+                              <p className="mt-1 text-lg font-semibold">
+                                {site.latestScan.highCount} /{" "}
+                                {site.latestScan.criticalCount}
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-2 text-sm text-[#6f7b91]">
+                          Aucun scan enregistré.
+                        </p>
+                      )}
+                    </div>
+
+                    <Link
+                      href={
+                        "/organizations/" + organizationId + "/sites/" + site.id
+                      }
+                      aria-label={"Ouvrir " + site.name}
+                      className="text-[#6676ff] transition hover:translate-x-1 hover:text-[#9ba5ff]"
+                    >
+                      →
+                    </Link>
                   </div>
-                ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-                {site.latestScan?.status === "completed" ? (
-                  <Link
-                    href={`/organizations/${organizationId}/sites/${site.id}/scans/${site.latestScan.id}`}
-                    className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-white/90"
-                  >
-                    Voir le rapport
-                  </Link>
-                ) : null}
-
-                {site.status === "active" &&
-                overview.access.role !== "member" &&
-                !scanActive ? (
-                  <ManualScanButton
-                    organizationId={organizationId}
-                    siteId={site.id}
-                  />
-                ) : null}
-              </article>
-            );
-          })}
+      {overview.access.role !== "member" ? (
+        <section className="mt-14 border-t border-[#242d40] pt-8">
+          <div className="mb-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Configuration
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Rapports et alertes
+            </h2>
+          </div>
+          <ReportBrandingPanel
+            organizationId={organizationId}
+            brandName={overview.access.reportBrandName}
+            accentColor={overview.access.reportAccentColor}
+          />
+          <AlertPreferencePanel
+            organizationId={organizationId}
+            enabled={overview.access.scanAlertEnabled}
+            minimumSeverity={
+              overview.access.scanAlertMinimumSeverity === "high" ||
+              overview.access.scanAlertMinimumSeverity === "critical"
+                ? overview.access.scanAlertMinimumSeverity
+                : "medium"
+            }
+          />
         </section>
-      )}
-    </main>
+      ) : null}
+    </WorkspaceShell>
   );
 }

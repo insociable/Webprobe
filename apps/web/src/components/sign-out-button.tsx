@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 
-export function SignOutButton() {
+export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
 
   async function signOut() {
@@ -16,9 +16,13 @@ export function SignOutButton() {
     <button
       type="button"
       onClick={signOut}
-      className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-white/20 hover:text-white"
+      className={
+        compact
+          ? "am-button-secondary min-h-9 px-3 py-2 text-xs"
+          : "am-button-secondary w-full"
+      }
     >
-      Se déconnecter
+      {compact ? "Quitter" : "Se déconnecter"}
     </button>
   );
 }

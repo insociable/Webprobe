@@ -74,7 +74,7 @@ export function ScanSchedulePanel({
 
   if (!canManage) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+      <div className="am-panel p-6">
         <p className="text-sm text-white/45">Planification</p>
         <h2 className="mt-2 text-xl font-semibold tracking-tight">
           Scan hebdomadaire
@@ -94,7 +94,7 @@ export function ScanSchedulePanel({
     );
   }
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-6">
+    <div className="am-panel p-6">
       <p className="text-sm text-white/45">Planification</p>
       <h2 className="mt-2 text-xl font-semibold tracking-tight">
         Scan hebdomadaire
@@ -110,7 +110,7 @@ export function ScanSchedulePanel({
             name="enabled"
             type="checkbox"
             defaultChecked={values.enabled}
-            className="h-4 w-4 accent-emerald-300"
+            className="h-4 w-4 accent-[#6d7cff]"
           />
           Activer le scan automatique
         </label>
@@ -126,7 +126,7 @@ export function ScanSchedulePanel({
             <select
               name="dayOfWeek"
               defaultValue={values.dayOfWeek}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+              className="am-field mt-2"
             >
               {dayLabels.map((label, index) => (
                 <option key={label} value={index + 1}>
@@ -143,7 +143,7 @@ export function ScanSchedulePanel({
               type="time"
               required
               defaultValue={timeValue(values.minuteOfDay)}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+              className="am-field mt-2"
             />
           </label>
         </div>
@@ -155,7 +155,7 @@ export function ScanSchedulePanel({
             required
             maxLength={100}
             defaultValue={values.timeZone}
-            className="mt-2 w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+            className="am-field mt-2"
           />
         </label>
 
@@ -168,7 +168,7 @@ export function ScanSchedulePanel({
 
         <button
           disabled={pending}
-          className="rounded-xl bg-emerald-300 px-5 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Enregistrement…" : "Enregistrer la planification"}
         </button>
@@ -177,7 +177,7 @@ export function ScanSchedulePanel({
       {state.message ? (
         <p
           aria-live="polite"
-          className="mt-4 rounded-xl border border-emerald-300/15 bg-emerald-300/[0.05] px-4 py-3 text-sm text-emerald-100"
+          className="mt-4 border-l-2 border-[#51d3a5] bg-[#0d1715] px-4 py-3 text-sm text-[#9fd2bd]"
         >
           {state.message}
         </p>

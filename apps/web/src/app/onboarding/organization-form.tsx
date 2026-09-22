@@ -27,13 +27,13 @@ export function OrganizationForm() {
           maxLength={120}
           name="name"
           placeholder="Agence Nord"
-          className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none transition focus:border-emerald-300/60"
+          className="am-field"
         />
       </label>
 
       <button
         disabled={pending}
-        className="rounded-xl bg-emerald-300 px-5 py-3 font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+        className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
         {pending ? "Création…" : "Créer mon espace agence"}
       </button>

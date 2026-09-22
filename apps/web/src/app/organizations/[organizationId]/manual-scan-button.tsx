@@ -42,17 +42,14 @@ export function ManualScanButton({
       <form action={formAction}>
         <button
           disabled={pending}
-          className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
           {pending ? "Mise en file…" : "Lancer un scan"}
         </button>
       </form>
 
       {state.message ? (
-        <p
-          aria-live="polite"
-          className="mt-3 text-xs leading-5 text-emerald-200"
-        >
+        <p aria-live="polite" className="mt-3 text-xs leading-5 text-[#8f9aff]">
           {state.message}
         </p>
       ) : null}

@@ -63,7 +63,7 @@ export function ReportSharePanel({
   );
 
   return (
-    <section className="border-b border-white/10 py-10">
+    <section className="border-b border-[#242d40] py-10">
       <p className="text-sm text-white/45">Partage client</p>
       <h2 className="mt-2 text-2xl font-semibold tracking-tight">
         Rapport partageable
@@ -74,34 +74,26 @@ export function ReportSharePanel({
       </p>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <form
-          action={createFormAction}
-          className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-        >
+        <form action={createFormAction} className="am-panel p-5">
           <h3 className="font-semibold">Créer un lien</h3>
           <p className="mt-2 text-sm text-white/40">
             Crée un accès public temporaire à ce rapport uniquement.
           </p>
           <button
             disabled={creating}
-            className="mt-4 rounded-xl bg-emerald-300 px-4 py-2.5 text-sm font-semibold text-emerald-950 disabled:opacity-50"
+            className="am-button-primary mt-4 disabled:opacity-50"
           >
             {creating ? "Création…" : "Créer un lien 7 jours"}
           </button>
           {createState.message ? (
-            <p className="mt-3 text-sm text-emerald-200">
-              {createState.message}
-            </p>
+            <p className="mt-3 text-sm text-[#51d3a5]">{createState.message}</p>
           ) : null}
           {createState.error ? (
             <p className="mt-3 text-sm text-amber-100">{createState.error}</p>
           ) : null}
         </form>
 
-        <form
-          action={emailFormAction}
-          className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-        >
+        <form action={emailFormAction} className="am-panel p-5">
           <h3 className="font-semibold">Envoyer par e-mail</h3>
           <label className="mt-3 block text-sm text-white/50">
             Destinataire
@@ -110,20 +102,18 @@ export function ReportSharePanel({
               type="email"
               required
               autoComplete="email"
-              className="mt-2 block w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-white outline-none focus:border-emerald-300/40"
+              className="am-field mt-2"
               placeholder="client@example.com"
             />
           </label>
           <button
             disabled={sending}
-            className="mt-4 rounded-xl border border-emerald-300/25 px-4 py-2.5 text-sm font-semibold text-emerald-200 disabled:opacity-50"
+            className="am-button-secondary mt-4 disabled:opacity-50"
           >
             {sending ? "Mise en file…" : "Envoyer le rapport"}
           </button>
           {emailState.message ? (
-            <p className="mt-3 text-sm text-emerald-200">
-              {emailState.message}
-            </p>
+            <p className="mt-3 text-sm text-[#51d3a5]">{emailState.message}</p>
           ) : null}
           {emailState.error ? (
             <p className="mt-3 text-sm text-amber-100">{emailState.error}</p>
@@ -153,7 +143,7 @@ export function ReportSharePanel({
                       href={share.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block truncate text-sm text-emerald-200 hover:underline"
+                      className="block truncate text-sm text-[#8e99ff] hover:underline"
                     >
                       {share.url}
                     </a>
