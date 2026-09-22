@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import type { ScanResult } from "@agency-saas/contracts";
-import { findings, organizations, scans, sites } from "@agency-saas/db";
+import {
+  findings,
+  organizations,
+  scanSchedules,
+  scans,
+  sites,
+} from "@agency-saas/db";
 import { and, eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import type { GeneratedFinding } from "../src/findings.js";
@@ -224,6 +230,63 @@ describeDatabase("scan persistence", () => {
       ).rejects.toMatchObject({ code: "target-mismatch" });
     } finally {
       await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("rejects scheduled work after its schedule is disabled", async () => {
+    const { db } = getDatabase();
+    const organizationId = randomUUID();
+    const siteId = randomUUID();
+    const scheduleId = randomUUID();
+    const scanId = randomUUID();
+
+    try {
+      await db.insert(organizations).values({
+        id: organizationId,
+        name: "Disabled schedule test",
+      });
+      await db.insert(sites).values({
+        id: siteId,
+        organizationId,
+        name: "Disabled schedule target",
+        canonicalUrl: "https://example.com/",
+        status: "active",
+        verifiedAt: new Date(),
+      });
+      await db.insert(scanSchedules).values({
+        id: scheduleId,
+        organizationId,
+        siteId,
+        enabled: false,
+        dayOfWeek: 1,
+        minuteOfDay: 540,
+        timeZone: "Europe/Paris",
+      });
+      await db.insert(scans).values({
+        id: scanId,
+        organizationId,
+        siteId,
+        trigger: "scheduled",
+        scheduleId,
+        scheduledFor: new Date(),
+      });
+
+      await expect(
+        validateScanContext({
+          scanId,
+          organizationId,
+          siteId,
+          targetUrl: "https://example.com/",
+          profile: {
+            maxPages: 20,
+            navigationTimeoutMs: 20_000,
+            checkAccessibility: true,
+            captureScreenshots: true,
+          },
+        }),
+      ).rejects.toMatchObject({ code: "schedule-not-active" });
+    } finally {
+      await deleteFixture(organizationId);
     }
   });
 });

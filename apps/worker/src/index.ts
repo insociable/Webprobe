@@ -1,10 +1,11 @@
 import { config } from "dotenv";
-import { Worker } from "bullmq";
+import { Queue, Worker } from "bullmq";
 import pino from "pino";
 import { z } from "zod";
 import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
 import { processScanJob } from "./scan-processor.js";
+import { startScheduledScanCoordinator } from "./scan-scheduler.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 void getDatabase();
@@ -19,6 +20,17 @@ const connection = {
   password: redisUrl.password || undefined,
   maxRetriesPerRequest: null,
 };
+
+const producerConnection = {
+  ...connection,
+  connectTimeout: 5_000,
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false,
+};
+
+const schedulerQueue = new Queue<ScanJob>(SCAN_QUEUE_NAME, {
+  connection: producerConnection,
+});
 
 const worker = new Worker<ScanJob>(
   SCAN_QUEUE_NAME,
@@ -61,9 +73,23 @@ worker.on("failed", (job, error) => {
   );
 });
 
+const schedulerCoordinator = startScheduledScanCoordinator({
+  logger,
+  enqueue: async (payload) => {
+    await schedulerQueue.add("scheduled-scan", payload, {
+      jobId: payload.scanId,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+  },
+  hasJob: async (scanId) => (await schedulerQueue.getJob(scanId)) !== undefined,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
+  await schedulerCoordinator.stop();
   await worker.close();
+  await schedulerQueue.close();
   await closeDatabase();
   process.exitCode = 0;
 }

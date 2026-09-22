@@ -237,6 +237,7 @@ export const scanSchedules = pgTable(
     dayOfWeek: integer("day_of_week").notNull(),
     minuteOfDay: integer("minute_of_day").notNull(),
     timeZone: text("time_zone").default("Europe/Paris").notNull(),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -247,6 +248,9 @@ export const scanSchedules = pgTable(
   (table) => [
     uniqueIndex("scan_schedules_site_unique").on(table.siteId),
     index("scan_schedules_org_idx").on(table.organizationId),
+    index("scan_schedules_due_idx")
+      .on(table.nextRunAt)
+      .where(sql`${table.enabled} = true`),
     check(
       "scan_schedules_day_of_week_range",
       sql`${table.dayOfWeek} between 1 and 7`,
@@ -274,6 +278,10 @@ export const scans = pgTable(
       .references(() => sites.id, { onDelete: "cascade" }),
     status: scanStatus("status").default("queued").notNull(),
     trigger: scanTrigger("trigger").notNull(),
+    scheduleId: uuid("schedule_id").references(() => scanSchedules.id, {
+      onDelete: "set null",
+    }),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
     pageCount: integer("page_count").default(0).notNull(),
     summary: jsonb("summary")
       .$type<Record<string, unknown>>()
@@ -291,6 +299,16 @@ export const scans = pgTable(
     uniqueIndex("scans_site_active_unique")
       .on(table.siteId)
       .where(sql`${table.status} in ('queued', 'running')`),
+    uniqueIndex("scans_schedule_occurrence_unique")
+      .on(table.scheduleId, table.scheduledFor)
+      .where(
+        sql`${table.trigger} = 'scheduled' and ${table.scheduleId} is not null`,
+      ),
+    check(
+      "scans_scheduled_metadata_consistent",
+      sql`(${table.trigger} = 'manual' and ${table.scheduleId} is null and ${table.scheduledFor} is null)
+          or (${table.trigger} = 'scheduled' and ${table.scheduledFor} is not null)`,
+    ),
   ],
 );
 

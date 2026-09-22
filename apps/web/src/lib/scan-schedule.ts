@@ -3,7 +3,7 @@ import {
   type WeeklyScanScheduleInput,
 } from "@agency-saas/contracts";
 import { scanSchedules } from "@agency-saas/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
   canManageOrganization,
@@ -78,6 +78,15 @@ export async function setWeeklyScanScheduleForSite(
     );
   }
 
+  const nextRunAt = data.enabled
+    ? sql<Date>`public.next_weekly_scan_run(
+        ${data.dayOfWeek},
+        ${data.minuteOfDay},
+        ${data.timeZone},
+        now()
+      )`
+    : null;
+
   const [schedule] = await db
     .insert(scanSchedules)
     .values({
@@ -87,6 +96,7 @@ export async function setWeeklyScanScheduleForSite(
       dayOfWeek: data.dayOfWeek,
       minuteOfDay: data.minuteOfDay,
       timeZone: data.timeZone,
+      nextRunAt,
     })
     .onConflictDoUpdate({
       target: scanSchedules.siteId,
@@ -96,6 +106,7 @@ export async function setWeeklyScanScheduleForSite(
         dayOfWeek: data.dayOfWeek,
         minuteOfDay: data.minuteOfDay,
         timeZone: data.timeZone,
+        nextRunAt,
         updatedAt: new Date(),
       },
     })

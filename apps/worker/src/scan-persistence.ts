@@ -1,6 +1,6 @@
-import { findings, scans, sites } from "@agency-saas/db";
+import { findings, scanSchedules, scans, sites } from "@agency-saas/db";
 import type { ScanJob, ScanResult, Severity } from "@agency-saas/contracts";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
 import type { HttpProbeResult } from "./http-probe.js";
@@ -12,6 +12,7 @@ export class ScanContextError extends Error {
       | "scan-not-found"
       | "scan-not-runnable"
       | "site-not-active"
+      | "schedule-not-active"
       | "target-mismatch",
   ) {
     super(message);
@@ -23,6 +24,9 @@ export type ValidatedScanContext = {
   scanId: string;
   organizationId: string;
   siteId: string;
+  trigger: "manual" | "scheduled";
+  scheduleId: string | null;
+  scheduledFor: Date | null;
   targetUrl: string;
   startedAt: Date;
 };
@@ -37,6 +41,10 @@ export async function validateScanContext(
     .select({
       scanId: scans.id,
       scanStatus: scans.status,
+      scanTrigger: scans.trigger,
+      scheduleId: scans.scheduleId,
+      scheduledFor: scans.scheduledFor,
+      scheduleEnabled: scanSchedules.enabled,
       startedAt: scans.startedAt,
       organizationId: scans.organizationId,
       siteId: scans.siteId,
@@ -49,6 +57,14 @@ export async function validateScanContext(
       and(
         eq(scans.siteId, sites.id),
         eq(scans.organizationId, sites.organizationId),
+      ),
+    )
+    .leftJoin(
+      scanSchedules,
+      and(
+        eq(scans.scheduleId, scanSchedules.id),
+        eq(scans.organizationId, scanSchedules.organizationId),
+        eq(scans.siteId, scanSchedules.siteId),
       ),
     )
     .where(
@@ -77,6 +93,16 @@ export async function validateScanContext(
     throw new ScanContextError("Site is not active", "site-not-active");
   }
 
+  if (
+    row.scanTrigger === "scheduled" &&
+    (!row.scheduleId || !row.scheduledFor || row.scheduleEnabled !== true)
+  ) {
+    throw new ScanContextError(
+      "Scheduled scan context is not active",
+      "schedule-not-active",
+    );
+  }
+
   if (row.canonicalUrl !== payload.targetUrl) {
     throw new ScanContextError(
       "Queued target does not match site",
@@ -88,6 +114,9 @@ export async function validateScanContext(
     scanId: row.scanId,
     organizationId: row.organizationId,
     siteId: row.siteId,
+    trigger: row.scanTrigger,
+    scheduleId: row.scheduleId,
+    scheduledFor: row.scheduledFor,
     targetUrl: row.canonicalUrl,
     startedAt: row.startedAt ?? new Date(),
   };
@@ -109,7 +138,28 @@ export async function markScanRunning(
         eq(scans.id, context.scanId),
         eq(scans.organizationId, context.organizationId),
         eq(scans.siteId, context.siteId),
+        eq(scans.trigger, context.trigger),
         inArray(scans.status, ["queued", "running", "failed"]),
+        sql`exists (
+          select 1
+          from ${sites}
+          where ${sites.id} = ${context.siteId}
+            and ${sites.organizationId} = ${context.organizationId}
+            and ${sites.status} = 'active'
+            and ${sites.verifiedAt} is not null
+            and ${sites.canonicalUrl} = ${context.targetUrl}
+        )`,
+        context.trigger === "scheduled"
+          ? sql`${scans.scheduleId} = ${context.scheduleId}
+              and exists (
+                select 1
+                from ${scanSchedules}
+                where ${scanSchedules.id} = ${context.scheduleId}
+                  and ${scanSchedules.organizationId} = ${context.organizationId}
+                  and ${scanSchedules.siteId} = ${context.siteId}
+                  and ${scanSchedules.enabled} = true
+              )`
+          : sql`${scans.scheduleId} is null`,
       ),
     )
     .returning({ id: scans.id });
