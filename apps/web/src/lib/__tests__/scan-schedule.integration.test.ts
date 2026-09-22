@@ -99,6 +99,9 @@ describeDatabase("weekly scan schedule tenant and permission rules", () => {
         },
       );
 
+      expect(created.nextRunAt).toBeInstanceOf(Date);
+      expect(created.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+
       const visibleToMember = await getWeeklyScanScheduleForSite(
         userIds[1]!,
         organizationIds[0]!,
@@ -129,6 +132,21 @@ describeDatabase("weekly scan schedule tenant and permission rules", () => {
         dayOfWeek: 5,
         minuteOfDay: 1110,
       });
+      expect(updated.nextRunAt).toBeInstanceOf(Date);
+      expect(updated.nextRunAt!.getTime()).toBeGreaterThan(Date.now());
+
+      const disabled = await setWeeklyScanScheduleForSite(
+        userIds[0]!,
+        organizationIds[0]!,
+        siteIds[0]!,
+        {
+          enabled: false,
+          dayOfWeek: 5,
+          minuteOfDay: 1110,
+          timeZone: "Europe/Paris",
+        },
+      );
+      expect(disabled.nextRunAt).toBeNull();
 
       await expect(
         setWeeklyScanScheduleForSite(
