@@ -1,6 +1,10 @@
 import { observeUrl } from "./url.js";
 
-export type SeoSignalLevel = "error" | "warning" | "information" | "opportunity";
+export type SeoSignalLevel =
+  | "error"
+  | "warning"
+  | "information"
+  | "opportunity";
 export type SeoSignalCode =
   | "seo.http-error"
   | "seo.title.missing"
@@ -120,7 +124,10 @@ export function analyzeSeoPage(input: {
     try {
       const resolved = new URL(canonicalHref, input.url);
       const observedCanonical = observeUrl(resolved.toString());
-      if (!observedCanonical || (resolved.protocol !== "http:" && resolved.protocol !== "https:")) {
+      if (
+        !observedCanonical ||
+        (resolved.protocol !== "http:" && resolved.protocol !== "https:")
+      ) {
         throw new Error("unsupported canonical URL");
       }
       canonicalUrl = observedCanonical.displayUrl;
@@ -268,7 +275,10 @@ export function parseRobotsTxt(contents: string): RobotsTxtObservation {
       }
       continue;
     }
-    if ((field !== "allow" && field !== "disallow") || currentAgents.length === 0) {
+    if (
+      (field !== "allow" && field !== "disallow") ||
+      currentAgents.length === 0
+    ) {
       continue;
     }
     for (const agent of currentAgents) {

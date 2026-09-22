@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
-const sensitiveQueryParameter = /(?:^|[_-])(token|secret|password|pass|auth|code|session|signature|sig|key|access[_-]?token|id[_-]?token|state)(?:$|[_-])/i;
+const sensitiveQueryParameter =
+  /(?:^|[_-])(token|secret|password|pass|auth|code|session|signature|sig|key|access[_-]?token|id[_-]?token|state)(?:$|[_-])/i;
 
 export type ObservedUrl = {
   /** URL safe to retain in scan output. Fragments are removed and sensitive values redacted. */
@@ -49,7 +50,10 @@ export function observeUrl(rawUrl: string): ObservedUrl | null {
   };
 }
 
-export function safeDiagnosticPreview(value: string, maximumLength = 180): string {
+export function safeDiagnosticPreview(
+  value: string,
+  maximumLength = 180,
+): string {
   const withRedactedUrls = value.replace(
     /https?:\/\/[^\s"'<>]+/gi,
     (rawUrl) => observeUrl(rawUrl)?.displayUrl ?? "[invalid-url]",

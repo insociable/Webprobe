@@ -23,20 +23,41 @@ import {
 
 describe("scanner v2 crawl coverage", () => {
   it("keeps meaningful query parameters while redacting only sensitive values", () => {
-    expect(observeUrl("https://example.com/search?page=2&token=secret#top")).toMatchObject({
+    expect(
+      observeUrl("https://example.com/search?page=2&token=secret#top"),
+    ).toMatchObject({
       displayUrl: "https://example.com/search?page=2&token=%5Bredacted%5D",
     });
   });
 
   it("records redirects, exclusions and pages left outside the page budget", () => {
     const tracker = new CrawlCoverageTracker(2);
-    const root = classifyCrawlCandidate(crawlFixture.root, crawlFixture.root, "https://example.com");
-    const redirected = classifyCrawlCandidate("/old", crawlFixture.root, "https://example.com");
-    const outside = classifyCrawlCandidate(crawlFixture.external, crawlFixture.root, "https://example.com");
-    const budget = classifyCrawlCandidate("/unvisited", crawlFixture.root, "https://example.com");
+    const root = classifyCrawlCandidate(
+      crawlFixture.root,
+      crawlFixture.root,
+      "https://example.com",
+    );
+    const redirected = classifyCrawlCandidate(
+      "/old",
+      crawlFixture.root,
+      "https://example.com",
+    );
+    const outside = classifyCrawlCandidate(
+      crawlFixture.external,
+      crawlFixture.root,
+      "https://example.com",
+    );
+    const budget = classifyCrawlCandidate(
+      "/unvisited",
+      crawlFixture.root,
+      "https://example.com",
+    );
     expect(root.accepted).toBe(true);
     expect(redirected.accepted).toBe(true);
-    expect(outside).toMatchObject({ accepted: false, reason: "external-origin" });
+    expect(outside).toMatchObject({
+      accepted: false,
+      reason: "external-origin",
+    });
     expect(budget.accepted).toBe(true);
     if (!root.accepted || !redirected.accepted || budget.accepted === false) {
       throw new Error("fixture candidates must be accepted");
@@ -115,7 +136,10 @@ describe("scanner v2 network observations", () => {
       resourceType: "script",
       failureCode: "net::ERR_NAME_NOT_RESOLVED",
     });
-    collector.recordConsoleError(crawlFixture.root, "ReferenceError: app is not defined");
+    collector.recordConsoleError(
+      crawlFixture.root,
+      "ReferenceError: app is not defined",
+    );
 
     const observation = collector.snapshot();
     expect(observation.issues).toEqual(
@@ -123,10 +147,16 @@ describe("scanner v2 network observations", () => {
         expect.objectContaining({
           kind: "http-4xx",
           resourceType: "script",
-          affectedPageUrls: ["https://example.com/", "https://example.com/about"],
+          affectedPageUrls: [
+            "https://example.com/",
+            "https://example.com/about",
+          ],
           occurrenceCount: 2,
         }),
-        expect.objectContaining({ kind: "request-failed", resourceType: "stylesheet" }),
+        expect.objectContaining({
+          kind: "request-failed",
+          resourceType: "stylesheet",
+        }),
         expect.objectContaining({ kind: "console-error" }),
       ]),
     );
@@ -221,14 +251,23 @@ describe("scanner v2 SEO", () => {
     expect(noindex?.signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "seo.noindex", level: "information" }),
-        expect.objectContaining({ code: "seo.h1.multiple", level: "information" }),
+        expect.objectContaining({
+          code: "seo.h1.multiple",
+          level: "information",
+        }),
       ]),
     );
     expect(missing?.signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "seo.http-error", level: "error" }),
-        expect.objectContaining({ code: "seo.title.missing", level: "warning" }),
-        expect.objectContaining({ code: "seo.meta-description.missing", level: "opportunity" }),
+        expect.objectContaining({
+          code: "seo.title.missing",
+          level: "warning",
+        }),
+        expect.objectContaining({
+          code: "seo.meta-description.missing",
+          level: "opportunity",
+        }),
       ]),
     );
   });
@@ -236,9 +275,7 @@ describe("scanner v2 SEO", () => {
   it("parses local robots/sitemap fixtures and compares coverage", () => {
     expect(parseRobotsTxt(robotsFixture)).toEqual({
       sitemaps: ["https://example.com/sitemap.xml"],
-      rules: [
-        { userAgent: "*", allow: ["/public/"], disallow: ["/private/"] },
-      ],
+      rules: [{ userAgent: "*", allow: ["/public/"], disallow: ["/private/"] }],
     });
     expect(parseSitemapXml(sitemapFixture)).toEqual([
       "https://example.com/",
@@ -253,8 +290,16 @@ describe("scanner v2 SEO", () => {
   });
 
   it("finds duplicates only after multiple page facts are available", () => {
-    const first = analyzeSeoPage({ url: crawlFixture.root, statusCode: 200, facts: seoFixture.complete });
-    const second = analyzeSeoPage({ url: "https://example.com/about", statusCode: 200, facts: seoFixture.complete });
+    const first = analyzeSeoPage({
+      url: crawlFixture.root,
+      statusCode: 200,
+      facts: seoFixture.complete,
+    });
+    const second = analyzeSeoPage({
+      url: "https://example.com/about",
+      statusCode: 200,
+      facts: seoFixture.complete,
+    });
     if (!first || !second) {
       throw new Error("expected valid SEO observations");
     }

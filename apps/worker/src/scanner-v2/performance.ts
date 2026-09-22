@@ -1,7 +1,12 @@
 import type { NetworkResourceObservation } from "./network.js";
 import { observeUrl } from "./url.js";
 
-export type LabResourceCategory = "javascript" | "css" | "images" | "fonts" | "other";
+export type LabResourceCategory =
+  | "javascript"
+  | "css"
+  | "images"
+  | "fonts"
+  | "other";
 export type LabPerformanceContext = {
   viewport: { width: number; height: number };
   userAgent: string;
@@ -50,7 +55,9 @@ function difference(end: number | null, start: number | null): number | null {
   return roundedNonNegative(end - start);
 }
 
-function categoryFor(resourceType: NetworkResourceObservation["resourceType"]): LabResourceCategory {
+function categoryFor(
+  resourceType: NetworkResourceObservation["resourceType"],
+): LabResourceCategory {
   switch (resourceType) {
     case "script":
       return "javascript";
@@ -107,9 +114,15 @@ export function createLabPerformanceObservation(input: {
     url: observedUrl.displayUrl,
     context: input.context,
     ttfbMs: difference(input.timing.responseStart, input.timing.requestStart),
-    firstContentfulPaintMs: roundedNonNegative(input.timing.firstContentfulPaint),
-    largestContentfulPaintMs: roundedNonNegative(input.timing.largestContentfulPaint),
-    cumulativeLayoutShift: roundedNonNegative(input.timing.cumulativeLayoutShift),
+    firstContentfulPaintMs: roundedNonNegative(
+      input.timing.firstContentfulPaint,
+    ),
+    largestContentfulPaintMs: roundedNonNegative(
+      input.timing.largestContentfulPaint,
+    ),
+    cumulativeLayoutShift: roundedNonNegative(
+      input.timing.cumulativeLayoutShift,
+    ),
     totalBlockingTimeMs: roundedNonNegative(input.timing.totalBlockingTime),
     navigationDurationMs: difference(
       input.timing.domContentLoadedEventEnd,
@@ -123,7 +136,12 @@ export function createLabPerformanceObservation(input: {
       cacheControlledResponseCount,
     },
     compression: {
-      encodedResponseCount: encodings.size === 0 ? 0 : input.resources.filter((resource) => resource.contentEncoding !== null).length,
+      encodedResponseCount:
+        encodings.size === 0
+          ? 0
+          : input.resources.filter(
+              (resource) => resource.contentEncoding !== null,
+            ).length,
       encodings: [...encodings].sort(),
     },
   };

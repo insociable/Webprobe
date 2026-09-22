@@ -63,18 +63,28 @@ export type NetworkObservation = {
   resources: NetworkResourceObservation[];
   failedRequests: NetworkFailureObservation[];
   consoleErrors: NetworkConsoleObservation[];
+  javascriptErrors: NetworkConsoleObservation[];
   issues: NetworkIssueEvidence[];
   suppressedThirdPartyIssueCount: number;
 };
 
-export type NetworkResponseInput = Omit<NetworkResourceObservation, "resourceUrl" | "resourceKey" | "party"> & {
+export type NetworkResponseInput = Omit<
+  NetworkResourceObservation,
+  "resourceUrl" | "resourceKey" | "party"
+> & {
   resourceUrl: string;
 };
-export type NetworkFailureInput = Omit<NetworkFailureObservation, "resourceUrl" | "resourceKey" | "party"> & {
+export type NetworkFailureInput = Omit<
+  NetworkFailureObservation,
+  "resourceUrl" | "resourceKey" | "party"
+> & {
   resourceUrl: string;
 };
 
-function partyFor(resourceUrl: string, firstPartyOrigin: string | null): NetworkParty {
+function partyFor(
+  resourceUrl: string,
+  firstPartyOrigin: string | null,
+): NetworkParty {
   const observed = observeUrl(resourceUrl);
   if (!observed || !firstPartyOrigin) {
     return "unknown";
@@ -101,6 +111,7 @@ export class NetworkObservationCollector {
   private readonly resources: NetworkResourceObservation[] = [];
   private readonly failedRequests: NetworkFailureObservation[] = [];
   private readonly consoleErrors: NetworkConsoleObservation[] = [];
+  private readonly javascriptErrors: NetworkConsoleObservation[] = [];
 
   constructor(firstPartyOrigin: string | null = null) {
     this.firstPartyOrigin = firstPartyOrigin;
@@ -141,17 +152,31 @@ export class NetworkObservationCollector {
       resourceKey: resource.urlKey,
       resourceType: input.resourceType,
       party: partyFor(input.resourceUrl, this.firstPartyOrigin),
-      failureCode: input.failureCode ? safeDiagnosticPreview(input.failureCode, 120) : null,
+      failureCode: input.failureCode
+        ? safeDiagnosticPreview(input.failureCode, 120)
+        : null,
     });
   }
 
   recordConsoleError(pageUrl: string, message: string): void {
+    this.recordError(this.consoleErrors, pageUrl, message);
+  }
+
+  recordJavascriptError(pageUrl: string, message: string): void {
+    this.recordError(this.javascriptErrors, pageUrl, message);
+  }
+
+  private recordError(
+    destination: NetworkConsoleObservation[],
+    pageUrl: string,
+    message: string,
+  ): void {
     const page = observeUrl(pageUrl);
     if (!page) {
       return;
     }
     const messagePreview = safeDiagnosticPreview(message, 180);
-    this.consoleErrors.push({
+    destination.push({
       pageUrl: page.displayUrl,
       messageKey: createHash("sha256").update(messagePreview).digest("hex"),
       messagePreview,
@@ -162,7 +187,10 @@ export class NetworkObservationCollector {
     const issues = new Map<string, MutableIssue>();
     let suppressedThirdPartyIssueCount = 0;
     const addIssue = (
-      input: Omit<NetworkIssueEvidence, "key" | "affectedPageUrls" | "occurrenceCount"> & {
+      input: Omit<
+        NetworkIssueEvidence,
+        "key" | "affectedPageUrls" | "occurrenceCount"
+      > & {
         pageUrl: string;
       },
     ) => {
@@ -246,11 +274,24 @@ export class NetworkObservationCollector {
         pageUrl: consoleError.pageUrl,
       });
     }
+    for (const javascriptError of this.javascriptErrors) {
+      addIssue({
+        kind: "javascript-error",
+        party: "first-party",
+        resourceType: null,
+        resourceUrl: null,
+        statusCode: null,
+        failureCode: null,
+        messagePreview: javascriptError.messagePreview,
+        pageUrl: javascriptError.pageUrl,
+      });
+    }
 
     return {
       resources: [...this.resources],
       failedRequests: [...this.failedRequests],
       consoleErrors: [...this.consoleErrors],
+      javascriptErrors: [...this.javascriptErrors],
       issues: [...issues.values()]
         .map((issue) => ({
           ...issue,

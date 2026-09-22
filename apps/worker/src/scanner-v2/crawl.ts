@@ -14,7 +14,11 @@ export type CrawlCandidate = ObservedUrl & {
 
 export type CrawlCandidateResult =
   | { accepted: true; candidate: CrawlCandidate }
-  | { accepted: false; reason: CrawlExclusionReason; observedUrl: ObservedUrl | null };
+  | {
+      accepted: false;
+      reason: CrawlExclusionReason;
+      observedUrl: ObservedUrl | null;
+    };
 
 export type CrawlEntryState =
   | "queued"
@@ -28,6 +32,7 @@ export type CrawlUrlObservation = {
   urlKey: string;
   origin: string;
   sourcePageUrls: string[];
+  duplicateDiscoveryCount: number;
   state: CrawlEntryState;
   exclusionReason: CrawlExclusionReason | null;
   finalUrl: string | null;
@@ -106,6 +111,7 @@ export class CrawlCoverageTracker {
       if (sourcePageUrl) {
         existing.sourceUrls.add(sourcePageUrl);
       }
+      existing.duplicateDiscoveryCount += 1;
       return false;
     }
 
@@ -115,6 +121,7 @@ export class CrawlCoverageTracker {
       origin: candidate.origin,
       sourcePageUrls: [],
       sourceUrls: new Set(sourcePageUrl ? [sourcePageUrl] : []),
+      duplicateDiscoveryCount: 0,
       state: "queued",
       exclusionReason: null,
       finalUrl: null,
@@ -123,7 +130,10 @@ export class CrawlCoverageTracker {
     return true;
   }
 
-  ignore(result: Exclude<CrawlCandidateResult, { accepted: true }>): void {
+  ignore(
+    result: Exclude<CrawlCandidateResult, { accepted: true }>,
+    sourcePageUrl: string | null,
+  ): void {
     if (!result.observedUrl) {
       this.malformedUrlCount += 1;
       return;
@@ -131,6 +141,10 @@ export class CrawlCoverageTracker {
 
     const existing = this.entries.get(result.observedUrl.urlKey);
     if (existing) {
+      if (sourcePageUrl) {
+        existing.sourceUrls.add(sourcePageUrl);
+      }
+      existing.duplicateDiscoveryCount += 1;
       return;
     }
     this.entries.set(result.observedUrl.urlKey, {
@@ -138,7 +152,8 @@ export class CrawlCoverageTracker {
       urlKey: result.observedUrl.urlKey,
       origin: result.observedUrl.origin,
       sourcePageUrls: [],
-      sourceUrls: new Set(),
+      sourceUrls: new Set(sourcePageUrl ? [sourcePageUrl] : []),
+      duplicateDiscoveryCount: 0,
       state: "ignored",
       exclusionReason: result.reason,
       finalUrl: null,
@@ -154,6 +169,16 @@ export class CrawlCoverageTracker {
     }
   }
 
+  markRemainingBudgetExceeded(): void {
+    for (const entry of this.entries.values()) {
+      if (entry.state === "queued") {
+        entry.state = "not-visited";
+        entry.exclusionReason = "page-budget";
+        this.reachedBudget = true;
+      }
+    }
+  }
+
   markBudgetExceeded(candidate: CrawlCandidate, sourcePageUrl: string): void {
     const isNew = this.discover(candidate, sourcePageUrl);
     const entry = this.entries.get(candidate.urlKey);
@@ -166,9 +191,15 @@ export class CrawlCoverageTracker {
 
   markVisited(
     candidate: CrawlCandidate,
-    input: { finalUrl: string; statusCode: number | null; navigationFailed: boolean },
+    input: {
+      finalUrl: string;
+      statusCode: number | null;
+      navigationFailed: boolean;
+    },
   ): void {
-    this.discover(candidate, null);
+    if (!this.entries.has(candidate.urlKey)) {
+      this.discover(candidate, null);
+    }
     const entry = this.entries.get(candidate.urlKey);
     if (!entry) {
       return;
@@ -193,15 +224,19 @@ export class CrawlCoverageTracker {
       urlKey: entry.urlKey,
       origin: entry.origin,
       sourcePageUrls: [...entry.sourceUrls].sort(),
+      duplicateDiscoveryCount: entry.duplicateDiscoveryCount,
       state: entry.state,
       exclusionReason: entry.exclusionReason,
       finalUrl: entry.finalUrl,
       statusCode: entry.statusCode,
     }));
     const visitedUrlCount = urls.filter(
-      (entry) => entry.state === "visited" || entry.state === "navigation-failed",
+      (entry) =>
+        entry.state === "visited" || entry.state === "navigation-failed",
     ).length;
-    const ignoredUrlCount = urls.filter((entry) => entry.state === "ignored").length;
+    const ignoredUrlCount = urls.filter(
+      (entry) => entry.state === "ignored",
+    ).length;
     const unvisitedUrlCount = urls.filter(
       (entry) => entry.state === "not-visited" || entry.state === "queued",
     ).length;
