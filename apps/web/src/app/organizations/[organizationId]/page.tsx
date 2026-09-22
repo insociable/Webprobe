@@ -94,7 +94,14 @@ export default async function OrganizationPage({
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold">{site.name}</h2>
+                  <h2 className="text-lg font-semibold">
+                    <Link
+                      href={`/organizations/${organizationId}/sites/${site.id}`}
+                      className="transition hover:text-emerald-200"
+                    >
+                      {site.name}
+                    </Link>
+                  </h2>
                   <p className="mt-2 break-all text-sm text-white/45">
                     {site.canonicalUrl}
                   </p>
