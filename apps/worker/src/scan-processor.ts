@@ -18,7 +18,7 @@ import { persistPrimaryScreenshot as defaultPersistPrimaryScreenshot } from "./s
 import {
   markScanRunning,
   persistScanCompletion,
-  persistScanFailure,
+  persistScanFailureForJob,
   validateScanContext,
 } from "./scan-persistence.js";
 
@@ -44,7 +44,7 @@ function isHtmlDocument(
   );
 }
 
-export async function processScanJob(
+export async function processScanJobAttempt(
   jobData: ScanJob | unknown,
   dependencies: ScanProcessorDependencies = {},
 ): Promise<ScanExecutionResult> {
@@ -58,77 +58,83 @@ export async function processScanJob(
 
   await markScanRunning(context);
 
-  try {
-    const httpProbe = await probeHttpTarget(context.targetUrl);
-    const httpFindings = generateHttpProbeFindings(
-      httpProbe,
-      context.targetUrl,
-    );
-    let browserScan: BrowserScanResult | null = null;
+  const httpProbe = await probeHttpTarget(context.targetUrl);
+  const httpFindings = generateHttpProbeFindings(httpProbe, context.targetUrl);
+  let browserScan: BrowserScanResult | null = null;
 
-    if (httpProbe.ok && isHtmlDocument(httpProbe)) {
-      browserScan = await runBrowserScan(context.targetUrl, {
-        maxPages: payload.profile.maxPages,
-        navigationTimeoutMs: payload.profile.navigationTimeoutMs,
-        checkAccessibility: payload.profile.checkAccessibility,
-        captureScreenshot: payload.profile.captureScreenshots,
-      });
-    }
-
-    const generatedFindings = [
-      ...new Map(
-        [
-          ...httpFindings,
-          ...(browserScan
-            ? generateBrowserFindings(browserScan.observations)
-            : []),
-        ].map((finding) => [finding.fingerprint, finding]),
-      ).values(),
-    ];
-    const completedAt = new Date();
-
-    const result = ScanResultSchema.parse({
-      scanId: context.scanId,
-      startedAt: context.startedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
-      status: "completed",
-      pagesVisited: browserScan?.pagesVisited ?? (httpProbe.ok ? 1 : 0),
-      findings: generatedFindings.map((item) => ({
-        category: item.category,
-        severity: item.severity,
-        code: item.code,
-        title: item.title,
-        pageUrl: item.pageUrl,
-        evidence: item.evidence,
-      })),
+  if (httpProbe.ok && isHtmlDocument(httpProbe)) {
+    browserScan = await runBrowserScan(context.targetUrl, {
+      maxPages: payload.profile.maxPages,
+      navigationTimeoutMs: payload.profile.navigationTimeoutMs,
+      checkAccessibility: payload.profile.checkAccessibility,
+      captureScreenshot: payload.profile.captureScreenshots,
     });
+  }
 
-    await persistScanCompletion(context, result, httpProbe, generatedFindings);
+  const generatedFindings = [
+    ...new Map(
+      [
+        ...httpFindings,
+        ...(browserScan
+          ? generateBrowserFindings(browserScan.observations)
+          : []),
+      ].map((finding) => [finding.fingerprint, finding]),
+    ).values(),
+  ];
+  const completedAt = new Date();
 
-    let screenshotStored = false;
-    if (payload.profile.captureScreenshots && browserScan?.screenshot) {
-      try {
-        screenshotStored = await persistPrimaryScreenshot({
-          organizationId: context.organizationId,
-          siteId: context.siteId,
-          scanId: context.scanId,
-          screenshot: browserScan.screenshot,
-        });
-      } catch {
-        screenshotStored = false;
-      }
+  const result = ScanResultSchema.parse({
+    scanId: context.scanId,
+    startedAt: context.startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    status: "completed",
+    pagesVisited: browserScan?.pagesVisited ?? (httpProbe.ok ? 1 : 0),
+    findings: generatedFindings.map((item) => ({
+      category: item.category,
+      severity: item.severity,
+      code: item.code,
+      title: item.title,
+      pageUrl: item.pageUrl,
+      evidence: item.evidence,
+    })),
+  });
+
+  await persistScanCompletion(context, result, httpProbe, generatedFindings);
+
+  let screenshotStored = false;
+  if (payload.profile.captureScreenshots && browserScan?.screenshot) {
+    try {
+      screenshotStored = await persistPrimaryScreenshot({
+        organizationId: context.organizationId,
+        siteId: context.siteId,
+        scanId: context.scanId,
+        screenshot: browserScan.screenshot,
+      });
+    } catch {
+      screenshotStored = false;
     }
+  }
 
-    return {
-      ...result,
-      http: httpProbe,
-      screenshotStored,
-    };
+  return {
+    ...result,
+    http: httpProbe,
+    screenshotStored,
+  };
+}
+
+export async function processScanJob(
+  jobData: ScanJob | unknown,
+  dependencies: ScanProcessorDependencies = {},
+): Promise<ScanExecutionResult> {
+  const payload = ScanJobSchema.parse(jobData);
+
+  try {
+    return await processScanJobAttempt(payload, dependencies);
   } catch (error) {
     try {
-      await persistScanFailure(context, error);
+      await persistScanFailureForJob(payload, error);
     } catch {
-      // Keep the original worker error as the BullMQ failure cause.
+      // Keep the original worker error as the failure cause.
     }
     throw error;
   }

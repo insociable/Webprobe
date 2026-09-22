@@ -85,6 +85,13 @@
       "when": 1790080549913,
       "tag": "0011_freezing_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790098355313,
+      "tag": "0012_solid_kabuki",
+      "breakpoints": true
     }
   ]
 }

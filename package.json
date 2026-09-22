@@ -11,7 +11,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "test": "pnpm --filter @agency-saas/worker exec tsx scripts/test-gate.ts workspace",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose --env-file .env -f infra/compose.yaml up -d",

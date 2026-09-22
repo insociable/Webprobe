@@ -1,6 +1,4 @@
-import { ScanJobSchema } from "@agency-saas/contracts";
-import { scans } from "@agency-saas/db";
-import { and, eq } from "drizzle-orm";
+import { scanDispatches, scans } from "@agency-saas/db";
 import { db } from "./database";
 import {
   canManageOrganization,
@@ -8,7 +6,6 @@ import {
   OrganizationAccessError,
   requireOrganizationAccess,
 } from "./organization-site-service";
-import { enqueueScanJob, type ScanEnqueuer } from "./scan-queue";
 import { hasPostgresErrorCode } from "./postgres-error";
 
 export class ManualScanError extends Error {
@@ -17,8 +14,7 @@ export class ManualScanError extends Error {
     readonly code:
       | "site-not-found"
       | "site-not-active"
-      | "scan-already-running"
-      | "queue-unavailable",
+      | "scan-already-running",
   ) {
     super(message);
     this.name = "ManualScanError";
@@ -29,7 +25,6 @@ export async function createManualScanForSite(
   userId: string,
   organizationId: string,
   siteId: string,
-  enqueue: ScanEnqueuer = enqueueScanJob,
 ) {
   const access = await requireOrganizationAccess(userId, organizationId);
   if (!canManageOrganization(access.role)) {
@@ -51,15 +46,24 @@ export async function createManualScanForSite(
 
   let scan;
   try {
-    [scan] = await db
-      .insert(scans)
-      .values({
-        organizationId,
-        siteId,
-        status: "queued",
-        trigger: "manual",
-      })
-      .returning();
+    scan = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(scans)
+        .values({
+          organizationId,
+          siteId,
+          status: "queued",
+          trigger: "manual",
+        })
+        .returning();
+
+      if (!created) {
+        throw new Error("Scan creation failed");
+      }
+
+      await tx.insert(scanDispatches).values({ scanId: created.id });
+      return created;
+    });
   } catch (error) {
     if (hasPostgresErrorCode(error, "23505")) {
       throw new ManualScanError(
@@ -68,53 +72,6 @@ export async function createManualScanForSite(
       );
     }
     throw error;
-  }
-
-  if (!scan) {
-    throw new Error("Scan creation failed");
-  }
-
-  const payload = ScanJobSchema.parse({
-    scanId: scan.id,
-    organizationId,
-    siteId,
-    targetUrl: site.canonicalUrl,
-  });
-
-  try {
-    await enqueue(payload);
-  } catch {
-    const current = await db
-      .select({ status: scans.status })
-      .from(scans)
-      .where(
-        and(
-          eq(scans.id, scan.id),
-          eq(scans.organizationId, organizationId),
-          eq(scans.siteId, siteId),
-        ),
-      )
-      .limit(1);
-
-    if (current[0]?.status === "queued") {
-      await db
-        .delete(scans)
-        .where(and(eq(scans.id, scan.id), eq(scans.status, "queued")));
-
-      throw new ManualScanError(
-        "Scan queue is unavailable",
-        "queue-unavailable",
-      );
-    }
-
-    if (
-      current[0]?.status === "running" ||
-      current[0]?.status === "completed"
-    ) {
-      return scan;
-    }
-
-    throw new ManualScanError("Scan queue is unavailable", "queue-unavailable");
   }
 
   return scan;

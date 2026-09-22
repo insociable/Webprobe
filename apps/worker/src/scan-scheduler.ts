@@ -1,16 +1,19 @@
 import { ScanJobSchema, type ScanJob } from "@agency-saas/contracts";
-import { scanSchedules, scans, sites } from "@agency-saas/db";
+import { scanDispatches, scanSchedules, scans, sites } from "@agency-saas/db";
 import { and, asc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
+import {
+  getScanAttemptCount,
+  MAX_STALE_RECOVERY_ATTEMPTS,
+} from "./scan-retry.js";
 
-export type ScheduledScanEnqueuer = (payload: ScanJob) => Promise<void>;
 export type ScheduledJobPresenceChecker = (scanId: string) => Promise<boolean>;
 
 export type StaleScanRecoveryResult = {
   checked: number;
-  recoveredScheduled: number;
-  failedManual: number;
+  recovered: number;
+  failed: number;
   inspectionFailed: number;
 };
 
@@ -20,11 +23,6 @@ export type ScheduledClaimResult = {
   skipped: number;
 };
 
-export type ScheduledDispatchResult = {
-  attempted: number;
-  enqueued: number;
-  failed: number;
-};
 export async function initializeMissingScheduleCursors(
   now = new Date(),
   batchSize = 100,
@@ -155,6 +153,8 @@ export async function claimDueScheduledScans(
         continue;
       }
 
+      await tx.insert(scanDispatches).values({ scanId: scan.id });
+
       created.push(
         ScanJobSchema.parse({
           scanId: scan.id,
@@ -227,10 +227,7 @@ export async function recoverOrphanedRunningScans(
   const staleBefore = new Date(now.getTime() - staleAfterMs);
 
   const rows = await db
-    .select({
-      id: scans.id,
-      trigger: scans.trigger,
-    })
+    .select({ id: scans.id })
     .from(scans)
     .where(
       and(
@@ -242,8 +239,8 @@ export async function recoverOrphanedRunningScans(
     .orderBy(asc(scans.startedAt))
     .limit(batchSize);
 
-  let recoveredScheduled = 0;
-  let failedManual = 0;
+  let recovered = 0;
+  let failed = 0;
   let inspectionFailed = 0;
 
   for (const row of rows) {
@@ -255,12 +252,41 @@ export async function recoverOrphanedRunningScans(
       continue;
     }
 
-    if (present) {
+    if (present) continue;
+
+    const attemptCount = await getScanAttemptCount(row.id);
+    if (attemptCount >= MAX_STALE_RECOVERY_ATTEMPTS) {
+      await db.transaction(async (tx) => {
+        const terminal = await tx
+          .update(scans)
+          .set({
+            status: "failed",
+            completedAt: now,
+            summary: {
+              error: { code: "stale-worker-recovery-exhausted" },
+            },
+          })
+          .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
+          .returning({ id: scans.id });
+
+        if (terminal.length === 1) {
+          await tx
+            .update(scanDispatches)
+            .set({
+              status: "failed",
+              leaseUntil: null,
+              lastErrorCode: "stale-worker-recovery-exhausted",
+              updatedAt: now,
+            })
+            .where(eq(scanDispatches.scanId, row.id));
+        }
+      });
+      failed += 1;
       continue;
     }
 
-    if (row.trigger === "scheduled") {
-      const recovered = await db
+    const didRecover = await db.transaction(async (tx) => {
+      const reset = await tx
         .update(scans)
         .set({
           status: "queued",
@@ -270,96 +296,45 @@ export async function recoverOrphanedRunningScans(
         .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
         .returning({ id: scans.id });
 
-      recoveredScheduled += recovered.length;
-      continue;
-    }
+      if (reset.length !== 1) return false;
 
-    const failed = await db
-      .update(scans)
-      .set({
-        status: "failed",
-        completedAt: now,
-        summary: {
-          error: { code: "stale-worker-job" },
-        },
-      })
-      .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
-      .returning({ id: scans.id });
+      await tx
+        .insert(scanDispatches)
+        .values({
+          scanId: row.id,
+          status: "pending",
+          nextAttemptAt: now,
+          leaseUntil: null,
+          dispatchedAt: null,
+          lastErrorCode: "stale-worker-job",
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: scanDispatches.scanId,
+          set: {
+            status: "pending",
+            nextAttemptAt: now,
+            leaseUntil: null,
+            dispatchedAt: null,
+            lastErrorCode: "stale-worker-job",
+            updatedAt: now,
+          },
+        });
+      return true;
+    });
 
-    failedManual += failed.length;
+    if (didRecover) recovered += 1;
   }
 
   return {
     checked: rows.length,
-    recoveredScheduled,
-    failedManual,
+    recovered,
+    failed,
     inspectionFailed,
   };
 }
 
-export async function dispatchQueuedScheduledScans(
-  enqueue: ScheduledScanEnqueuer,
-  batchSize = 100,
-): Promise<ScheduledDispatchResult> {
-  const { db } = getDatabase();
-
-  const rows = await db
-    .select({
-      scanId: scans.id,
-      organizationId: scans.organizationId,
-      siteId: scans.siteId,
-      targetUrl: sites.canonicalUrl,
-    })
-    .from(scans)
-    .innerJoin(
-      sites,
-      and(
-        eq(scans.siteId, sites.id),
-        eq(scans.organizationId, sites.organizationId),
-      ),
-    )
-    .innerJoin(
-      scanSchedules,
-      and(
-        eq(scans.scheduleId, scanSchedules.id),
-        eq(scans.organizationId, scanSchedules.organizationId),
-        eq(scans.siteId, scanSchedules.siteId),
-      ),
-    )
-    .where(
-      and(
-        eq(scans.trigger, "scheduled"),
-        eq(scans.status, "queued"),
-        eq(scanSchedules.enabled, true),
-        eq(sites.status, "active"),
-        isNotNull(sites.verifiedAt),
-      ),
-    )
-    .orderBy(asc(scans.queuedAt))
-    .limit(batchSize);
-
-  let enqueued = 0;
-  let failed = 0;
-
-  for (const row of rows) {
-    const payload = ScanJobSchema.parse(row);
-    try {
-      await enqueue(payload);
-      enqueued += 1;
-    } catch {
-      failed += 1;
-    }
-  }
-
-  return {
-    attempted: rows.length,
-    enqueued,
-    failed,
-  };
-}
-
 export async function runScheduledScanTick(
-  enqueue: ScheduledScanEnqueuer,
   hasJob: ScheduledJobPresenceChecker,
   now = new Date(),
 ) {
@@ -367,19 +342,16 @@ export async function runScheduledScanTick(
   const staleRecovery = await recoverOrphanedRunningScans(hasJob, now);
   const cancelled = await cancelInvalidQueuedScheduledScans(now);
   const claim = await claimDueScheduledScans(now);
-  const dispatch = await dispatchQueuedScheduledScans(enqueue);
 
   return {
     initialized,
     staleRecovery,
     cancelled,
     claim,
-    dispatch,
   };
 }
 
 export function startScheduledScanCoordinator(options: {
-  enqueue: ScheduledScanEnqueuer;
   hasJob: ScheduledJobPresenceChecker;
   logger: Logger;
   intervalMs?: number;
@@ -391,33 +363,26 @@ export function startScheduledScanCoordinator(options: {
 
   const execute = async () => {
     try {
-      const result = await runScheduledScanTick(
-        options.enqueue,
-        options.hasJob,
-      );
+      const result = await runScheduledScanTick(options.hasJob);
       const activity =
         result.initialized +
-        result.staleRecovery.recoveredScheduled +
-        result.staleRecovery.failedManual +
+        result.staleRecovery.recovered +
+        result.staleRecovery.failed +
         result.cancelled +
-        result.claim.due +
-        result.dispatch.attempted;
+        result.claim.due;
 
-      if (activity > 0 || result.dispatch.failed > 0) {
+      if (activity > 0 || result.staleRecovery.inspectionFailed > 0) {
         options.logger.info(
           {
             schedulesInitialized: result.initialized,
             staleScansChecked: result.staleRecovery.checked,
-            staleScheduledRecovered: result.staleRecovery.recoveredScheduled,
-            staleManualFailed: result.staleRecovery.failedManual,
+            staleScansRecovered: result.staleRecovery.recovered,
+            staleScansFailed: result.staleRecovery.failed,
             staleInspectionFailed: result.staleRecovery.inspectionFailed,
             scansCancelled: result.cancelled,
             schedulesDue: result.claim.due,
             scansCreated: result.claim.created.length,
             schedulesSkipped: result.claim.skipped,
-            dispatchAttempted: result.dispatch.attempted,
-            dispatchEnqueued: result.dispatch.enqueued,
-            dispatchFailed: result.dispatch.failed,
           },
           "scheduled scan coordinator tick",
         );

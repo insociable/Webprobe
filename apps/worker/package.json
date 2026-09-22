@@ -11,7 +11,8 @@
     "smoke:report": "tsx scripts/report-smoke.ts",
     "smoke:browser": "tsx scripts/browser-smoke.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
-    "test": "vitest run --passWithNoTests --no-file-parallelism"
+    "test": "tsx scripts/test-gate.ts worker",
+    "diagnostics": "tsx scripts/diagnostics.ts"
   },
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",
@@ -25,6 +26,7 @@
     "nodemailer": "10.0.10",
     "pino": "10.3.1",
     "playwright": "1.63.0",
+    "postgres": "3.4.9",
     "zod": "4.6.5"
   },
   "devDependencies": {

@@ -523,8 +523,8 @@ function safeErrorCode(error: unknown): string {
   return "worker-error";
 }
 
-export async function persistScanFailure(
-  context: ValidatedScanContext,
+export async function persistScanFailureForJob(
+  payload: Pick<ScanJob, "scanId" | "organizationId" | "siteId" | "targetUrl">,
   error: unknown,
 ): Promise<void> {
   const { db } = getDatabase();
@@ -536,18 +536,31 @@ export async function persistScanFailure(
       pageCount: 0,
       completedAt: new Date(),
       summary: {
-        targetUrl: context.targetUrl,
-        error: {
-          code: safeErrorCode(error),
-        },
+        targetUrl: payload.targetUrl,
+        error: { code: safeErrorCode(error) },
       },
     })
     .where(
       and(
-        eq(scans.id, context.scanId),
-        eq(scans.organizationId, context.organizationId),
-        eq(scans.siteId, context.siteId),
+        eq(scans.id, payload.scanId),
+        eq(scans.organizationId, payload.organizationId),
+        eq(scans.siteId, payload.siteId),
         inArray(scans.status, ["running", "queued", "failed"]),
       ),
     );
+}
+
+export async function persistScanFailure(
+  context: ValidatedScanContext,
+  error: unknown,
+): Promise<void> {
+  await persistScanFailureForJob(
+    {
+      scanId: context.scanId,
+      organizationId: context.organizationId,
+      siteId: context.siteId,
+      targetUrl: context.targetUrl,
+    },
+    error,
+  );
 }

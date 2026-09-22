@@ -37,7 +37,8 @@
         "REPORT_PUBLIC_BASE_URL",
         "REPORT_TOKEN_SECRET",
         "BETTER_AUTH_SECRET",
-        "BETTER_AUTH_URL"
+        "BETTER_AUTH_URL",
+        "AGENCY_TEST_ISOLATED"
       ]
     }
   }
