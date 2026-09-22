@@ -1,4 +1,5 @@
 import { scanDispatches, scans } from "@agency-saas/db";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
   canManageOrganization,
@@ -14,17 +15,22 @@ export class ManualScanError extends Error {
     readonly code:
       | "site-not-found"
       | "site-not-active"
-      | "scan-already-running",
+      | "scan-already-running"
+      | "scan-rate-limited",
   ) {
     super(message);
     this.name = "ManualScanError";
   }
 }
 
+const manualScanSiteHourlyLimit = 6;
+const manualScanOrganizationDailyLimit = 60;
+
 export async function createManualScanForSite(
   userId: string,
   organizationId: string,
   siteId: string,
+  now = new Date(),
 ) {
   const access = await requireOrganizationAccess(userId, organizationId);
   if (!canManageOrganization(access.role)) {
@@ -47,6 +53,51 @@ export async function createManualScanForSite(
   let scan;
   try {
     scan = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`manual-scan:org:${organizationId}`}, 0))`,
+      );
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`manual-scan:site:${siteId}`}, 0))`,
+      );
+
+      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      const [siteUsage] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(scans)
+        .where(
+          and(
+            eq(scans.organizationId, organizationId),
+            eq(scans.siteId, siteId),
+            eq(scans.trigger, "manual"),
+            gte(scans.queuedAt, oneHourAgo),
+          ),
+        );
+      if ((siteUsage?.count ?? 0) >= manualScanSiteHourlyLimit) {
+        throw new ManualScanError(
+          "Manual scan hourly quota exceeded for this site",
+          "scan-rate-limited",
+        );
+      }
+
+      const [organizationUsage] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(scans)
+        .where(
+          and(
+            eq(scans.organizationId, organizationId),
+            eq(scans.trigger, "manual"),
+            gte(scans.queuedAt, oneDayAgo),
+          ),
+        );
+      if ((organizationUsage?.count ?? 0) >= manualScanOrganizationDailyLimit) {
+        throw new ManualScanError(
+          "Manual scan daily quota exceeded for this organization",
+          "scan-rate-limited",
+        );
+      }
+
       const [created] = await tx
         .insert(scans)
         .values({
@@ -54,6 +105,7 @@ export async function createManualScanForSite(
           siteId,
           status: "queued",
           trigger: "manual",
+          queuedAt: now,
         })
         .returning();
 

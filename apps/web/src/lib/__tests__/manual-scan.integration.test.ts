@@ -220,4 +220,38 @@ describeDatabase("manual scan creation", () => {
       ]);
     }
   });
+
+  it("enforces the manual scan hourly site quota transactionally", async () => {
+    const fixture = await createFixture();
+    const now = new Date("2026-09-22T12:00:00.000Z");
+
+    try {
+      await db.insert(scans).values(
+        Array.from({ length: 6 }, (_, index) => ({
+          organizationId: fixture.organizationId,
+          siteId: fixture.activeSiteId,
+          trigger: "manual" as const,
+          status: "completed" as const,
+          queuedAt: new Date(now.getTime() - index * 5 * 60_000),
+          completedAt: new Date(now.getTime() - index * 5 * 60_000 + 30_000),
+        })),
+      );
+
+      await expect(
+        createManualScanForSite(
+          fixture.ownerId,
+          fixture.organizationId,
+          fixture.activeSiteId,
+          now,
+        ),
+      ).rejects.toMatchObject({
+        code: "scan-rate-limited",
+      } satisfies Partial<ManualScanError>);
+    } finally {
+      await cleanupFixture(fixture.organizationId, [
+        fixture.ownerId,
+        fixture.memberId,
+      ]);
+    }
+  });
 });

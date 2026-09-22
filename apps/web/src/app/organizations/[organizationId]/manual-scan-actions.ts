@@ -30,6 +30,8 @@ function humanScanError(error: unknown): string {
         return "Le domaine doit être vérifié avant de lancer un scan.";
       case "scan-already-running":
         return "Un scan est déjà en file ou en cours pour ce site.";
+      case "scan-rate-limited":
+        return "Quota de scans manuels atteint. Réessayez un peu plus tard.";
     }
   }
 

@@ -17,6 +17,7 @@ import { getPublicReportByToken } from "../public-report-service";
 import {
   createReportShare,
   queueReportEmail,
+  ReportShareRateLimitError,
   revokeReportShare,
 } from "../report-share-service";
 
@@ -226,6 +227,69 @@ describeDatabase("shareable scan reports", () => {
       const rawToken = queued.url.split("/").at(-1)!;
       expect(shareRow?.tokenHash).not.toBe(rawToken);
       expect(shareRow?.tokenCiphertext).not.toContain(rawToken);
+    } finally {
+      if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
+      else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      await cleanup(f);
+    }
+  });
+
+  it("enforces the hourly recipient email quota without creating an extra delivery", async () => {
+    const f = await fixture();
+    const previousSecret = process.env.REPORT_TOKEN_SECRET;
+    process.env.REPORT_TOKEN_SECRET =
+      "report-test-secret-that-is-at-least-thirty-two-characters";
+    const now = new Date("2026-09-22T13:00:00.000Z");
+    const recipientEmail = "client@example.com";
+
+    try {
+      const shareIds = Array.from({ length: 5 }, () => randomUUID());
+      await db.insert(reportShares).values(
+        shareIds.map((id, index) => ({
+          id,
+          organizationId: f.organizationId,
+          siteId: f.siteId,
+          scanId: f.scanId,
+          tokenHash: (index + 1).toString(16).padStart(64, "0"),
+          tokenCiphertext: `cipher-${index + 1}`,
+          expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+          createdByUserId: f.ownerId,
+          createdAt: new Date(now.getTime() - 10 * 60_000),
+        })),
+      );
+      await db.insert(reportDeliveries).values(
+        shareIds.map((reportShareId, index) => ({
+          reportShareId,
+          organizationId: f.organizationId,
+          siteId: f.siteId,
+          scanId: f.scanId,
+          recipientEmail,
+          createdAt: new Date(now.getTime() - index * 60_000),
+          updatedAt: new Date(now.getTime() - index * 60_000),
+        })),
+      );
+
+      await expect(
+        queueReportEmail(
+          f.ownerId,
+          f.organizationId,
+          f.siteId,
+          f.scanId,
+          recipientEmail,
+          now,
+        ),
+      ).rejects.toBeInstanceOf(ReportShareRateLimitError);
+
+      const deliveries = await db
+        .select({ id: reportDeliveries.id })
+        .from(reportDeliveries)
+        .where(
+          and(
+            eq(reportDeliveries.organizationId, f.organizationId),
+            eq(reportDeliveries.recipientEmail, recipientEmail),
+          ),
+        );
+      expect(deliveries).toHaveLength(5);
     } finally {
       if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
       else process.env.REPORT_TOKEN_SECRET = previousSecret;

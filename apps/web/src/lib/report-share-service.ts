@@ -6,7 +6,7 @@ import {
   generateReportShareToken,
   hashReportShareToken,
 } from "@agency-saas/security";
-import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
   canManageOrganization,
@@ -15,11 +15,39 @@ import {
 } from "./organization-site-service";
 
 const shareLifetimeMs = 7 * 24 * 60 * 60 * 1000;
+const activeShareLimitPerScan = 20;
+const reportEmailSiteHourlyLimit = 30;
+const reportEmailOrganizationHourlyLimit = 100;
+const reportEmailSenderHourlyLimit = 30;
+const reportEmailRecipientHourlyLimit = 5;
+
+export class ReportShareRateLimitError extends Error {
+  constructor(
+    message: string,
+    readonly code: "share-rate-limited" | "email-rate-limited",
+  ) {
+    super(message);
+    this.name = "ReportShareRateLimitError";
+  }
+}
 
 function tokenSecret(): string {
-  const value =
-    process.env.REPORT_TOKEN_SECRET?.trim() ||
-    process.env.BETTER_AUTH_SECRET?.trim();
+  const reportSecret = process.env.REPORT_TOKEN_SECRET?.trim();
+  const authSecret = process.env.BETTER_AUTH_SECRET?.trim();
+
+  if (process.env.NODE_ENV === "production") {
+    if (!reportSecret) {
+      throw new Error("REPORT_TOKEN_SECRET is required in production");
+    }
+    if (authSecret && reportSecret === authSecret) {
+      throw new Error(
+        "REPORT_TOKEN_SECRET must be distinct from BETTER_AUTH_SECRET in production",
+      );
+    }
+    return reportSecret;
+  }
+
+  const value = reportSecret || authSecret;
   if (!value) {
     throw new Error("REPORT_TOKEN_SECRET or BETTER_AUTH_SECRET is required");
   }
@@ -105,30 +133,55 @@ export async function createReportShare(
 ) {
   await requireManageableCompletedScan(userId, organizationId, siteId, scanId);
 
-  const share = newShareValues({
-    userId,
-    organizationId,
-    siteId,
-    scanId,
-    now,
-  });
-  const [created] = await db
-    .insert(reportShares)
-    .values(share.values)
-    .returning({
-      id: reportShares.id,
-      expiresAt: reportShares.expiresAt,
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-share:scan:${scanId}`}, 0))`,
+    );
+
+    const [usage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportShares)
+      .where(
+        and(
+          eq(reportShares.organizationId, organizationId),
+          eq(reportShares.siteId, siteId),
+          eq(reportShares.scanId, scanId),
+          isNull(reportShares.revokedAt),
+          gt(reportShares.expiresAt, now),
+        ),
+      );
+    if ((usage?.count ?? 0) >= activeShareLimitPerScan) {
+      throw new ReportShareRateLimitError(
+        "Active report share quota exceeded for this scan",
+        "share-rate-limited",
+      );
+    }
+
+    const share = newShareValues({
+      userId,
+      organizationId,
+      siteId,
+      scanId,
+      now,
     });
+    const [created] = await tx
+      .insert(reportShares)
+      .values(share.values)
+      .returning({
+        id: reportShares.id,
+        expiresAt: reportShares.expiresAt,
+      });
 
-  if (!created) {
-    throw new Error("Report share creation failed");
-  }
+    if (!created) {
+      throw new Error("Report share creation failed");
+    }
 
-  return {
-    id: created.id,
-    url: reportShareUrl(share.token),
-    expiresAt: created.expiresAt,
-  };
+    return {
+      id: created.id,
+      url: reportShareUrl(share.token),
+      expiresAt: created.expiresAt,
+    };
+  });
 }
 
 export async function queueReportEmail(
@@ -143,6 +196,76 @@ export async function queueReportEmail(
   const recipientEmail = ReportRecipientEmailSchema.parse(rawRecipientEmail);
 
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-email:org:${organizationId}`}, 0))`,
+    );
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-email:site:${siteId}`}, 0))`,
+    );
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-email:sender:${userId}`}, 0))`,
+    );
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-email:recipient:${organizationId}:${recipientEmail}`}, 0))`,
+    );
+
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const [organizationUsage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportDeliveries)
+      .where(
+        and(
+          eq(reportDeliveries.organizationId, organizationId),
+          gte(reportDeliveries.createdAt, oneHourAgo),
+        ),
+      );
+    const [siteUsage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportDeliveries)
+      .where(
+        and(
+          eq(reportDeliveries.organizationId, organizationId),
+          eq(reportDeliveries.siteId, siteId),
+          gte(reportDeliveries.createdAt, oneHourAgo),
+        ),
+      );
+    const [recipientUsage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportDeliveries)
+      .where(
+        and(
+          eq(reportDeliveries.organizationId, organizationId),
+          eq(reportDeliveries.recipientEmail, recipientEmail),
+          gte(reportDeliveries.createdAt, oneHourAgo),
+        ),
+      );
+    const [senderUsage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportDeliveries)
+      .innerJoin(
+        reportShares,
+        eq(reportDeliveries.reportShareId, reportShares.id),
+      )
+      .where(
+        and(
+          eq(reportDeliveries.organizationId, organizationId),
+          eq(reportShares.createdByUserId, userId),
+          gte(reportDeliveries.createdAt, oneHourAgo),
+        ),
+      );
+
+    if (
+      (organizationUsage?.count ?? 0) >= reportEmailOrganizationHourlyLimit ||
+      (siteUsage?.count ?? 0) >= reportEmailSiteHourlyLimit ||
+      (senderUsage?.count ?? 0) >= reportEmailSenderHourlyLimit ||
+      (recipientUsage?.count ?? 0) >= reportEmailRecipientHourlyLimit
+    ) {
+      throw new ReportShareRateLimitError(
+        "Report email hourly quota exceeded",
+        "email-rate-limited",
+      );
+    }
+
     const share = newShareValues({
       userId,
       organizationId,
