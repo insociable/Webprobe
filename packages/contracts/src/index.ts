@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./organization-site.js";
+
 export const SCAN_QUEUE_NAME = "site-scan";
 
 export const SeveritySchema = z.enum([

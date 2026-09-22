@@ -67,9 +67,10 @@ export default async function DashboardPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {userMemberships.map((membership) => (
-            <article
+            <Link
               key={membership.membershipId}
-              className="rounded-2xl border border-white/10 bg-white/[0.035] p-6"
+              href={`/organizations/${membership.organizationId}`}
+              className="rounded-2xl border border-white/10 bg-white/[0.035] p-6 transition hover:border-emerald-300/25 hover:bg-white/[0.055]"
             >
               <p className="text-lg font-semibold">
                 {membership.organizationName}
@@ -77,7 +78,7 @@ export default async function DashboardPage() {
               <p className="mt-2 text-sm text-white/45">
                 {roleLabels[membership.role]}
               </p>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
