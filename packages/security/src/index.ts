@@ -1,3 +1,9 @@
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
 
@@ -120,4 +126,91 @@ export async function assertPublicHttpUrl(
   }
 
   return { url, hostname, addresses };
+}
+
+const reportShareTokenPattern = /^[A-Za-z0-9_-]{43}$/;
+
+function reportTokenKey(secret: string): Buffer {
+  if (secret.length < 32) {
+    throw new Error("Report token secret must contain at least 32 characters");
+  }
+  return createHash("sha256").update(secret, "utf8").digest();
+}
+
+export function generateReportShareToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function isReportShareToken(value: string): boolean {
+  return reportShareTokenPattern.test(value);
+}
+
+export function hashReportShareToken(token: string): string {
+  if (!isReportShareToken(token)) {
+    throw new Error("Invalid report share token");
+  }
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+export function encryptReportShareToken(token: string, secret: string): string {
+  if (!isReportShareToken(token)) {
+    throw new Error("Invalid report share token");
+  }
+
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", reportTokenKey(secret), iv);
+  const ciphertext = Buffer.concat([
+    cipher.update(token, "utf8"),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+
+  return [
+    "v1",
+    iv.toString("base64url"),
+    ciphertext.toString("base64url"),
+    tag.toString("base64url"),
+  ].join(".");
+}
+
+export function decryptReportShareToken(
+  encrypted: string,
+  secret: string,
+): string {
+  const parts = encrypted.split(".");
+  if (parts.length !== 4 || parts[0] !== "v1") {
+    throw new Error("Invalid encrypted report token");
+  }
+
+  const [, ivValue, ciphertextValue, tagValue] = parts;
+  if (!ivValue || !ciphertextValue || !tagValue) {
+    throw new Error("Invalid encrypted report token");
+  }
+
+  try {
+    const iv = Buffer.from(ivValue, "base64url");
+    const ciphertext = Buffer.from(ciphertextValue, "base64url");
+    const tag = Buffer.from(tagValue, "base64url");
+    if (iv.length !== 12 || tag.length !== 16 || ciphertext.length === 0) {
+      throw new Error("Invalid encrypted report token");
+    }
+
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      reportTokenKey(secret),
+      iv,
+    );
+    decipher.setAuthTag(tag);
+    const token = Buffer.concat([
+      decipher.update(ciphertext),
+      decipher.final(),
+    ]).toString("utf8");
+
+    if (!isReportShareToken(token)) {
+      throw new Error("Invalid decrypted report token");
+    }
+    return token;
+  } catch {
+    throw new Error("Invalid encrypted report token");
+  }
 }

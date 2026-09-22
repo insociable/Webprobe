@@ -3,6 +3,7 @@ import { z } from "zod";
 export * from "./organization-site.js";
 export * from "./scan-schedule.js";
 export * from "./notification-preferences.js";
+export * from "./report-branding.js";
 
 export const SCAN_QUEUE_NAME = "site-scan";
 

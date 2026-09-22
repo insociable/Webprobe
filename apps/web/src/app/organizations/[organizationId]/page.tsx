@@ -7,6 +7,7 @@ import { getOrganizationOverview } from "@/lib/organization-overview";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { AlertPreferencePanel } from "./alert-preference-panel";
 import { ManualScanButton } from "./manual-scan-button";
+import { ReportBrandingPanel } from "./report-branding-panel";
 
 type OrganizationPageProps = {
   params: Promise<{ organizationId: string }>;
@@ -124,6 +125,14 @@ export default async function OrganizationPage({
           <p className="mt-2 text-2xl font-semibold">{majorFindings}</p>
         </div>
       </section>
+
+      {overview.access.role !== "member" ? (
+        <ReportBrandingPanel
+          organizationId={organizationId}
+          brandName={overview.access.reportBrandName}
+          accentColor={overview.access.reportAccentColor}
+        />
+      ) : null}
 
       {overview.access.role !== "member" ? (
         <AlertPreferencePanel

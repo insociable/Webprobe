@@ -82,15 +82,36 @@ aux URLs de rapport sans query/fragment, codes/règles, impacts et compteurs.
 Une capture visuelle optionnelle peut contenir du contenu client. Elle est donc
 traitée comme un artefact sensible : une seule image JPEG bornée à 2 MiB par
 scan, fichier privé hors PostgreSQL, chemin construit uniquement avec les UUID
-internes, métadonnées tenant-scopées et SHA-256 vérifié à la lecture. La route
-HTTP exige une session valide et recroise organisation, site et scan avant de
-servir l'image. Les captures suivent la rétention de l'historique de scan et ne
+internes, métadonnées tenant-scopées et SHA-256 vérifié à la lecture. La route interne
+exige une session valide et recroise organisation, site et scan avant de servir
+l'image ; une route publique n'est accessible qu'au travers d'un jeton de rapport
+encore valide. Les captures suivent la rétention de l'historique de scan et ne
 doivent jamais être exposées directement par un serveur de fichiers statique.
 
 Cette défense vise le contenu web hostile dans le pilote privé. Elle ne remplace
 pas une politique egress noyau/conteneur face à une hypothétique évasion complète
 du sandbox Chromium ; cette couche restera requise avant une exposition de
 production plus large.
+
+## Rapports publics du pilote
+
+Les liens de rapport utilisent un jeton aléatoire de 256 bits encodé en base64url,
+valable sept jours et révocable. Le jeton brut n'est jamais conservé en base :
+`report_shares.token_hash` contient son SHA-256 et `token_ciphertext` une copie
+AES-256-GCM nécessaire au dashboard et à l'envoi différé.
+
+La résolution publique exige simultanément un jeton valide, non expiré, non
+révoqué, un scan terminé et le même scope organisation/site/scan. La révocation
+rend le rapport inaccessible et annule les livraisons encore pending ou sending.
+Les routes de captures publiques réutilisent ce contrôle puis revérifient le
+scope et l'intégrité SHA-256 de l'artefact.
+
+`REPORT_TOKEN_SECRET` doit contenir au moins 32 caractères aléatoires et doit
+être distinct des autres secrets en production. `REPORT_PUBLIC_BASE_URL` doit
+pointer vers l'origine publique attendue. Les journaux du worker n'incluent ni
+jeton, ni hash, ni ciphertext. Les pages publiques sont `noindex/nofollow` avec
+une politique de referrer `no-referrer`; les captures sont servies avec
+`Cache-Control: private, no-store`.
 
 ## Dépendances connues
 

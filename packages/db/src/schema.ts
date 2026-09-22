@@ -48,6 +48,13 @@ export const notificationDeliveryStatus = pgEnum(
   ["pending", "sending", "sent"],
 );
 
+export const reportDeliveryStatus = pgEnum("report_delivery_status", [
+  "pending",
+  "sending",
+  "sent",
+  "cancelled",
+]);
+
 export const users = pgTable(
   "users",
   {
@@ -72,16 +79,31 @@ export const users = pgTable(
   ],
 );
 
-export const organizations = pgTable("organizations", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    reportBrandName: text("report_brand_name"),
+    reportAccentColor: text("report_accent_color").default("#34d399").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "organizations_report_brand_name_not_blank",
+      sql`${table.reportBrandName} is null or length(btrim(${table.reportBrandName})) > 0`,
+    ),
+    check(
+      "organizations_report_accent_color_hex",
+      sql`${table.reportAccentColor} ~ '^#[0-9a-fA-F]{6}$'`,
+    ),
+  ],
+);
 
 export const memberships = pgTable(
   "memberships",
@@ -398,6 +420,112 @@ export const scanArtifacts = pgTable(
     check(
       "scan_artifacts_storage_key_not_blank",
       sql`length(btrim(${table.storageKey})) > 0`,
+    ),
+  ],
+);
+
+export const reportShares = pgTable(
+  "report_shares",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("report_shares_token_hash_unique").on(table.tokenHash),
+    index("report_shares_scan_idx").on(
+      table.organizationId,
+      table.siteId,
+      table.scanId,
+    ),
+    index("report_shares_expires_idx").on(table.expiresAt),
+    check(
+      "report_shares_token_hash_length",
+      sql`length(${table.tokenHash}) = 64`,
+    ),
+    check(
+      "report_shares_token_ciphertext_not_blank",
+      sql`length(btrim(${table.tokenCiphertext})) > 0`,
+    ),
+    check(
+      "report_shares_expiry_after_creation",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const reportDeliveries = pgTable(
+  "report_deliveries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    reportShareId: uuid("report_share_id")
+      .notNull()
+      .references(() => reportShares.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    recipientEmail: text("recipient_email").notNull(),
+    status: reportDeliveryStatus("status").default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("report_deliveries_share_recipient_unique").on(
+      table.reportShareId,
+      table.recipientEmail,
+    ),
+    index("report_deliveries_due_idx")
+      .on(table.nextAttemptAt)
+      .where(sql`${table.status} = 'pending'`),
+    index("report_deliveries_lease_idx")
+      .on(table.leaseUntil)
+      .where(sql`${table.status} = 'sending'`),
+    index("report_deliveries_org_idx").on(table.organizationId),
+    check(
+      "report_deliveries_recipient_email_normalized",
+      sql`${table.recipientEmail} = lower(btrim(${table.recipientEmail}))`,
+    ),
+    check(
+      "report_deliveries_recipient_email_not_blank",
+      sql`length(btrim(${table.recipientEmail})) > 0`,
+    ),
+    check(
+      "report_deliveries_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
     ),
   ],
 );

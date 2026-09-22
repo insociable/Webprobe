@@ -95,6 +95,22 @@ leur scan l'est. Toute future purge de scans devra supprimer les fichiers
 associés ; les fichiers orphelins peuvent être supprimés lors d'une maintenance
 après vérification de l'absence de métadonnée `scan_artifacts`.
 
+## Rapports partageables
+
+Les owners et admins peuvent créer un lien public temporaire pour un scan terminé
+ou mettre un rapport en file d'envoi par e-mail. Le branding du pilote comprend
+un nom de marque et une couleur d'accent ; aucun logo distant n'est chargé.
+
+Les liens expirent après sept jours et peuvent être révoqués à tout moment. Le
+jeton brut n'est pas stocké : PostgreSQL conserve son SHA-256 pour la résolution
+publique et une copie chiffrée AES-256-GCM pour reconstruire le lien dans le
+dashboard et l'outbox. `REPORT_TOKEN_SECRET` doit contenir au moins 32 caractères
+aléatoires ; `REPORT_PUBLIC_BASE_URL` définit l'origine des liens envoyés.
+
+Le rapport public est résolu uniquement par jeton, recroise organisation, site et
+scan côté serveur, utilise `noindex/nofollow` et `no-referrer`, et ne nécessite
+aucun identifiant interne dans son URL.
+
 ## Invariants de sécurité
 
 - seules les URL HTTP(S) sur ports standards sont acceptées ;
@@ -104,7 +120,7 @@ après vérification de l'absence de métadonnée `scan_artifacts`.
 - les workers Playwright seront isolés et limités en temps, pages et ressources ;
 - chaque requête métier portera explicitement l'identifiant d'organisation ;
 - aucun secret, mot de passe de site ou contenu sensible ne doit finir dans les logs ;
-- les rapports partagés utiliseront des jetons courts, révocables et expirants.
+- les rapports partagés utilisent des jetons courts, révocables et expirants.
 
 ## Vérifications
 

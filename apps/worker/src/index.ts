@@ -6,6 +6,7 @@ import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
 import { startNotificationDeliveryCoordinator } from "./notification-delivery.js";
 import { sendScanNotificationEmail } from "./notification-email.js";
+import { startReportDeliveryCoordinator } from "./report-delivery.js";
 import { processScanJob } from "./scan-processor.js";
 import { startScheduledScanCoordinator } from "./scan-scheduler.js";
 
@@ -94,10 +95,15 @@ const notificationCoordinator = startNotificationDeliveryCoordinator({
   sender: sendScanNotificationEmail,
 });
 
+const reportDeliveryCoordinator = startReportDeliveryCoordinator({
+  logger,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   await schedulerCoordinator.stop();
   await notificationCoordinator.stop();
+  await reportDeliveryCoordinator.stop();
   await worker.close();
   await schedulerQueue.close();
   await closeDatabase();
