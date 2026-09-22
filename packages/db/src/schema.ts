@@ -223,6 +223,45 @@ export const siteVerificationChallenges = pgTable(
   ],
 );
 
+export const scanSchedules = pgTable(
+  "scan_schedules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").default(true).notNull(),
+    dayOfWeek: integer("day_of_week").notNull(),
+    minuteOfDay: integer("minute_of_day").notNull(),
+    timeZone: text("time_zone").default("Europe/Paris").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("scan_schedules_site_unique").on(table.siteId),
+    index("scan_schedules_org_idx").on(table.organizationId),
+    check(
+      "scan_schedules_day_of_week_range",
+      sql`${table.dayOfWeek} between 1 and 7`,
+    ),
+    check(
+      "scan_schedules_minute_of_day_range",
+      sql`${table.minuteOfDay} between 0 and 1439`,
+    ),
+    check(
+      "scan_schedules_time_zone_not_blank",
+      sql`length(btrim(${table.timeZone})) > 0`,
+    ),
+  ],
+);
+
 export const scans = pgTable(
   "scans",
   {
