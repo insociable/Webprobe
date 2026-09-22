@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-shell";
 import { getFindingRemediation } from "@/lib/finding-remediation";
+import { groupFindingsForDisplay } from "@/lib/finding-display";
 import { getPublicReportByToken } from "@/lib/public-report-service";
 
 export const metadata: Metadata = {
@@ -52,6 +53,7 @@ export default async function PublicReportPage({
   const findings = [...report.scan.findings].sort(
     (a, b) => rank[b.severity] - rank[a.severity],
   );
+  const findingGroups = groupFindingsForDisplay(findings);
 
   return (
     <main className="min-h-screen">
@@ -97,8 +99,8 @@ export default async function PublicReportPage({
               <p className="am-metric-value">{report.scan.pageCount}</p>
             </div>
             <div className="am-metric-cell">
-              <p className="am-metric-label">Findings</p>
-              <p className="am-metric-value">{findings.length}</p>
+              <p className="am-metric-label">Problèmes</p>
+              <p className="am-metric-value">{findingGroups.length}</p>
             </div>
             <div className="am-metric-cell">
               <p className="am-metric-label">Lien valable jusqu’au</p>
@@ -163,7 +165,7 @@ export default async function PublicReportPage({
               </h2>
             </div>
             <span className="font-mono text-xs text-[#657188]">
-              {String(findings.length).padStart(2, "0")}
+              {String(findingGroups.length).padStart(2, "0")}
             </span>
           </div>
 
@@ -173,11 +175,13 @@ export default async function PublicReportPage({
             </div>
           ) : (
             <div className="mt-6 space-y-4">
-              {findings.map((finding, index) => {
+              {findingGroups.map((group, index) => {
+                const finding = group.primary;
+                const grouped = group.findings.length > 1;
                 const remediation = getFindingRemediation(finding.code);
                 return (
                   <article
-                    key={finding.fingerprint}
+                    key={group.key}
                     className="border border-[#242d40] bg-[#0d111a] p-5 sm:p-6"
                   >
                     <div className="grid gap-4 sm:grid-cols-[42px_1fr_auto]">
@@ -189,7 +193,20 @@ export default async function PublicReportPage({
                           {finding.category}
                         </p>
                         <h3 className="mt-2 font-semibold">{finding.title}</h3>
-                        {finding.pageUrl ? (
+                        {grouped ? (
+                          <div className="mt-3">
+                            <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
+                              {group.pageUrls.length} pages concernées
+                            </span>
+                            <ul className="mt-3 space-y-1.5 text-sm text-[#6f7b91]">
+                              {group.pageUrls.map((pageUrl) => (
+                                <li key={pageUrl} className="break-all">
+                                  {pageUrl}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : finding.pageUrl ? (
                           <p className="mt-2 break-all text-sm text-[#6f7b91]">
                             {finding.pageUrl}
                           </p>

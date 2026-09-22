@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getFindingRemediation } from "@/lib/finding-remediation";
+import { groupFindingsForDisplay } from "@/lib/finding-display";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
@@ -228,6 +229,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const orderedFindings = [...details.findings].sort(
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
+  const findingGroups = groupFindingsForDisplay(orderedFindings);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
   const activeShares =
@@ -437,8 +439,8 @@ export default async function ScanPage({ params }: ScanPageProps) {
       <section className="py-10">
         <p className="text-sm text-white/45">Analyse</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-          {orderedFindings.length} finding
-          {orderedFindings.length > 1 ? "s" : ""}
+          {findingGroups.length} problème
+          {findingGroups.length > 1 ? "s" : ""}
         </h2>
 
         {orderedFindings.length === 0 ? (
@@ -449,14 +451,17 @@ export default async function ScanPage({ params }: ScanPageProps) {
           </div>
         ) : (
           <div className="mt-6 space-y-4">
-            {orderedFindings.map((finding) => {
-              const evidence = visibleEvidence(finding.evidence);
+            {findingGroups.map((group) => {
+              const finding = group.primary;
+              const grouped = group.findings.length > 1;
+              const evidence = grouped ? [] : visibleEvidence(finding.evidence);
               const remediation = getFindingRemediation(finding.code);
-              const change =
-                comparison?.changesByFingerprint[finding.fingerprint];
+              const change = grouped
+                ? null
+                : comparison?.changesByFingerprint[finding.fingerprint];
               return (
                 <article
-                  key={finding.id}
+                  key={group.key}
                   className="rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -469,7 +474,20 @@ export default async function ScanPage({ params }: ScanPageProps) {
                       <h3 className="mt-2 text-lg font-semibold">
                         {finding.title}
                       </h3>
-                      {finding.pageUrl ? (
+                      {grouped ? (
+                        <div className="mt-3">
+                          <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
+                            {group.pageUrls.length} pages concernées
+                          </span>
+                          <ul className="mt-3 space-y-1.5 text-sm text-white/40">
+                            {group.pageUrls.map((pageUrl) => (
+                              <li key={pageUrl} className="break-all">
+                                {pageUrl}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : finding.pageUrl ? (
                         <p className="mt-2 break-all text-sm text-white/40">
                           {finding.pageUrl}
                         </p>

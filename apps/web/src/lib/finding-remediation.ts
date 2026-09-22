@@ -274,6 +274,21 @@ function accessibilityRemediation(code: string): FindingRemediation {
   };
 }
 function scannerV2Remediation(code: string): FindingRemediation | null {
+  if (code === "seo.noindex") {
+    return {
+      title: "Vérifier si le noindex est volontaire",
+      summary:
+        "La page demande aux moteurs de recherche de ne pas l’indexer. Ce réglage peut être normal pour une page privée, technique ou volontairement exclue, mais il doit être supprimé si la page doit apparaître dans les résultats de recherche.",
+      steps: [
+        "Passez en revue les URL concernées et confirmez pour chacune si l’exclusion de l’index est intentionnelle.",
+        "Si une page doit être indexée, retirez la directive noindex de la balise meta robots ou de l’en-tête X-Robots-Tag.",
+        "Si le noindex est volontaire, conservez-le et documentez cette intention afin d’éviter une correction inutile.",
+      ],
+      verification:
+        "Relancez le scan : les pages destinées à être indexées ne doivent plus remonter ce signal, tandis que les exclusions volontaires peuvent rester assumées.",
+    };
+  }
+
   if (code.startsWith("seo.")) {
     return {
       title: "Corriger le signal SEO détecté",
