@@ -8,6 +8,7 @@ coverage/
 .env.*
 !.env.example
 playwright-report/
+.playwright-browsers/
 test-results/
 artifacts/
 storage/
