@@ -13,6 +13,7 @@ import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
 import type { HttpProbeResult } from "./http-probe.js";
+import type { ScannerV2PersistentSummary } from "./scanner-v2/findings.js";
 import {
   detectScanDegradations,
   filterDegradationsByMinimumSeverity,
@@ -230,6 +231,7 @@ export async function persistScanCompletion(
   result: ScanResult,
   probe: HttpProbeResult,
   generatedFindings: GeneratedFinding[],
+  scannerV2: ScannerV2PersistentSummary | null = null,
 ): Promise<void> {
   const { db } = getDatabase();
 
@@ -245,6 +247,7 @@ export async function persistScanCompletion(
           http: probe,
           findingCount: generatedFindings.length,
           findingsBySeverity: severityCounts(generatedFindings),
+          ...(scannerV2 ? { scannerV2 } : {}),
         },
       })
       .where(

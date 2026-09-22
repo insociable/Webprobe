@@ -38,6 +38,18 @@ const severityLabels = {
   critical: "Critique",
 } as const;
 
+const findingCategoryLabels: Record<string, string> = {
+  availability: "Disponibilité",
+  "broken-link": "Lien cassé",
+  javascript: "JavaScript",
+  tls: "TLS",
+  "security-header": "En-tête de sécurité",
+  accessibility: "Accessibilité",
+  performance: "Performance",
+  seo: "SEO",
+  network: "Réseau",
+};
+
 const severityRank = {
   critical: 5,
   high: 4,
@@ -91,6 +103,15 @@ function visibleEvidence(
     ruleId: "Règle accessibilité",
     impact: "Impact",
     nodeCount: "Éléments concernés",
+    observedValue: "Valeur observée",
+    warningThreshold: "Seuil d’alerte",
+    highThreshold: "Seuil haut",
+    unit: "Unité",
+    party: "Origine réseau",
+    resourceType: "Type de ressource",
+    failureClass: "Classe d’échec",
+    occurrenceCount: "Occurrences",
+    affectedPageCount: "Pages affectées",
   };
 
   return Object.entries(labels).flatMap(([key, label]) => {
@@ -105,6 +126,62 @@ function visibleEvidence(
 
     return [[label, String(value)]];
   });
+}
+
+type ScannerV2AnalyzerStatus = "complete" | "partial" | "unavailable";
+
+const scannerV2AnalyzerLabels = {
+  crawl: "Crawl",
+  network: "Réseau",
+  performance: "Performance",
+  seo: "SEO",
+} as const;
+
+const scannerV2StatusLabels: Record<ScannerV2AnalyzerStatus, string> = {
+  complete: "Complet",
+  partial: "Partiel",
+  unavailable: "Indisponible",
+};
+
+function scannerV2Quality(
+  summary: Record<string, unknown>,
+): Record<
+  keyof typeof scannerV2AnalyzerLabels,
+  ScannerV2AnalyzerStatus
+> | null {
+  const scannerV2 = summary.scannerV2;
+  if (typeof scannerV2 !== "object" || scannerV2 === null) {
+    return null;
+  }
+
+  const completeness = (scannerV2 as { completeness?: unknown }).completeness;
+  if (typeof completeness !== "object" || completeness === null) {
+    return null;
+  }
+
+  const result = {} as Record<
+    keyof typeof scannerV2AnalyzerLabels,
+    ScannerV2AnalyzerStatus
+  >;
+  for (const analyzer of Object.keys(scannerV2AnalyzerLabels) as Array<
+    keyof typeof scannerV2AnalyzerLabels
+  >) {
+    const value = (completeness as Record<string, unknown>)[analyzer];
+    const status =
+      typeof value === "object" && value !== null
+        ? (value as { status?: unknown }).status
+        : null;
+    if (
+      status !== "complete" &&
+      status !== "partial" &&
+      status !== "unavailable"
+    ) {
+      return null;
+    }
+    result[analyzer] = status;
+  }
+
+  return result;
 }
 
 async function loadScan(
@@ -152,6 +229,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
   const comparison = details.comparison;
+  const scannerV2QualityState = scannerV2Quality(details.scan.summary);
   const activeShares =
     details.scan.status === "completed" && details.access.role !== "member"
       ? await listActiveReportShares(
@@ -286,6 +364,36 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
+      {scannerV2QualityState ? (
+        <section className="border-b border-white/10 py-10">
+          <p className="text-sm text-white/45">Qualité de l’analyse</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            Couverture Scanner V2
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/40">
+            Un analyseur partiel signifie que ses résultats restent
+            exploitables, mais que certaines observations n’ont pas pu être
+            collectées. Cela ne transforme pas le scan en échec.
+          </p>
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {(
+              Object.entries(scannerV2QualityState) as Array<
+                [keyof typeof scannerV2AnalyzerLabels, ScannerV2AnalyzerStatus]
+              >
+            ).map(([analyzer, status]) => (
+              <div key={analyzer} className="am-panel-soft p-4">
+                <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                  {scannerV2AnalyzerLabels[analyzer]}
+                </dt>
+                <dd className="mt-2 text-sm font-semibold">
+                  {scannerV2StatusLabels[status]}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
+
       {comparison ? (
         <section className="border-b border-white/10 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -354,7 +462,9 @@ export default async function ScanPage({ params }: ScanPageProps) {
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <p className="text-xs uppercase tracking-[0.16em] text-white/35">
-                        {finding.category} · {finding.code}
+                        {findingCategoryLabels[finding.category] ??
+                          finding.category}{" "}
+                        · {finding.code}
                       </p>
                       <h3 className="mt-2 text-lg font-semibold">
                         {finding.title}

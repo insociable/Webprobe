@@ -16,6 +16,11 @@ import {
 } from "./http-probe.js";
 import { persistPrimaryScreenshot as defaultPersistPrimaryScreenshot } from "./scan-artifacts.js";
 import {
+  generateScannerV2Findings,
+  summarizeScannerV2,
+  type ScannerV2PersistentSummary,
+} from "./scanner-v2/findings.js";
+import {
   markScanRunning,
   persistScanCompletion,
   persistScanFailureForJob,
@@ -25,6 +30,7 @@ import {
 export type ScanExecutionResult = ScanResult & {
   http: HttpProbeResult;
   screenshotStored: boolean;
+  scannerV2: ScannerV2PersistentSummary | null;
 };
 
 export type ScanProcessorDependencies = {
@@ -76,7 +82,12 @@ export async function processScanJobAttempt(
       [
         ...httpFindings,
         ...(browserScan
-          ? generateBrowserFindings(browserScan.observations)
+          ? [
+              ...generateBrowserFindings(browserScan.observations),
+              ...(browserScan.scannerV2
+                ? generateScannerV2Findings(browserScan.scannerV2)
+                : []),
+            ]
           : []),
       ].map((finding) => [finding.fingerprint, finding]),
     ).values(),
@@ -99,7 +110,17 @@ export async function processScanJobAttempt(
     })),
   });
 
-  await persistScanCompletion(context, result, httpProbe, generatedFindings);
+  const scannerV2Summary = browserScan?.scannerV2
+    ? summarizeScannerV2(browserScan.scannerV2)
+    : null;
+
+  await persistScanCompletion(
+    context,
+    result,
+    httpProbe,
+    generatedFindings,
+    scannerV2Summary,
+  );
 
   let screenshotStored = false;
   if (payload.profile.captureScreenshots && browserScan?.screenshot) {
@@ -119,6 +140,7 @@ export async function processScanJobAttempt(
     ...result,
     http: httpProbe,
     screenshotStored,
+    scannerV2: scannerV2Summary,
   };
 }
 
