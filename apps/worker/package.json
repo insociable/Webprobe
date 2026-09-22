@@ -13,9 +13,11 @@
   },
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",
+    "@agency-saas/db": "workspace:*",
     "@agency-saas/security": "workspace:*",
     "bullmq": "6.3.8",
     "dotenv": "18.0.1",
+    "drizzle-orm": "0.45.3",
     "ioredis": "6.0.0",
     "pino": "10.3.1",
     "zod": "4.6.5"

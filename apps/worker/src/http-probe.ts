@@ -90,6 +90,13 @@ function firstHeaderValue(
   return value ?? null;
 }
 
+function reportSafeUrl(input: URL): string {
+  const safeUrl = new URL(input.toString());
+  safeUrl.search = "";
+  safeUrl.hash = "";
+  return safeUrl.toString();
+}
+
 function reportHeaders(headers: IncomingHttpHeaders): Record<string, string> {
   return Object.fromEntries(
     reportHeaderNames.flatMap((name) => {
@@ -267,7 +274,7 @@ export async function probeHttpTarget(
     try {
       response = await requester(target, timeoutMs);
     } catch (error) {
-      return networkFailure(target.url.toString(), redirects, error);
+      return networkFailure(reportSafeUrl(target.url), redirects, error);
     }
 
     totalDurationMs += response.durationMs;
@@ -276,7 +283,7 @@ export async function probeHttpTarget(
       if (redirects.length >= maxRedirects) {
         return {
           ok: false,
-          targetUrl: target.url.toString(),
+          targetUrl: reportSafeUrl(target.url),
           redirects,
           error: { kind: "redirect", code: "TOO_MANY_REDIRECTS" },
         };
@@ -288,7 +295,7 @@ export async function probeHttpTarget(
       } catch {
         return {
           ok: false,
-          targetUrl: target.url.toString(),
+          targetUrl: reportSafeUrl(target.url),
           redirects,
           error: { kind: "redirect", code: "INVALID_REDIRECT" },
         };
@@ -296,8 +303,8 @@ export async function probeHttpTarget(
 
       redirects.push({
         statusCode: response.statusCode,
-        from: target.url.toString(),
-        to: nextUrl.toString(),
+        from: reportSafeUrl(target.url),
+        to: reportSafeUrl(nextUrl),
       });
       currentUrl = nextUrl.toString();
       continue;
@@ -306,7 +313,7 @@ export async function probeHttpTarget(
 
     return {
       ok: true,
-      finalUrl: target.url.toString(),
+      finalUrl: reportSafeUrl(target.url),
       statusCode: response.statusCode,
       durationMs: totalDurationMs,
       redirects,
