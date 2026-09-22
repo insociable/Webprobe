@@ -4,6 +4,8 @@ import pino from "pino";
 import { z } from "zod";
 import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
+import { startNotificationDeliveryCoordinator } from "./notification-delivery.js";
+import { sendScanDegradationEmail } from "./notification-email.js";
 import { processScanJob } from "./scan-processor.js";
 import { startScheduledScanCoordinator } from "./scan-scheduler.js";
 
@@ -85,9 +87,15 @@ const schedulerCoordinator = startScheduledScanCoordinator({
   hasJob: async (scanId) => (await schedulerQueue.getJob(scanId)) !== undefined,
 });
 
+const notificationCoordinator = startNotificationDeliveryCoordinator({
+  logger,
+  sender: sendScanDegradationEmail,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   await schedulerCoordinator.stop();
+  await notificationCoordinator.stop();
   await worker.close();
   await schedulerQueue.close();
   await closeDatabase();

@@ -50,6 +50,13 @@
       "when": 1790064597683,
       "tag": "0006_curved_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790069064851,
+      "tag": "0007_wealthy_morlocks",
+      "breakpoints": true
     }
   ]
 }

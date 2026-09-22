@@ -1,9 +1,18 @@
-import { findings, scanSchedules, scans, sites } from "@agency-saas/db";
+import {
+  findings,
+  memberships,
+  notificationDeliveries,
+  scanSchedules,
+  scans,
+  sites,
+  users,
+} from "@agency-saas/db";
 import type { ScanJob, ScanResult, Severity } from "@agency-saas/contracts";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
 import type { HttpProbeResult } from "./http-probe.js";
+import { detectScanDegradations } from "./scan-alerts.js";
 
 export class ScanContextError extends Error {
   constructor(
@@ -248,6 +257,80 @@ export async function persistScanCompletion(
         })),
       );
     }
+
+    const [previousScan] = await tx
+      .select({ id: scans.id })
+      .from(scans)
+      .where(
+        and(
+          eq(scans.organizationId, context.organizationId),
+          eq(scans.siteId, context.siteId),
+          eq(scans.status, "completed"),
+          ne(scans.id, context.scanId),
+          isNotNull(scans.completedAt),
+        ),
+      )
+      .orderBy(desc(scans.completedAt), desc(scans.queuedAt))
+      .limit(1);
+
+    if (!previousScan) {
+      return;
+    }
+
+    const previousFindings = await tx
+      .select({
+        fingerprint: findings.fingerprint,
+        severity: findings.severity,
+      })
+      .from(findings)
+      .where(
+        and(
+          eq(findings.organizationId, context.organizationId),
+          eq(findings.scanId, previousScan.id),
+        ),
+      );
+
+    const degradations = detectScanDegradations(
+      generatedFindings,
+      previousFindings,
+    );
+
+    if (degradations.length === 0) {
+      return;
+    }
+
+    const recipients = await tx
+      .select({
+        userId: users.id,
+        email: users.email,
+      })
+      .from(memberships)
+      .innerJoin(users, eq(memberships.userId, users.id))
+      .where(
+        and(
+          eq(memberships.organizationId, context.organizationId),
+          inArray(memberships.role, ["owner", "admin"]),
+          eq(users.emailVerified, true),
+        ),
+      );
+
+    if (recipients.length === 0) {
+      return;
+    }
+
+    await tx
+      .insert(notificationDeliveries)
+      .values(
+        recipients.map((recipient) => ({
+          organizationId: context.organizationId,
+          siteId: context.siteId,
+          scanId: context.scanId,
+          recipientUserId: recipient.userId,
+          recipientEmail: recipient.email,
+          payload: { degradations },
+        })),
+      )
+      .onConflictDoNothing();
   });
 }
 
