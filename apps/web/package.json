@@ -12,6 +12,7 @@
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",
     "@agency-saas/db": "workspace:*",
+    "@agency-saas/security": "workspace:*",
     "@better-auth/drizzle-adapter": "1.7.5",
     "@better-auth/utils": "0.4.2",
     "better-auth": "1.7.5",

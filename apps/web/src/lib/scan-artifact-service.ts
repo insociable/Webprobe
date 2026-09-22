@@ -51,18 +51,11 @@ function resolveStorageKey(storageKey: string): string | null {
   return resolved.startsWith(prefix) ? resolved : null;
 }
 
-export async function getPrimaryScreenshotArtifact(
-  userId: string,
+export async function getPrimaryScreenshotArtifactForScope(
   organizationId: string,
   siteId: string,
   scanId: string,
 ): Promise<PrimaryScreenshotArtifact | null> {
-  await requireOrganizationAccess(userId, organizationId);
-  const site = await getSiteForOrganization(userId, organizationId, siteId);
-  if (!site) {
-    return null;
-  }
-
   const [artifact] = await db
     .select({
       storageKey: scanArtifacts.storageKey,
@@ -125,4 +118,19 @@ export async function readPrimaryScreenshot(
   } catch {
     return null;
   }
+}
+
+export async function getPrimaryScreenshotArtifact(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+  scanId: string,
+): Promise<PrimaryScreenshotArtifact | null> {
+  await requireOrganizationAccess(userId, organizationId);
+  const site = await getSiteForOrganization(userId, organizationId, siteId);
+  if (!site) {
+    return null;
+  }
+
+  return getPrimaryScreenshotArtifactForScope(organizationId, siteId, scanId);
 }

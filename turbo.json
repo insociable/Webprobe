@@ -13,7 +13,9 @@
         "SMTP_FROM",
         "SMTP_USER",
         "SMTP_PASSWORD",
-        "SMTP_SECURE"
+        "SMTP_SECURE",
+        "REPORT_PUBLIC_BASE_URL",
+        "REPORT_TOKEN_SECRET"
       ]
     },
     "dev": {
@@ -29,7 +31,14 @@
     "test": {
       "dependsOn": ["^build"],
       "env": ["RUN_DB_INTEGRATION", "RUN_REDIS_INTEGRATION"],
-      "passThroughEnv": ["DATABASE_URL", "REDIS_URL"]
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "REPORT_PUBLIC_BASE_URL",
+        "REPORT_TOKEN_SECRET",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL"
+      ]
     }
   }
 }

@@ -34,6 +34,8 @@ export async function getOrganizationAccess(
       membershipId: memberships.id,
       organizationId: organizations.id,
       organizationName: organizations.name,
+      reportBrandName: organizations.reportBrandName,
+      reportAccentColor: organizations.reportAccentColor,
       role: memberships.role,
       scanAlertEnabled: memberships.scanAlertEnabled,
       scanAlertMinimumSeverity: memberships.scanAlertMinimumSeverity,

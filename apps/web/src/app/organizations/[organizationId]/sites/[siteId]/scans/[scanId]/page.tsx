@@ -8,7 +8,9 @@ import { notFound } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
+import { listActiveReportShares } from "@/lib/report-share-service";
 import { ScanStatusRefresher } from "../../scan-status-refresher";
+import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
   params: Promise<{
@@ -140,6 +142,15 @@ export default async function ScanPage({ params }: ScanPageProps) {
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
   const comparison = details.comparison;
+  const activeShares =
+    details.scan.status === "completed" && details.access.role !== "member"
+      ? await listActiveReportShares(
+          session.user.id,
+          organizationId,
+          siteId,
+          scanId,
+        )
+      : [];
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8 lg:px-10">
@@ -210,6 +221,20 @@ export default async function ScanPage({ params }: ScanPageProps) {
           </p>
         ) : null}
       </section>
+
+      {details.scan.status === "completed" &&
+      details.access.role !== "member" ? (
+        <ReportSharePanel
+          organizationId={organizationId}
+          siteId={siteId}
+          scanId={scanId}
+          shares={activeShares.map((share) => ({
+            ...share,
+            expiresAt: share.expiresAt.toISOString(),
+            createdAt: share.createdAt.toISOString(),
+          }))}
+        />
+      ) : null}
 
       {details.screenshotAvailable ? (
         <section className="border-b border-white/10 py-10">

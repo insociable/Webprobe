@@ -1,39 +1,5 @@
-import nodemailer, { type Transporter } from "nodemailer";
 import type { ClaimedNotificationDelivery } from "./notification-delivery.js";
-
-let transporter: Transporter | undefined;
-
-function smtpPort(): number {
-  const value =
-    process.env.SMTP_PORT ?? process.env.MAILPIT_SMTP_PORT ?? "1025";
-  const port = Number(value);
-
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error("SMTP_PORT must be a valid TCP port");
-  }
-
-  return port;
-}
-
-function getTransporter(): Transporter {
-  if (transporter) {
-    return transporter;
-  }
-
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPassword = process.env.SMTP_PASSWORD;
-
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? "127.0.0.1",
-    port: smtpPort(),
-    secure: process.env.SMTP_SECURE === "true",
-    ...(smtpUser && smtpPassword
-      ? { auth: { user: smtpUser, pass: smtpPassword } }
-      : {}),
-  });
-
-  return transporter;
-}
+import { getSmtpTransporter } from "./smtp.js";
 
 function severityLabel(value: string): string {
   return value.toUpperCase();
@@ -62,7 +28,7 @@ export async function sendScanNotificationEmail(
       `  ${item.pageUrl}`,
     ]);
 
-    await getTransporter().sendMail({
+    await getSmtpTransporter().sendMail({
       from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
       to: delivery.recipientEmail,
       messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
@@ -86,7 +52,7 @@ export async function sendScanNotificationEmail(
     `  ${item.pageUrl}`,
   ]);
 
-  await getTransporter().sendMail({
+  await getSmtpTransporter().sendMail({
     from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
     to: delivery.recipientEmail,
     messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
