@@ -52,12 +52,16 @@ describe("browser crawl", () => {
         "https://example.com/",
         [
           "https://example.com/ok?token=secret#fragment",
+          "https://EXAMPLE.com:443/ok?token=secret",
           "https://example.com/bad",
           "https://outside.example/",
           "mailto:test@example.com",
         ],
       ],
-      ["https://example.com/ok?token=secret", ["https://example.com/down"]],
+      [
+        "https://example.com/ok?token=secret",
+        ["https://example.com/down", "https://example.com/#loop"],
+      ],
     ]);
 
     const fakePage = {
@@ -174,6 +178,16 @@ describe("browser crawl", () => {
         }),
       ]),
     );
+    expect(
+      result.scannerV2.crawl.urls.find(
+        (entry) => entry.url === "https://example.com/ok",
+      )?.duplicateDiscoveryCount,
+    ).toBeGreaterThan(0);
+    expect(
+      result.scannerV2.crawl.urls.find(
+        (entry) => entry.url === "https://example.com/",
+      )?.duplicateDiscoveryCount,
+    ).toBeGreaterThan(0);
   });
 
   it("skips axe when accessibility checks are disabled", async () => {
@@ -352,7 +366,10 @@ describe("browser crawl", () => {
           text: () => "ReferenceError: app",
         });
         handlers.pageerror?.(new Error("ReferenceError: app"));
-        return { status: () => 200 } as unknown as Response;
+        return {
+          status: () => 200,
+          headers: () => ({ "x-robots-tag": "googlebot: noindex" }),
+        } as unknown as Response;
       },
       url: () => currentUrl,
       viewportSize: () => ({ width: 1440, height: 900 }),
@@ -396,12 +413,63 @@ describe("browser crawl", () => {
         transferBytesByCategory: expect.objectContaining({ javascript: 1280 }),
       }),
     ]);
+    expect(result.scannerV2.network.resources).toEqual([
+      expect.objectContaining({
+        cacheControlled: true,
+        contentEncoding: "br",
+      }),
+    ]);
     expect(result.scannerV2.seo.pages).toEqual([
       expect.objectContaining({
-        title: "Accueil Example",
+        titlePresent: true,
+        titleLength: 15,
         canonicalStatus: "valid",
+        indexability: "noindex",
+        robots: expect.arrayContaining(["noindex"]),
         sitemapUrls: ["https://example.com/sitemap.xml"],
       }),
     ]);
+    expect(JSON.stringify(result)).not.toContain("Accueil Example");
+    expect(JSON.stringify(result)).not.toContain("Description test");
+    expect(JSON.stringify(result)).not.toContain("max-age=60");
+    expect(JSON.stringify(result)).not.toContain("googlebot:");
+  });
+
+  it("reports partial browser collection without failing the scan", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async () => {
+          throw new Error("browser DOM became unavailable");
+        },
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness).toMatchObject({
+      crawl: { status: "partial", linkExtractionFailureCount: 1 },
+      performance: { status: "unavailable", observedPageCount: 0 },
+      seo: { status: "unavailable", observedPageCount: 0 },
+    });
   });
 });

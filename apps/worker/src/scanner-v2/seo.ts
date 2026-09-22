@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { observeUrl } from "./url.js";
 
 export type SeoSignalLevel =
@@ -32,14 +33,16 @@ export type SeoDocumentFacts = {
   h1Count: number;
   internalLinkCount: number;
   sitemapHrefs: string[];
+  contentTruncated?: boolean;
 };
 
 export type SeoPageObservation = {
   url: string;
   statusCode: number | null;
-  title: string | null;
+  titlePresent: boolean;
   titleLength: number | null;
-  metaDescription: string | null;
+  titleFingerprint: string | null;
+  metaDescriptionPresent: boolean;
   metaDescriptionLength: number | null;
   canonicalUrl: string | null;
   canonicalStatus: "missing" | "valid" | "invalid";
@@ -49,6 +52,7 @@ export type SeoPageObservation = {
   h1Count: number;
   internalLinkCount: number;
   sitemapUrls: string[];
+  contentTruncated: boolean;
   signals: SeoSignal[];
 };
 
@@ -57,17 +61,76 @@ function trimmedOrNull(value: string | null): string | null {
   return trimmed || null;
 }
 
+function textFingerprint(value: string): string {
+  return createHash("sha256").update(value.trim(), "utf8").digest("hex");
+}
+
+function normalizeRobotDirective(value: string): string[] {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return [];
+  }
+  if (normalized === "none") {
+    return ["none", "noindex", "nofollow"];
+  }
+  if (
+    normalized === "all" ||
+    normalized === "index" ||
+    normalized === "noindex" ||
+    normalized === "follow" ||
+    normalized === "nofollow" ||
+    normalized === "noarchive" ||
+    normalized === "nosnippet" ||
+    normalized === "noimageindex" ||
+    normalized === "notranslate"
+  ) {
+    return [normalized];
+  }
+  if (normalized.startsWith("max-snippet:")) {
+    return ["max-snippet"];
+  }
+  if (normalized.startsWith("max-image-preview:")) {
+    return ["max-image-preview"];
+  }
+  if (normalized.startsWith("max-video-preview:")) {
+    return ["max-video-preview"];
+  }
+  if (normalized.startsWith("unavailable_after:")) {
+    return ["unavailable_after"];
+  }
+  const scopeDelimiter = normalized.indexOf(":");
+  return scopeDelimiter >= 0
+    ? normalizeRobotDirective(normalized.slice(scopeDelimiter + 1))
+    : [];
+}
+
 function normalizeRobots(values: readonly string[]): string[] {
   return [
     ...new Set(
       values.flatMap((value) =>
         value
           .split(",")
-          .map((directive) => directive.trim().toLowerCase())
-          .filter(Boolean),
+          .flatMap((directive) => normalizeRobotDirective(directive)),
       ),
     ),
   ].sort();
+}
+
+function normalizedLang(value: string | null): string | null {
+  const lang = trimmedOrNull(value)?.toLowerCase() ?? null;
+  return lang && /^[a-z]{2,3}(?:-[a-z0-9]{2,8}){0,3}$/.test(lang) ? lang : null;
+}
+
+function safeHttpDisplayUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return observeUrl(url.toString())?.displayUrl ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function analyzeSeoPage(input: {
@@ -82,7 +145,7 @@ export function analyzeSeoPage(input: {
 
   const title = trimmedOrNull(input.facts.title);
   const metaDescription = trimmedOrNull(input.facts.metaDescription);
-  const lang = trimmedOrNull(input.facts.lang);
+  const lang = normalizedLang(input.facts.lang);
   const robots = normalizeRobots(input.facts.robots);
   const indexability = robots.includes("noindex")
     ? "noindex"
@@ -151,9 +214,11 @@ export function analyzeSeoPage(input: {
   return {
     url: pageUrl.displayUrl,
     statusCode: input.statusCode,
-    title,
+    titlePresent: title !== null,
     titleLength: title?.length ?? null,
-    metaDescription,
+    titleFingerprint:
+      title && !input.facts.contentTruncated ? textFingerprint(title) : null,
+    metaDescriptionPresent: metaDescription !== null,
     metaDescriptionLength: metaDescription?.length ?? null,
     canonicalUrl,
     canonicalStatus,
@@ -163,6 +228,7 @@ export function analyzeSeoPage(input: {
     h1Count: input.facts.h1Count,
     internalLinkCount: input.facts.internalLinkCount,
     sitemapUrls: [...new Set(sitemapUrls)].sort(),
+    contentTruncated: input.facts.contentTruncated ?? false,
     signals,
   };
 }
@@ -172,17 +238,17 @@ export function findDuplicateSeoTitles(
 ): SeoSignal[] {
   const pagesByTitle = new Map<string, SeoPageObservation[]>();
   for (const page of pages) {
-    if (!page.title) {
+    if (!page.titleFingerprint) {
       continue;
     }
-    const key = page.title.trim().toLocaleLowerCase();
+    const key = page.titleFingerprint;
     const existing = pagesByTitle.get(key) ?? [];
     existing.push(page);
     pagesByTitle.set(key, existing);
   }
 
   const signals: SeoSignal[] = [];
-  for (const [title, matchingPages] of pagesByTitle) {
+  for (const [titleFingerprint, matchingPages] of pagesByTitle) {
     if (matchingPages.length < 2) {
       continue;
     }
@@ -191,7 +257,7 @@ export function findDuplicateSeoTitles(
         code: "seo.title.duplicate",
         level: "warning",
         pageUrl: page.url,
-        evidence: { title, pageCount: matchingPages.length },
+        evidence: { titleFingerprint, pageCount: matchingPages.length },
       });
     }
   }
@@ -265,7 +331,10 @@ export function parseRobotsTxt(contents: string): RobotsTxtObservation {
       continue;
     }
     if (field === "sitemap") {
-      sitemaps.push(value);
+      const sitemap = safeHttpDisplayUrl(value);
+      if (sitemap) {
+        sitemaps.push(sitemap);
+      }
       continue;
     }
     if (field === "user-agent") {
@@ -307,7 +376,10 @@ export function parseSitemapXml(contents: string): string[] {
   for (const match of contents.matchAll(locationPattern)) {
     const value = match[1]?.replace(/<!\[CDATA\[|\]\]>/g, "").trim();
     if (value) {
-      locations.push(value);
+      const location = safeHttpDisplayUrl(value);
+      if (location) {
+        locations.push(location);
+      }
     }
   }
   return [...new Set(locations)].sort();

@@ -22,12 +22,61 @@ import {
 } from "./fixtures/scanner-v2.js";
 
 describe("scanner v2 crawl coverage", () => {
-  it("keeps meaningful query parameters while redacting only sensitive values", () => {
+  it("removes query strings from retained URLs while keeping a distinct identity", () => {
     expect(
       observeUrl("https://example.com/search?page=2&token=secret#top"),
     ).toMatchObject({
-      displayUrl: "https://example.com/search?page=2&token=%5Bredacted%5D",
+      displayUrl: "https://example.com/search",
+      hasQuery: true,
     });
+  });
+
+  it("deduplicates normalized URL forms and link loops without losing sources", () => {
+    const tracker = new CrawlCoverageTracker(3);
+    const root = classifyCrawlCandidate(
+      "https://example.com/",
+      "https://example.com/",
+      "https://example.com",
+    );
+    const aboutByFragment = classifyCrawlCandidate(
+      "/about#team",
+      "https://example.com/",
+      "https://example.com",
+    );
+    const aboutByAbsoluteUrl = classifyCrawlCandidate(
+      "https://EXAMPLE.com:443/about",
+      "https://example.com/",
+      "https://example.com",
+    );
+    if (
+      !root.accepted ||
+      !aboutByFragment.accepted ||
+      !aboutByAbsoluteUrl.accepted
+    ) {
+      throw new Error("fixture candidates must be accepted");
+    }
+
+    tracker.discover(root.candidate, null);
+    tracker.discover(aboutByFragment.candidate, root.candidate.displayUrl);
+    tracker.discover(aboutByAbsoluteUrl.candidate, root.candidate.displayUrl);
+    tracker.discover(root.candidate, aboutByFragment.candidate.displayUrl);
+
+    const coverage = tracker.coverage();
+    expect(coverage.discoveredUrlCount).toBe(2);
+    expect(coverage.urls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.com/about",
+          sourcePageUrls: ["https://example.com/"],
+          duplicateDiscoveryCount: 1,
+        }),
+        expect.objectContaining({
+          url: "https://example.com/",
+          sourcePageUrls: ["https://example.com/about"],
+          duplicateDiscoveryCount: 1,
+        }),
+      ]),
+    );
   });
 
   it("records redirects, exclusions and pages left outside the page budget", () => {
@@ -70,6 +119,16 @@ describe("scanner v2 crawl coverage", () => {
       navigationFailed: false,
     });
     tracker.discover(redirected.candidate, crawlFixture.root);
+    const redirectDestination = classifyCrawlCandidate(
+      crawlFixture.final,
+      crawlFixture.root,
+      "https://example.com",
+    );
+    expect(redirectDestination.accepted).toBe(true);
+    if (!redirectDestination.accepted) {
+      throw new Error("redirect destination must be accepted");
+    }
+    tracker.discover(redirectDestination.candidate, crawlFixture.root);
     tracker.markVisited(redirected.candidate, {
       finalUrl: crawlFixture.final,
       statusCode: 200,
@@ -87,10 +146,15 @@ describe("scanner v2 crawl coverage", () => {
       redirects: [
         expect.objectContaining({
           fromUrl: crawlFixture.redirected,
-          toUrl: crawlFixture.final,
+          toUrl: "https://example.com/new",
         }),
       ],
     });
+    expect(
+      tracker
+        .coverage()
+        .urls.find((entry) => entry.url === "https://example.com/new"),
+    ).toBeUndefined();
   });
 });
 
@@ -156,8 +220,12 @@ describe("scanner v2 network observations", () => {
         expect.objectContaining({
           kind: "request-failed",
           resourceType: "stylesheet",
+          failureClass: "aborted",
         }),
-        expect.objectContaining({ kind: "console-error" }),
+        expect.objectContaining({
+          kind: "console-error",
+          errorClass: "reference-error",
+        }),
       ]),
     );
     expect(observation.suppressedThirdPartyIssueCount).toBe(1);
@@ -169,10 +237,54 @@ describe("scanner v2 network observations", () => {
       ]),
     );
   });
+
+  it("truncates hostile browser event volume instead of retaining it unbounded", () => {
+    const collector = new NetworkObservationCollector("https://example.com", 2);
+    collector.recordResponse({
+      pageUrl: crawlFixture.root,
+      resourceUrl: "https://example.com/first.js",
+      resourceType: "script",
+      statusCode: 200,
+      transferBytes: 1,
+      cacheControl: null,
+      contentEncoding: null,
+    });
+    collector.recordFailure({
+      pageUrl: crawlFixture.root,
+      resourceUrl: "https://example.com/second.js",
+      resourceType: "script",
+      failureCode: "net::ERR_TIMED_OUT",
+    });
+    collector.recordConsoleError(
+      crawlFixture.root,
+      "ReferenceError: this third event must be dropped",
+    );
+
+    expect(collector.snapshot()).toMatchObject({
+      resources: [
+        expect.objectContaining({
+          resourceUrl: "https://example.com/first.js",
+        }),
+      ],
+      failedRequests: [
+        expect.objectContaining({
+          resourceUrl: "https://example.com/second.js",
+          failureClass: "timeout",
+        }),
+      ],
+      consoleErrors: [],
+      collection: {
+        maxRetainedObservationCount: 2,
+        retainedObservationCount: 2,
+        droppedObservationCount: 1,
+        truncated: true,
+      },
+    });
+  });
 });
 
 describe("scanner v2 performance lab", () => {
-  it("summarizes deterministic browser and network measurements without claiming field data", () => {
+  it("preserves slow-page lab measurements without claiming field data", () => {
     const observation = createLabPerformanceObservation({
       url: crawlFixture.root,
       context: {
@@ -186,7 +298,7 @@ describe("scanner v2 performance lab", () => {
       timing: {
         requestStart: 10,
         responseStart: 110,
-        domContentLoadedEventEnd: 540,
+        domContentLoadedEventEnd: 12_010,
         firstContentfulPaint: 180,
         largestContentfulPaint: 420,
         cumulativeLayoutShift: 0.08,
@@ -201,7 +313,7 @@ describe("scanner v2 performance lab", () => {
           party: "first-party",
           statusCode: 200,
           transferBytes: 1200,
-          cacheControl: "public, max-age=3600",
+          cacheControlled: true,
           contentEncoding: "br",
         },
         {
@@ -212,7 +324,7 @@ describe("scanner v2 performance lab", () => {
           party: "first-party",
           statusCode: 200,
           transferBytes: 800,
-          cacheControl: null,
+          cacheControlled: false,
           contentEncoding: null,
         },
       ],
@@ -220,7 +332,7 @@ describe("scanner v2 performance lab", () => {
 
     expect(observation).toMatchObject({
       ttfbMs: 100,
-      navigationDurationMs: 530,
+      navigationDurationMs: 12_000,
       totalRequestCount: 2,
       transferBytes: 2000,
       transferBytesByCategory: { javascript: 1200, images: 800 },
@@ -248,6 +360,10 @@ describe("scanner v2 SEO", () => {
       facts: seoFixture.missingTitle,
     });
     expect(complete?.titleLength).toBe(seoFixture.complete.title.length);
+    expect(JSON.stringify(complete)).not.toContain(seoFixture.complete.title);
+    expect(JSON.stringify(complete)).not.toContain(
+      seoFixture.complete.metaDescription,
+    );
     expect(noindex?.signals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: "seo.noindex", level: "information" }),
@@ -268,8 +384,35 @@ describe("scanner v2 SEO", () => {
           code: "seo.meta-description.missing",
           level: "opportunity",
         }),
+        expect.objectContaining({
+          code: "seo.canonical.invalid",
+          level: "error",
+        }),
       ]),
     );
+
+    const contradictoryRobots = analyzeSeoPage({
+      url: crawlFixture.root,
+      statusCode: 200,
+      facts: {
+        ...seoFixture.complete,
+        robots: ["index, follow", "googlebot: noindex"],
+      },
+    });
+    expect(contradictoryRobots).toMatchObject({
+      robots: ["follow", "index", "noindex"],
+      indexability: "noindex",
+    });
+
+    const truncated = analyzeSeoPage({
+      url: crawlFixture.root,
+      statusCode: 200,
+      facts: { ...seoFixture.complete, contentTruncated: true },
+    });
+    expect(truncated).toMatchObject({
+      contentTruncated: true,
+      titleFingerprint: null,
+    });
   });
 
   it("parses local robots/sitemap fixtures and compares coverage", () => {
@@ -287,6 +430,11 @@ describe("scanner v2 SEO", () => {
       sitemapOnlyUrls: ["https://example.com/unvisited"],
       crawledOnlyUrls: [],
     });
+    expect(
+      parseSitemapXml(
+        "<urlset><url><loc>https://example.com/private?token=secret</loc></url><url><loc>ftp://example.com/ignored</loc></url></urlset>",
+      ),
+    ).toEqual(["https://example.com/private"]);
   });
 
   it("finds duplicates only after multiple page facts are available", () => {

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { observeUrl, safeDiagnosticPreview } from "./url.js";
+import { observeUrl } from "./url.js";
 
 export type NetworkResourceType =
   | "document"
@@ -12,12 +12,34 @@ export type NetworkResourceType =
   | "media"
   | "other";
 export type NetworkParty = "first-party" | "third-party" | "unknown";
+export type NetworkContentEncoding =
+  | "br"
+  | "deflate"
+  | "gzip"
+  | "identity"
+  | "zstd"
+  | "other";
 export type NetworkIssueKind =
   | "http-4xx"
   | "http-5xx"
   | "request-failed"
   | "console-error"
   | "javascript-error";
+export type NetworkFailureClass =
+  | "aborted"
+  | "blocked"
+  | "connection"
+  | "dns"
+  | "timeout"
+  | "other";
+export type BrowserErrorClass =
+  | "reference-error"
+  | "type-error"
+  | "syntax-error"
+  | "range-error"
+  | "uri-error"
+  | "network-error"
+  | "other";
 
 export type NetworkResourceObservation = {
   pageUrl: string;
@@ -27,8 +49,8 @@ export type NetworkResourceObservation = {
   party: NetworkParty;
   statusCode: number;
   transferBytes: number | null;
-  cacheControl: string | null;
-  contentEncoding: string | null;
+  cacheControlled: boolean;
+  contentEncoding: NetworkContentEncoding | null;
 };
 
 export type NetworkFailureObservation = {
@@ -37,13 +59,12 @@ export type NetworkFailureObservation = {
   resourceKey: string;
   resourceType: NetworkResourceType;
   party: NetworkParty;
-  failureCode: string | null;
+  failureClass: NetworkFailureClass | null;
 };
 
 export type NetworkConsoleObservation = {
   pageUrl: string;
-  messageKey: string;
-  messagePreview: string;
+  errorClass: BrowserErrorClass;
 };
 
 export type NetworkIssueEvidence = {
@@ -52,9 +73,10 @@ export type NetworkIssueEvidence = {
   party: NetworkParty;
   resourceType: NetworkResourceType | null;
   resourceUrl: string | null;
+  resourceKey: string | null;
   statusCode: number | null;
-  failureCode: string | null;
-  messagePreview: string | null;
+  failureClass: NetworkFailureClass | null;
+  errorClass: BrowserErrorClass | null;
   affectedPageUrls: string[];
   occurrenceCount: number;
 };
@@ -66,20 +88,35 @@ export type NetworkObservation = {
   javascriptErrors: NetworkConsoleObservation[];
   issues: NetworkIssueEvidence[];
   suppressedThirdPartyIssueCount: number;
+  collection: {
+    maxRetainedObservationCount: number;
+    retainedObservationCount: number;
+    droppedObservationCount: number;
+    truncated: boolean;
+  };
 };
 
 export type NetworkResponseInput = Omit<
   NetworkResourceObservation,
-  "resourceUrl" | "resourceKey" | "party"
+  | "resourceUrl"
+  | "resourceKey"
+  | "party"
+  | "cacheControlled"
+  | "contentEncoding"
 > & {
   resourceUrl: string;
+  cacheControl: string | null;
+  contentEncoding: string | null;
 };
 export type NetworkFailureInput = Omit<
   NetworkFailureObservation,
-  "resourceUrl" | "resourceKey" | "party"
+  "resourceUrl" | "resourceKey" | "party" | "failureClass"
 > & {
   resourceUrl: string;
+  failureCode: string | null;
 };
+
+const defaultMaxRetainedNetworkObservations = 400;
 
 function partyFor(
   resourceUrl: string,
@@ -98,6 +135,73 @@ function boundedBytes(value: number | null | undefined): number | null {
     : null;
 }
 
+function contentEncoding(value: string | null): NetworkContentEncoding | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.slice(0, 64).trim().toLowerCase();
+  switch (normalized) {
+    case "br":
+    case "deflate":
+    case "gzip":
+    case "identity":
+    case "zstd":
+      return normalized;
+    default:
+      return "other";
+  }
+}
+
+function classifyFailure(value: string | null): NetworkFailureClass | null {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.slice(0, 256).toLowerCase();
+  if (normalized.includes("aborted")) {
+    return "aborted";
+  }
+  if (normalized.includes("blocked")) {
+    return "blocked";
+  }
+  if (normalized.includes("name_not_resolved") || normalized.includes("dns")) {
+    return "dns";
+  }
+  if (normalized.includes("timed_out") || normalized.includes("timeout")) {
+    return "timeout";
+  }
+  if (
+    normalized.includes("connection") ||
+    normalized.includes("connection_refused") ||
+    normalized.includes("connection_reset")
+  ) {
+    return "connection";
+  }
+  return "other";
+}
+
+function classifyBrowserError(message: string): BrowserErrorClass {
+  const normalized = message.slice(0, 256).trim().toLowerCase();
+  if (normalized.startsWith("referenceerror")) {
+    return "reference-error";
+  }
+  if (normalized.startsWith("typeerror")) {
+    return "type-error";
+  }
+  if (normalized.startsWith("syntaxerror")) {
+    return "syntax-error";
+  }
+  if (normalized.startsWith("rangeerror")) {
+    return "range-error";
+  }
+  if (normalized.startsWith("urierror")) {
+    return "uri-error";
+  }
+  if (normalized.includes("network")) {
+    return "network-error";
+  }
+  return "other";
+}
+
 function issueKey(parts: readonly string[]): string {
   return createHash("sha256").update(parts.join(":"), "utf8").digest("hex");
 }
@@ -112,8 +216,13 @@ export class NetworkObservationCollector {
   private readonly failedRequests: NetworkFailureObservation[] = [];
   private readonly consoleErrors: NetworkConsoleObservation[] = [];
   private readonly javascriptErrors: NetworkConsoleObservation[] = [];
+  private retainedObservationCount = 0;
+  private droppedObservationCount = 0;
 
-  constructor(firstPartyOrigin: string | null = null) {
+  constructor(
+    firstPartyOrigin: string | null = null,
+    private readonly maxRetainedObservationCount = defaultMaxRetainedNetworkObservations,
+  ) {
     this.firstPartyOrigin = firstPartyOrigin;
   }
 
@@ -121,7 +230,18 @@ export class NetworkObservationCollector {
     this.firstPartyOrigin = origin;
   }
 
-  recordResponse(input: NetworkResponseInput): void {
+  /**
+   * Reserves a bounded slot before asynchronous response metadata collection.
+   * This bounds both retained results and in-flight browser response promises.
+   */
+  reserveResponseCapture(): boolean {
+    return this.reserveObservation();
+  }
+
+  recordResponse(input: NetworkResponseInput, reserved = false): void {
+    if (!reserved && !this.reserveObservation()) {
+      return;
+    }
     const resource = observeUrl(input.resourceUrl);
     const page = observeUrl(input.pageUrl);
     if (!resource || !page) {
@@ -135,12 +255,15 @@ export class NetworkObservationCollector {
       party: partyFor(input.resourceUrl, this.firstPartyOrigin),
       statusCode: input.statusCode,
       transferBytes: boundedBytes(input.transferBytes),
-      cacheControl: input.cacheControl,
-      contentEncoding: input.contentEncoding,
+      cacheControlled: Boolean(input.cacheControl?.slice(0, 64).trim()),
+      contentEncoding: contentEncoding(input.contentEncoding),
     });
   }
 
   recordFailure(input: NetworkFailureInput): void {
+    if (!this.reserveObservation()) {
+      return;
+    }
     const resource = observeUrl(input.resourceUrl);
     const page = observeUrl(input.pageUrl);
     if (!resource || !page) {
@@ -152,9 +275,7 @@ export class NetworkObservationCollector {
       resourceKey: resource.urlKey,
       resourceType: input.resourceType,
       party: partyFor(input.resourceUrl, this.firstPartyOrigin),
-      failureCode: input.failureCode
-        ? safeDiagnosticPreview(input.failureCode, 120)
-        : null,
+      failureClass: classifyFailure(input.failureCode),
     });
   }
 
@@ -171,16 +292,26 @@ export class NetworkObservationCollector {
     pageUrl: string,
     message: string,
   ): void {
+    if (!this.reserveObservation()) {
+      return;
+    }
     const page = observeUrl(pageUrl);
     if (!page) {
       return;
     }
-    const messagePreview = safeDiagnosticPreview(message, 180);
     destination.push({
       pageUrl: page.displayUrl,
-      messageKey: createHash("sha256").update(messagePreview).digest("hex"),
-      messagePreview,
+      errorClass: classifyBrowserError(message),
     });
+  }
+
+  private reserveObservation(): boolean {
+    if (this.retainedObservationCount >= this.maxRetainedObservationCount) {
+      this.droppedObservationCount += 1;
+      return false;
+    }
+    this.retainedObservationCount += 1;
+    return true;
   }
 
   snapshot(): NetworkObservation {
@@ -202,8 +333,8 @@ export class NetworkObservationCollector {
         input.kind,
         input.party,
         input.resourceType ?? "none",
-        input.resourceUrl ?? input.messagePreview ?? "none",
-        input.statusCode?.toString() ?? input.failureCode ?? "none",
+        input.resourceKey ?? input.errorClass ?? "none",
+        input.statusCode?.toString() ?? input.failureClass ?? "none",
       ]);
       const existing = issues.get(key);
       if (existing) {
@@ -217,9 +348,10 @@ export class NetworkObservationCollector {
         party: input.party,
         resourceType: input.resourceType,
         resourceUrl: input.resourceUrl,
+        resourceKey: input.resourceKey,
         statusCode: input.statusCode,
-        failureCode: input.failureCode,
-        messagePreview: input.messagePreview,
+        failureClass: input.failureClass,
+        errorClass: input.errorClass,
         affectedPageUrls: new Set([input.pageUrl]),
         occurrenceCount: 1,
       });
@@ -232,9 +364,10 @@ export class NetworkObservationCollector {
           party: resource.party,
           resourceType: resource.resourceType,
           resourceUrl: resource.resourceUrl,
+          resourceKey: resource.resourceKey,
           statusCode: resource.statusCode,
-          failureCode: null,
-          messagePreview: null,
+          failureClass: null,
+          errorClass: null,
           pageUrl: resource.pageUrl,
         });
       } else if (resource.statusCode >= 400) {
@@ -243,9 +376,10 @@ export class NetworkObservationCollector {
           party: resource.party,
           resourceType: resource.resourceType,
           resourceUrl: resource.resourceUrl,
+          resourceKey: resource.resourceKey,
           statusCode: resource.statusCode,
-          failureCode: null,
-          messagePreview: null,
+          failureClass: null,
+          errorClass: null,
           pageUrl: resource.pageUrl,
         });
       }
@@ -256,9 +390,10 @@ export class NetworkObservationCollector {
         party: failed.party,
         resourceType: failed.resourceType,
         resourceUrl: failed.resourceUrl,
+        resourceKey: failed.resourceKey,
         statusCode: null,
-        failureCode: failed.failureCode,
-        messagePreview: null,
+        failureClass: failed.failureClass,
+        errorClass: null,
         pageUrl: failed.pageUrl,
       });
     }
@@ -268,9 +403,10 @@ export class NetworkObservationCollector {
         party: "first-party",
         resourceType: null,
         resourceUrl: null,
+        resourceKey: null,
         statusCode: null,
-        failureCode: null,
-        messagePreview: consoleError.messagePreview,
+        failureClass: null,
+        errorClass: consoleError.errorClass,
         pageUrl: consoleError.pageUrl,
       });
     }
@@ -280,9 +416,10 @@ export class NetworkObservationCollector {
         party: "first-party",
         resourceType: null,
         resourceUrl: null,
+        resourceKey: null,
         statusCode: null,
-        failureCode: null,
-        messagePreview: javascriptError.messagePreview,
+        failureClass: null,
+        errorClass: javascriptError.errorClass,
         pageUrl: javascriptError.pageUrl,
       });
     }
@@ -299,6 +436,12 @@ export class NetworkObservationCollector {
         }))
         .sort((left, right) => left.key.localeCompare(right.key)),
       suppressedThirdPartyIssueCount,
+      collection: {
+        maxRetainedObservationCount: this.maxRetainedObservationCount,
+        retainedObservationCount: this.retainedObservationCount,
+        droppedObservationCount: this.droppedObservationCount,
+        truncated: this.droppedObservationCount > 0,
+      },
     };
   }
 }

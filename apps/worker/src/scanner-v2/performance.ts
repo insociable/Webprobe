@@ -102,7 +102,7 @@ export function createLabPerformanceObservation(input: {
       transferBytes += resource.transferBytes;
       transferBytesByCategory[category] += resource.transferBytes;
     }
-    if (resource.cacheControl) {
+    if (resource.cacheControlled) {
       cacheControlledResponseCount += 1;
     }
     if (resource.contentEncoding) {

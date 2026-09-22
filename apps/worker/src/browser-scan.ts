@@ -57,6 +57,31 @@ export type BrowserScanResult = {
     network: NetworkObservation;
     performance: LabPerformanceObservation[];
     seo: { pages: SeoPageObservation[]; signals: SeoSignal[] };
+    completeness: ScannerV2Completeness;
+  };
+};
+
+export type ScannerV2AnalyzerStatus = "complete" | "partial" | "unavailable";
+
+export type ScannerV2Completeness = {
+  crawl: {
+    status: ScannerV2AnalyzerStatus;
+    linkExtractionFailureCount: number;
+  };
+  network: {
+    status: ScannerV2AnalyzerStatus;
+    captureFailureCount: number;
+  };
+  performance: {
+    status: ScannerV2AnalyzerStatus;
+    eligiblePageCount: number;
+    observedPageCount: number;
+    observerInstalled: boolean;
+  };
+  seo: {
+    status: ScannerV2AnalyzerStatus;
+    eligiblePageCount: number;
+    observedPageCount: number;
   };
 };
 
@@ -204,10 +229,49 @@ async function extractPageHrefs(page: Page): Promise<string[]> {
   );
 }
 
-function trackPromise(pending: Set<Promise<void>>, work: Promise<void>): void {
-  const handled = work.catch(() => undefined);
+function trackPromise(
+  pending: Set<Promise<void>>,
+  work: Promise<void>,
+  onFailure: () => void,
+): void {
+  const handled = work.catch(() => onFailure());
   pending.add(handled);
   void handled.finally(() => pending.delete(handled));
+}
+
+function responseRobotsDirectives(response: Response | null): {
+  values: string[];
+  truncated: boolean;
+} {
+  if (!response) {
+    return { values: [], truncated: false };
+  }
+  try {
+    const value = response.headers()["x-robots-tag"];
+    if (typeof value !== "string") {
+      return { values: [], truncated: false };
+    }
+    const preview = value.slice(0, 512);
+    if (!preview.trim()) {
+      return { values: [], truncated: value.length > 512 };
+    }
+    return {
+      values: [preview],
+      truncated: value.length > 512,
+    };
+  } catch {
+    return { values: [], truncated: false };
+  }
+}
+
+function analyzerStatus(
+  eligiblePageCount: number,
+  observedPageCount: number,
+): ScannerV2AnalyzerStatus {
+  if (eligiblePageCount === 0 || observedPageCount === 0) {
+    return "unavailable";
+  }
+  return observedPageCount < eligiblePageCount ? "partial" : "complete";
 }
 
 async function recordNetworkResponse(
@@ -220,17 +284,20 @@ async function recordNetworkResponse(
     response.allHeaders().catch(() => null),
     request.sizes().catch(() => null),
   ]);
-  collector.recordResponse({
-    pageUrl,
-    resourceUrl: response.url(),
-    resourceType: networkResourceType(request.resourceType()),
-    statusCode: response.status(),
-    transferBytes: sizes
-      ? sizes.responseBodySize + sizes.responseHeadersSize
-      : null,
-    cacheControl: headers?.["cache-control"] ?? null,
-    contentEncoding: headers?.["content-encoding"] ?? null,
-  });
+  collector.recordResponse(
+    {
+      pageUrl,
+      resourceUrl: response.url(),
+      resourceType: networkResourceType(request.resourceType()),
+      statusCode: response.status(),
+      transferBytes: sizes
+        ? sizes.responseBodySize + sizes.responseHeadersSize
+        : null,
+      cacheControl: headers?.["cache-control"] ?? null,
+      contentEncoding: headers?.["content-encoding"] ?? null,
+    },
+    true,
+  );
 }
 
 function recordFailedNetworkRequest(
@@ -304,8 +371,14 @@ export async function runBrowserScan(
     const javascriptErrorsByUrl = new Map<string, number>();
     let screenshot: BrowserScreenshot | null = null;
     let activePageUrl = initialCandidate.navigationUrl;
+    let networkCaptureFailureCount = 0;
+    let linkExtractionFailureCount = 0;
+    let performanceEligiblePageCount = 0;
+    let seoEligiblePageCount = 0;
 
-    await installLabPerformanceObserver(page).catch(() => false);
+    const performanceObserverInstalled = await installLabPerformanceObserver(
+      page,
+    ).catch(() => false);
 
     page.on("pageerror", (error) => {
       try {
@@ -325,9 +398,15 @@ export async function runBrowserScan(
       }
     });
     page.on("response", (response) => {
+      if (!networkCollector.reserveResponseCapture()) {
+        return;
+      }
       trackPromise(
         pendingNetworkCaptures,
         recordNetworkResponse(response, activePageUrl, networkCollector),
+        () => {
+          networkCaptureFailureCount += 1;
+        },
       );
     });
     page.on("requestfailed", (request) => {
@@ -370,6 +449,7 @@ export async function runBrowserScan(
 
       const validatedFinal = await assertPublicHttpUrl(page.url(), resolver);
       const finalUrl = validatedFinal.url.toString();
+      seen.add(finalUrl);
       const reportUrl = reportSafeUrl(finalUrl);
       const statusCode = response?.status() ?? null;
 
@@ -410,6 +490,8 @@ export async function runBrowserScan(
       });
 
       if (sameOrigin && healthyDocument) {
+        performanceEligiblePageCount += 1;
+        seoEligiblePageCount += 1;
         const [labSnapshot, seoFacts] = await Promise.all([
           readLabPerformanceSnapshot(page),
           extractSeoDocumentFacts(page),
@@ -418,10 +500,16 @@ export async function runBrowserScan(
           labSnapshots.push({ url: finalUrl, snapshot: labSnapshot });
         }
         if (seoFacts) {
+          const headerRobots = responseRobotsDirectives(response ?? null);
           const seoPage = analyzeSeoPage({
             url: finalUrl,
             statusCode,
-            facts: seoFacts,
+            facts: {
+              ...seoFacts,
+              robots: [...seoFacts.robots, ...headerRobots.values],
+              contentTruncated:
+                seoFacts.contentTruncated || headerRobots.truncated,
+            },
           });
           if (seoPage) {
             seoPages.push(seoPage);
@@ -438,7 +526,13 @@ export async function runBrowserScan(
         continue;
       }
 
-      const hrefs = await extractPageHrefs(page);
+      let hrefs: string[];
+      try {
+        hrefs = await extractPageHrefs(page);
+      } catch {
+        linkExtractionFailureCount += 1;
+        continue;
+      }
       for (const href of hrefs) {
         const candidateResult = classifyCrawlCandidate(
           href,
@@ -505,6 +599,15 @@ export async function runBrowserScan(
       ...seoPages.flatMap((pageObservation) => pageObservation.signals),
       ...findDuplicateSeoTitles(seoPages),
     ];
+    const performanceStatus = analyzerStatus(
+      performanceEligiblePageCount,
+      performance.length,
+    );
+    const seoStatus = analyzerStatus(seoEligiblePageCount, seoPages.length);
+    const seoAnalysisStatus =
+      seoStatus === "complete" && seoPages.some((page) => page.contentTruncated)
+        ? "partial"
+        : seoStatus;
 
     return {
       pagesVisited: observations.length,
@@ -515,6 +618,33 @@ export async function runBrowserScan(
         network,
         performance,
         seo: { pages: seoPages, signals: seoSignals },
+        completeness: {
+          crawl: {
+            status: linkExtractionFailureCount > 0 ? "partial" : "complete",
+            linkExtractionFailureCount,
+          },
+          network: {
+            status:
+              networkCaptureFailureCount > 0 || network.collection.truncated
+                ? "partial"
+                : "complete",
+            captureFailureCount: networkCaptureFailureCount,
+          },
+          performance: {
+            status:
+              !performanceObserverInstalled && performanceStatus === "complete"
+                ? "partial"
+                : performanceStatus,
+            eligiblePageCount: performanceEligiblePageCount,
+            observedPageCount: performance.length,
+            observerInstalled: performanceObserverInstalled,
+          },
+          seo: {
+            status: seoAnalysisStatus,
+            eligiblePageCount: seoEligiblePageCount,
+            observedPageCount: seoPages.length,
+          },
+        },
       },
     };
   } finally {

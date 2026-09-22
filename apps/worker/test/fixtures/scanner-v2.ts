@@ -22,7 +22,7 @@ export const seoFixture = {
   missingTitle: {
     title: null,
     metaDescription: null,
-    canonicalHref: "::::",
+    canonicalHref: "javascript:alert(1)",
     robots: [],
     lang: null,
     h1Count: 0,

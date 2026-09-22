@@ -99,6 +99,8 @@ export function classifyCrawlCandidate(
 
 export class CrawlCoverageTracker {
   private readonly entries = new Map<string, MutableCrawlEntry>();
+  /** Redirect destinations are aliases of the document that rendered them. */
+  private readonly redirectAliases = new Map<string, string>();
   private readonly redirects: CrawlRedirectObservation[] = [];
   private malformedUrlCount = 0;
   private reachedBudget = false;
@@ -106,7 +108,9 @@ export class CrawlCoverageTracker {
   constructor(private readonly maxPages: number) {}
 
   discover(candidate: CrawlCandidate, sourcePageUrl: string | null): boolean {
-    const existing = this.entries.get(candidate.urlKey);
+    const existing = this.entries.get(
+      this.redirectAliases.get(candidate.urlKey) ?? candidate.urlKey,
+    );
     if (existing) {
       if (sourcePageUrl) {
         existing.sourceUrls.add(sourcePageUrl);
@@ -161,14 +165,6 @@ export class CrawlCoverageTracker {
     });
   }
 
-  markDuplicate(candidate: CrawlCandidate): void {
-    const entry = this.entries.get(candidate.urlKey);
-    if (entry && entry.state === "queued") {
-      // It remains queued/visited; duplicate is a discovery fact, not an exclusion.
-      return;
-    }
-  }
-
   markRemainingBudgetExceeded(): void {
     for (const entry of this.entries.values()) {
       if (entry.state === "queued") {
@@ -181,7 +177,9 @@ export class CrawlCoverageTracker {
 
   markBudgetExceeded(candidate: CrawlCandidate, sourcePageUrl: string): void {
     const isNew = this.discover(candidate, sourcePageUrl);
-    const entry = this.entries.get(candidate.urlKey);
+    const entry = this.entries.get(
+      this.redirectAliases.get(candidate.urlKey) ?? candidate.urlKey,
+    );
     if (isNew && entry) {
       entry.state = "not-visited";
       entry.exclusionReason = "page-budget";
@@ -210,6 +208,27 @@ export class CrawlCoverageTracker {
     const finalUrl = observeUrl(input.finalUrl);
     entry.finalUrl = finalUrl?.displayUrl ?? null;
     if (finalUrl && finalUrl.urlKey !== candidate.urlKey) {
+      const destinationEntry = this.entries.get(finalUrl.urlKey);
+      if (destinationEntry && destinationEntry !== entry) {
+        if (destinationEntry.state === "queued") {
+          for (const sourceUrl of destinationEntry.sourceUrls) {
+            entry.sourceUrls.add(sourceUrl);
+          }
+          entry.duplicateDiscoveryCount +=
+            destinationEntry.duplicateDiscoveryCount + 1;
+          this.entries.delete(finalUrl.urlKey);
+        } else {
+          // The redirect target was already visited independently, so keep its
+          // coverage entry rather than concealing a completed navigation.
+          this.redirects.push({
+            fromUrl: candidate.displayUrl,
+            toUrl: finalUrl.displayUrl,
+            statusCode: input.statusCode,
+          });
+          return;
+        }
+      }
+      this.redirectAliases.set(finalUrl.urlKey, entry.urlKey);
       this.redirects.push({
         fromUrl: candidate.displayUrl,
         toUrl: finalUrl.displayUrl,
