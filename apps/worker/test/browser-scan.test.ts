@@ -472,4 +472,123 @@ describe("browser crawl", () => {
       seo: { status: "unavailable", observedPageCount: 0 },
     });
   });
+  it("keeps a hanging optional network capture bounded and marks network partial", async () => {
+    let currentUrl = "about:blank";
+    const handlers: Record<string, ((value: unknown) => void) | undefined> = {};
+    const hangingResponse = {
+      request: () => ({
+        resourceType: () => "fetch",
+        sizes: async () => new Promise(() => undefined),
+      }),
+      allHeaders: async () => ({}),
+      url: () => "https://example.com/stream",
+      status: () => 200,
+    } as unknown as Response;
+    const fakePage = {
+      on: (event: string, handler: (value: unknown) => void) => {
+        handlers[event] = handler;
+        return fakePage;
+      },
+      goto: async (url: string) => {
+        currentUrl = url;
+        handlers.response?.(hangingResponse);
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({ evaluateAll: async () => [] }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      networkCaptureTimeoutMs: 100,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness.network).toMatchObject({
+      status: "partial",
+      captureFailureCount: 1,
+    });
+  });
+
+  it("does not crawl a third-party origin reached by the initial redirect", async () => {
+    let currentUrl = "about:blank";
+    let navigationCount = 0;
+    const fakePage = {
+      on: () => fakePage,
+      goto: async () => {
+        navigationCount += 1;
+        currentUrl = "https://outside.example/landing";
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async () => ["https://outside.example/second"],
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      maxPages: 5,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(navigationCount).toBe(1);
+    expect(result.pagesVisited).toBe(1);
+    expect(result.observations[0]?.url).toBe("https://outside.example/landing");
+    expect(result.scannerV2.performance).toHaveLength(0);
+    expect(result.scannerV2.seo.pages).toHaveLength(0);
+  });
+
+  it("enforces a global browser scan deadline", async () => {
+    let currentUrl = "about:blank";
+    let closed = false;
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({ evaluateAll: async () => [] }),
+    } as unknown as Page;
+
+    await expect(
+      runBrowserScan("https://example.com/", {
+        resolver: publicResolver,
+        scanTimeoutMs: 100,
+        createSession: async () =>
+          ({
+            browser: {},
+            context: { newPage: async () => fakePage },
+            proxy: {},
+            pageCount: () => 1,
+            close: async () => {
+              closed = true;
+            },
+          }) as unknown as IsolatedBrowserSession,
+        analyzeAccessibility: async () => new Promise(() => undefined),
+      }),
+    ).rejects.toThrow("Browser scan deadline exceeded");
+    expect(closed).toBe(true);
+  });
 });

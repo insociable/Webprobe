@@ -404,6 +404,19 @@ describe("scanner v2 SEO", () => {
       indexability: "noindex",
     });
 
+    const unrelatedScopedRobots = analyzeSeoPage({
+      url: crawlFixture.root,
+      statusCode: 200,
+      facts: {
+        ...seoFixture.complete,
+        robots: ["index, follow", "otherbot: noindex, nofollow"],
+      },
+    });
+    expect(unrelatedScopedRobots).toMatchObject({
+      robots: ["follow", "index"],
+      indexability: "indexable",
+    });
+
     const truncated = analyzeSeoPage({
       url: crawlFixture.root,
       statusCode: 200,

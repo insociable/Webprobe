@@ -37,6 +37,8 @@ export type SafeBrowserProxyOptions = {
   connectTimeoutMs?: number;
   maxConnections?: number;
   maxHttpResponseBytes?: number;
+  maxTunnelDurationMs?: number;
+  maxTunnelBytes?: number;
 };
 
 export type SafeBrowserProxy = {
@@ -239,7 +241,10 @@ async function handleConnect(
   clientSocket: Duplex,
   head: Buffer,
   options: Required<
-    Pick<SafeBrowserProxyOptions, "resolver" | "connectTimeoutMs">
+    Pick<
+      SafeBrowserProxyOptions,
+      "resolver" | "connectTimeoutMs" | "maxTunnelDurationMs" | "maxTunnelBytes"
+    >
   >,
   upstreamSockets: Set<Socket>,
 ): Promise<void> {
@@ -268,6 +273,19 @@ async function handleConnect(
     upstream.destroy();
     endConnectError(clientSocket, 504, "Gateway Timeout");
   }, options.connectTimeoutMs);
+  let tunnelTimer: NodeJS.Timeout | undefined;
+  let tunneledBytes = head.length;
+
+  const closeTunnel = () => {
+    upstream.destroy();
+    clientSocket.destroy();
+  };
+  const accountTunnelBytes = (chunk: Buffer) => {
+    tunneledBytes += chunk.length;
+    if (tunneledBytes > options.maxTunnelBytes) {
+      closeTunnel();
+    }
+  };
 
   upstream.once("connect", () => {
     clearTimeout(timeout);
@@ -279,6 +297,13 @@ async function handleConnect(
     clientSocket.write(
       "HTTP/1.1 200 Connection Established\r\nProxy-Agent: AgencyMonitor\r\n\r\n",
     );
+    if (head.length > options.maxTunnelBytes) {
+      closeTunnel();
+      return;
+    }
+    tunnelTimer = setTimeout(closeTunnel, options.maxTunnelDurationMs);
+    clientSocket.on("data", accountTunnelBytes);
+    upstream.on("data", accountTunnelBytes);
     if (head.length > 0) {
       upstream.write(head);
     }
@@ -286,12 +311,22 @@ async function handleConnect(
     upstream.pipe(clientSocket);
   });
 
+  const clearTunnelTimer = () => {
+    if (tunnelTimer) clearTimeout(tunnelTimer);
+  };
   upstream.once("error", () => {
     clearTimeout(timeout);
+    clearTunnelTimer();
     endConnectError(clientSocket, 502, "Bad Gateway");
   });
-  upstream.once("close", () => upstreamSockets.delete(upstream));
-  clientSocket.once("close", () => upstream.destroy());
+  upstream.once("close", () => {
+    clearTunnelTimer();
+    upstreamSockets.delete(upstream);
+  });
+  clientSocket.once("close", () => {
+    clearTunnelTimer();
+    upstream.destroy();
+  });
   clientSocket.once("error", () => upstream.destroy());
 }
 
@@ -303,6 +338,8 @@ export async function startSafeBrowserProxy(
     connectTimeoutMs: options.connectTimeoutMs ?? 10_000,
     maxConnections: options.maxConnections ?? 64,
     maxHttpResponseBytes: options.maxHttpResponseBytes ?? 10 * 1024 * 1024,
+    maxTunnelDurationMs: options.maxTunnelDurationMs ?? 45_000,
+    maxTunnelBytes: options.maxTunnelBytes ?? 50 * 1024 * 1024,
   };
   const clientSockets = new Set<Socket>();
   const upstreamSockets = new Set<Socket>();

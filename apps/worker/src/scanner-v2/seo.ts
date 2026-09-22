@@ -98,22 +98,44 @@ function normalizeRobotDirective(value: string): string[] {
   if (normalized.startsWith("unavailable_after:")) {
     return ["unavailable_after"];
   }
-  const scopeDelimiter = normalized.indexOf(":");
-  return scopeDelimiter >= 0
-    ? normalizeRobotDirective(normalized.slice(scopeDelimiter + 1))
-    : [];
+  return [];
 }
 
+const supportedScopedRobotsAgents = new Set(["googlebot"]);
+const parameterizedRobotDirectives = new Set([
+  "max-snippet",
+  "max-image-preview",
+  "max-video-preview",
+  "unavailable_after",
+]);
+
 function normalizeRobots(values: readonly string[]): string[] {
-  return [
-    ...new Set(
-      values.flatMap((value) =>
-        value
-          .split(",")
-          .flatMap((directive) => normalizeRobotDirective(directive)),
-      ),
-    ),
-  ].sort();
+  const normalizedDirectives: string[] = [];
+
+  for (const value of values) {
+    let activeAgent: string | null = null;
+    for (const rawDirective of value.split(",")) {
+      let directive = rawDirective.trim().toLowerCase();
+      const delimiter = directive.indexOf(":");
+      if (delimiter > 0) {
+        const prefix = directive.slice(0, delimiter).trim();
+        if (!parameterizedRobotDirectives.has(prefix)) {
+          activeAgent = prefix;
+          directive = directive.slice(delimiter + 1).trim();
+        }
+      }
+
+      if (
+        activeAgent !== null &&
+        !supportedScopedRobotsAgents.has(activeAgent)
+      ) {
+        continue;
+      }
+      normalizedDirectives.push(...normalizeRobotDirective(directive));
+    }
+  }
+
+  return [...new Set(normalizedDirectives)].sort();
 }
 
 function normalizedLang(value: string | null): string | null {

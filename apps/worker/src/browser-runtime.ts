@@ -121,6 +121,10 @@ export async function createIsolatedBrowserSession(
     proxy = await startSafeBrowserProxy({
       resolver,
       connectTimeoutMs: Math.min(navigationTimeoutMs, 10_000),
+      maxTunnelDurationMs: Math.min(
+        Math.max(navigationTimeoutMs * 2, 15_000),
+        120_000,
+      ),
     });
     browser = await launchBrowser({
       headless: true,

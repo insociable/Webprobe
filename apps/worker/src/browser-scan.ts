@@ -89,6 +89,8 @@ export type BrowserScanOptions = {
   resolver?: DnsResolver;
   maxPages?: number;
   navigationTimeoutMs?: number;
+  scanTimeoutMs?: number;
+  networkCaptureTimeoutMs?: number;
   checkAccessibility?: boolean;
   captureScreenshot?: boolean;
   createSession?: (
@@ -110,6 +112,40 @@ function boundedCrawlPages(value?: number): number {
 
 function boundedNavigationTimeout(value?: number): number {
   return Math.max(1_000, Math.min(value ?? 20_000, 60_000));
+}
+
+function boundedScanTimeout(value?: number): number {
+  return Math.max(100, Math.min(value ?? 120_000, 180_000));
+}
+
+function boundedNetworkCaptureTimeout(value?: number): number {
+  return Math.max(100, Math.min(value ?? 2_500, 5_000));
+}
+
+function remainingScanTime(deadline: number): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error("Browser scan deadline exceeded");
+  }
+  return remaining;
+}
+
+async function withinTimeout<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 const maxScreenshotBytes = 2 * 1024 * 1024;
@@ -322,6 +358,11 @@ export async function runBrowserScan(
   const navigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
   );
+  const scanTimeoutMs = boundedScanTimeout(options.scanTimeoutMs);
+  const networkCaptureTimeoutMs = boundedNetworkCaptureTimeout(
+    options.networkCaptureTimeoutMs,
+  );
+  const scanDeadline = Date.now() + scanTimeoutMs;
   const checkAccessibility = options.checkAccessibility ?? true;
   const captureScreenshot = options.captureScreenshot ?? false;
   const createSession = options.createSession ?? createIsolatedBrowserSession;
@@ -358,16 +399,14 @@ export async function runBrowserScan(
     const observations: BrowserPageObservation[] = [];
     const crawlCoverage = new CrawlCoverageTracker(maxPages);
     crawlCoverage.discover(initialCandidate, null);
-    const networkCollector = new NetworkObservationCollector(
-      initialTarget.url.origin,
-    );
+    const crawlOrigin = initialTarget.url.origin;
+    const networkCollector = new NetworkObservationCollector(crawlOrigin);
     const pendingNetworkCaptures = new Set<Promise<void>>();
     const labSnapshots: Array<{
       url: string;
       snapshot: BrowserLabRuntimeSnapshot;
     }> = [];
     const seoPages: SeoPageObservation[] = [];
-    let crawlOrigin: string | null = null;
     const javascriptErrorsByUrl = new Map<string, number>();
     let screenshot: BrowserScreenshot | null = null;
     let activePageUrl = initialCandidate.navigationUrl;
@@ -382,7 +421,7 @@ export async function runBrowserScan(
 
     page.on("pageerror", (error) => {
       try {
-        const pageUrl = reportSafeUrl(page.url());
+        const pageUrl = reportSafeUrl(activePageUrl);
         javascriptErrorsByUrl.set(
           pageUrl,
           (javascriptErrorsByUrl.get(pageUrl) ?? 0) + 1,
@@ -403,7 +442,11 @@ export async function runBrowserScan(
       }
       trackPromise(
         pendingNetworkCaptures,
-        recordNetworkResponse(response, activePageUrl, networkCollector),
+        withinTimeout(
+          recordNetworkResponse(response, activePageUrl, networkCollector),
+          networkCaptureTimeoutMs,
+          "Network metadata capture timed out",
+        ),
         () => {
           networkCaptureFailureCount += 1;
         },
@@ -424,7 +467,10 @@ export async function runBrowserScan(
       try {
         response = await page.goto(target.candidate.navigationUrl, {
           waitUntil: "domcontentloaded",
-          timeout: navigationTimeoutMs,
+          timeout: Math.min(
+            navigationTimeoutMs,
+            remainingScanTime(scanDeadline),
+          ),
         });
       } catch {
         if (!target.sourcePageUrl) {
@@ -453,10 +499,7 @@ export async function runBrowserScan(
       const reportUrl = reportSafeUrl(finalUrl);
       const statusCode = response?.status() ?? null;
 
-      if (!crawlOrigin) {
-        crawlOrigin = validatedFinal.url.origin;
-        networkCollector.setFirstPartyOrigin(crawlOrigin);
-      }
+      activePageUrl = finalUrl;
       const sameOrigin = validatedFinal.url.origin === crawlOrigin;
       const healthyDocument = statusCode === null || statusCode < 400;
 
@@ -470,7 +513,11 @@ export async function runBrowserScan(
 
       const accessibilityViolations =
         sameOrigin && healthyDocument && checkAccessibility
-          ? await analyzeAccessibility(page)
+          ? await withinTimeout(
+              analyzeAccessibility(page),
+              remainingScanTime(scanDeadline),
+              "Browser scan deadline exceeded",
+            )
           : [];
 
       observations.push({
@@ -492,10 +539,14 @@ export async function runBrowserScan(
       if (sameOrigin && healthyDocument) {
         performanceEligiblePageCount += 1;
         seoEligiblePageCount += 1;
-        const [labSnapshot, seoFacts] = await Promise.all([
-          readLabPerformanceSnapshot(page),
-          extractSeoDocumentFacts(page),
-        ]);
+        const [labSnapshot, seoFacts] = await withinTimeout(
+          Promise.all([
+            readLabPerformanceSnapshot(page),
+            extractSeoDocumentFacts(page),
+          ]),
+          remainingScanTime(scanDeadline),
+          "Browser scan deadline exceeded",
+        );
         if (labSnapshot) {
           labSnapshots.push({ url: finalUrl, snapshot: labSnapshot });
         }
@@ -528,7 +579,11 @@ export async function runBrowserScan(
 
       let hrefs: string[];
       try {
-        hrefs = await extractPageHrefs(page);
+        hrefs = await withinTimeout(
+          extractPageHrefs(page),
+          remainingScanTime(scanDeadline),
+          "Browser scan deadline exceeded",
+        );
       } catch {
         linkExtractionFailureCount += 1;
         continue;
@@ -571,7 +626,18 @@ export async function runBrowserScan(
     if (observations.length >= maxPages || pending.length > 0) {
       crawlCoverage.markRemainingBudgetExceeded();
     }
-    await Promise.all([...pendingNetworkCaptures]);
+    if (pendingNetworkCaptures.size > 0) {
+      await withinTimeout(
+        Promise.all([...pendingNetworkCaptures]),
+        Math.min(
+          networkCaptureTimeoutMs + 100,
+          remainingScanTime(scanDeadline),
+        ),
+        "Pending network metadata collection timed out",
+      ).catch(() => {
+        networkCaptureFailureCount += pendingNetworkCaptures.size;
+      });
+    }
     const network = networkCollector.snapshot();
     const performance = labSnapshots.flatMap(({ url, snapshot }) => {
       const observedUrl = observeUrl(url);
@@ -632,7 +698,10 @@ export async function runBrowserScan(
           },
           performance: {
             status:
-              !performanceObserverInstalled && performanceStatus === "complete"
+              performanceStatus === "complete" &&
+              (!performanceObserverInstalled ||
+                networkCaptureFailureCount > 0 ||
+                network.collection.truncated)
                 ? "partial"
                 : performanceStatus,
             eligiblePageCount: performanceEligiblePageCount,
