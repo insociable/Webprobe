@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getOrganizationOverview } from "@/lib/organization-overview";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
+import { AlertPreferencePanel } from "./alert-preference-panel";
 import { ManualScanButton } from "./manual-scan-button";
 
 type OrganizationPageProps = {
@@ -123,6 +124,19 @@ export default async function OrganizationPage({
           <p className="mt-2 text-2xl font-semibold">{majorFindings}</p>
         </div>
       </section>
+
+      {overview.access.role !== "member" ? (
+        <AlertPreferencePanel
+          organizationId={organizationId}
+          enabled={overview.access.scanAlertEnabled}
+          minimumSeverity={
+            overview.access.scanAlertMinimumSeverity === "high" ||
+            overview.access.scanAlertMinimumSeverity === "critical"
+              ? overview.access.scanAlertMinimumSeverity
+              : "medium"
+          }
+        />
+      ) : null}
 
       {overview.sites.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-white/15 bg-black/10 p-8">

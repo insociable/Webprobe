@@ -47,7 +47,9 @@ function result(scanId: string, startedAt: Date): ScanResult {
   };
 }
 
-function generatedFinding(severity: "medium" | "high"): GeneratedFinding {
+function generatedFinding(
+  severity: "medium" | "high" | "critical",
+): GeneratedFinding {
   return {
     category: "availability",
     severity,
@@ -215,6 +217,72 @@ describeDatabase("scan degradation notification creation", () => {
             eq(notificationDeliveries.scanId, fixture.currentScanId),
           ),
         );
+
+      expect(rows).toHaveLength(0);
+    } finally {
+      await cleanup(fixture.organizationId, fixture.userId);
+    }
+  });
+
+  it("does not create a delivery when the recipient disabled alerts", async () => {
+    const fixture = await createFixture();
+    const { db } = getDatabase();
+
+    try {
+      await db
+        .update(memberships)
+        .set({ scanAlertEnabled: false })
+        .where(
+          and(
+            eq(memberships.organizationId, fixture.organizationId),
+            eq(memberships.userId, fixture.userId),
+          ),
+        );
+
+      await persistScanCompletion(
+        fixture.context,
+        result(fixture.currentScanId, fixture.context.startedAt),
+        successfulProbe(),
+        [generatedFinding("critical")],
+      );
+
+      const rows = await db
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(eq(notificationDeliveries.scanId, fixture.currentScanId));
+
+      expect(rows).toHaveLength(0);
+    } finally {
+      await cleanup(fixture.organizationId, fixture.userId);
+    }
+  });
+
+  it("does not create a delivery below the recipient severity threshold", async () => {
+    const fixture = await createFixture();
+    const { db } = getDatabase();
+
+    try {
+      await db
+        .update(memberships)
+        .set({ scanAlertMinimumSeverity: "critical" })
+        .where(
+          and(
+            eq(memberships.organizationId, fixture.organizationId),
+            eq(memberships.userId, fixture.userId),
+          ),
+        );
+
+      await persistScanCompletion(
+        fixture.context,
+        result(fixture.currentScanId, fixture.context.startedAt),
+        successfulProbe(),
+        [generatedFinding("high")],
+      );
+
+      const rows = await db
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(eq(notificationDeliveries.scanId, fixture.currentScanId));
 
       expect(rows).toHaveLength(0);
     } finally {

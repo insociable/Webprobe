@@ -12,7 +12,10 @@ import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
 import type { HttpProbeResult } from "./http-probe.js";
-import { detectScanDegradations } from "./scan-alerts.js";
+import {
+  detectScanDegradations,
+  filterDegradationsByMinimumSeverity,
+} from "./scan-alerts.js";
 
 export class ScanContextError extends Error {
   constructor(
@@ -303,6 +306,7 @@ export async function persistScanCompletion(
       .select({
         userId: users.id,
         email: users.email,
+        minimumSeverity: memberships.scanAlertMinimumSeverity,
       })
       .from(memberships)
       .innerJoin(users, eq(memberships.userId, users.id))
@@ -310,26 +314,48 @@ export async function persistScanCompletion(
         and(
           eq(memberships.organizationId, context.organizationId),
           inArray(memberships.role, ["owner", "admin"]),
+          eq(memberships.scanAlertEnabled, true),
           eq(users.emailVerified, true),
         ),
       );
 
-    if (recipients.length === 0) {
-      return;
-    }
+    const deliveries = recipients.flatMap((recipient) => {
+      if (
+        recipient.minimumSeverity !== "medium" &&
+        recipient.minimumSeverity !== "high" &&
+        recipient.minimumSeverity !== "critical"
+      ) {
+        return [];
+      }
 
-    await tx
-      .insert(notificationDeliveries)
-      .values(
-        recipients.map((recipient) => ({
+      const recipientDegradations = filterDegradationsByMinimumSeverity(
+        degradations,
+        recipient.minimumSeverity,
+      );
+
+      if (recipientDegradations.length === 0) {
+        return [];
+      }
+
+      return [
+        {
           organizationId: context.organizationId,
           siteId: context.siteId,
           scanId: context.scanId,
           recipientUserId: recipient.userId,
           recipientEmail: recipient.email,
-          payload: { degradations },
-        })),
-      )
+          payload: { degradations: recipientDegradations },
+        },
+      ];
+    });
+
+    if (deliveries.length === 0) {
+      return;
+    }
+
+    await tx
+      .insert(notificationDeliveries)
+      .values(deliveries)
       .onConflictDoNothing();
   });
 }

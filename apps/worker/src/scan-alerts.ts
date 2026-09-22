@@ -1,4 +1,7 @@
-import type { Severity } from "@agency-saas/contracts";
+import type {
+  ScanAlertMinimumSeverity,
+  Severity,
+} from "@agency-saas/contracts";
 import type { GeneratedFinding } from "./findings.js";
 
 export type PreviousFindingSnapshot = {
@@ -71,4 +74,14 @@ export function detectScanDegradations(
   }
 
   return degradations;
+}
+
+export function filterDegradationsByMinimumSeverity(
+  degradations: ScanDegradation[],
+  minimumSeverity: ScanAlertMinimumSeverity,
+): ScanDegradation[] {
+  const minimumRank = severityRank[minimumSeverity];
+  return degradations.filter(
+    (degradation) => severityRank[degradation.severity] >= minimumRank,
+  );
 }
