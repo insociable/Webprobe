@@ -69,7 +69,10 @@ async function createFixture() {
     .returning({ id: scans.id });
   if (!scan) throw new Error("fixture scan creation failed");
 
-  await db.insert(scanDispatches).values({ scanId: scan.id });
+  await db.insert(scanDispatches).values({
+    scanId: scan.id,
+    nextAttemptAt: new Date(0),
+  });
   return { organizationId, siteId, scanId: scan.id };
 }
 
@@ -244,7 +247,10 @@ describeIntegration("scan dispatch transactional outbox", () => {
       })
       .returning({ id: scans.id });
     if (!scan) throw new Error("fixture scan creation failed");
-    await db.insert(scanDispatches).values({ scanId: scan.id });
+    await db.insert(scanDispatches).values({
+      scanId: scan.id,
+      nextAttemptAt: new Date(0),
+    });
 
     let enqueueCalled = false;
     try {
