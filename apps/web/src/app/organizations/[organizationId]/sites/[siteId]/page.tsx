@@ -5,6 +5,8 @@ import { requireCurrentSession } from "@/lib/current-session";
 import { ManualScanButton } from "../../manual-scan-button";
 import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
+import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
+import { ScanSchedulePanel } from "./scan-schedule-panel";
 import { ScanStatusRefresher } from "./scan-status-refresher";
 
 type SitePageProps = {
@@ -54,6 +56,21 @@ async function loadSiteHistory(
   }
 }
 
+async function loadSiteSchedule(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+) {
+  try {
+    return await getWeeklyScanScheduleForSite(userId, organizationId, siteId);
+  } catch (error) {
+    if (error instanceof OrganizationAccessError) {
+      notFound();
+    }
+    throw error;
+  }
+}
+
 export default async function SitePage({ params }: SitePageProps) {
   const { organizationId, siteId } = await params;
 
@@ -74,6 +91,12 @@ export default async function SitePage({ params }: SitePageProps) {
   if (!history) {
     notFound();
   }
+
+  const scheduleState = await loadSiteSchedule(
+    session.user.id,
+    organizationId,
+    siteId,
+  );
 
   const activeScan = history.scans.some(
     (scan) => scan.status === "queued" || scan.status === "running",
@@ -131,6 +154,29 @@ export default async function SitePage({ params }: SitePageProps) {
             </p>
           ) : null}
         </div>
+      </section>
+
+      <section className="border-b border-white/10 py-10">
+        <ScanSchedulePanel
+          organizationId={organizationId}
+          siteId={siteId}
+          canManage={canManage}
+          siteActive={
+            history.site.status === "active" && Boolean(history.site.verifiedAt)
+          }
+          schedule={
+            scheduleState?.schedule
+              ? {
+                  enabled: scheduleState.schedule.enabled,
+                  dayOfWeek: scheduleState.schedule.dayOfWeek,
+                  minuteOfDay: scheduleState.schedule.minuteOfDay,
+                  timeZone: scheduleState.schedule.timeZone,
+                  nextRunAt:
+                    scheduleState.schedule.nextRunAt?.toISOString() ?? null,
+                }
+              : null
+          }
+        />
       </section>
 
       <section className="py-10">
