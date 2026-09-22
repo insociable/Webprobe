@@ -14,11 +14,6 @@ export type ReportBrandingActionState = {
   message: string | null;
 };
 
-export const initialReportBrandingActionState: ReportBrandingActionState = {
-  error: null,
-  message: null,
-};
-
 export async function updateReportBrandingAction(
   organizationId: string,
   _previousState: ReportBrandingActionState,

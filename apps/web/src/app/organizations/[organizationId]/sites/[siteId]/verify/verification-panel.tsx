@@ -3,9 +3,16 @@
 import { useActionState } from "react";
 import {
   generateVerificationChallengeAction,
-  initialVerificationActionState,
   verifyDnsChallengeAction,
 } from "./actions";
+import type { VerificationActionState } from "./actions";
+
+const initialVerificationActionState: VerificationActionState = {
+  error: null,
+  token: null,
+  recordName: null,
+  expiresAt: null,
+};
 
 type VerificationPanelProps = {
   organizationId: string;

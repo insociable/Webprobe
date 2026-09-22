@@ -1,10 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  initialManualScanActionState,
-  startManualScanAction,
-} from "./manual-scan-actions";
+import { startManualScanAction } from "./manual-scan-actions";
+import type { ManualScanActionState } from "./manual-scan-actions";
+
+const initialManualScanActionState: ManualScanActionState = {
+  error: null,
+  message: null,
+  scanId: null,
+};
 
 type ManualScanButtonProps = {
   organizationId: string;

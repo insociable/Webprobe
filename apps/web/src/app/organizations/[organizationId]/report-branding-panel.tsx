@@ -1,10 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  initialReportBrandingActionState,
-  updateReportBrandingAction,
-} from "./report-branding-actions";
+import { updateReportBrandingAction } from "./report-branding-actions";
+import type { ReportBrandingActionState } from "./report-branding-actions";
+
+const initialReportBrandingActionState: ReportBrandingActionState = {
+  error: null,
+  message: null,
+};
 
 type ReportBrandingPanelProps = {
   organizationId: string;

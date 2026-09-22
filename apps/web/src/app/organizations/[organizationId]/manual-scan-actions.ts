@@ -12,7 +12,7 @@ export type ManualScanActionState = {
   scanId: string | null;
 };
 
-export const initialManualScanActionState: ManualScanActionState = {
+const initialManualScanActionState: ManualScanActionState = {
   error: null,
   message: null,
   scanId: null,
