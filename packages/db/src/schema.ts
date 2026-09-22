@@ -355,6 +355,53 @@ export const findings = pgTable(
   ],
 );
 
+export const scanArtifacts = pgTable(
+  "scan_artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(),
+    storageKey: text("storage_key").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: text("sha256").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("scan_artifacts_scan_kind_unique").on(table.scanId, table.kind),
+    uniqueIndex("scan_artifacts_storage_key_unique").on(table.storageKey),
+    index("scan_artifacts_org_site_idx").on(
+      table.organizationId,
+      table.siteId,
+      table.scanId,
+    ),
+    check(
+      "scan_artifacts_kind_supported",
+      sql`${table.kind} = 'primary-screenshot'`,
+    ),
+    check(
+      "scan_artifacts_media_type_supported",
+      sql`${table.mediaType} = 'image/jpeg'`,
+    ),
+    check("scan_artifacts_byte_size_positive", sql`${table.byteSize} > 0`),
+    check("scan_artifacts_sha256_length", sql`length(${table.sha256}) = 64`),
+    check(
+      "scan_artifacts_storage_key_not_blank",
+      sql`length(btrim(${table.storageKey})) > 0`,
+    ),
+  ],
+);
+
 export const notificationDeliveries = pgTable(
   "notification_deliveries",
   {

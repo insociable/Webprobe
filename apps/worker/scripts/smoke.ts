@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
 import { config } from "dotenv";
 import { Queue, QueueEvents } from "bullmq";
 import { and, eq } from "drizzle-orm";
@@ -7,9 +9,11 @@ import {
   createDatabase,
   findings,
   organizations,
+  scanArtifacts,
   scans,
   sites,
 } from "@agency-saas/db";
+import { scanArtifactStorageRoot } from "../src/scan-artifacts.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 
@@ -32,6 +36,7 @@ const connection = {
 };
 
 const database = createDatabase(databaseUrlValue);
+const artifactRoot = scanArtifactStorageRoot();
 const events = new QueueEvents(SCAN_QUEUE_NAME, { connection });
 const queue = new Queue(SCAN_QUEUE_NAME, { connection });
 
@@ -116,6 +121,9 @@ try {
   if (!publicResult.http?.ok || publicResult.status !== "completed") {
     throw new Error("Public target scan did not complete");
   }
+  if (publicResult.screenshotStored !== true) {
+    throw new Error("Public target screenshot was not stored");
+  }
   if (!privateTargetRejected) {
     throw new Error("Private target was unexpectedly accepted");
   }
@@ -162,6 +170,39 @@ try {
     throw new Error("Persisted finding count does not match worker result");
   }
 
+  const [artifact] = await database.db
+    .select({
+      storageKey: scanArtifacts.storageKey,
+      byteSize: scanArtifacts.byteSize,
+      sha256: scanArtifacts.sha256,
+    })
+    .from(scanArtifacts)
+    .where(eq(scanArtifacts.scanId, publicScanId));
+
+  if (!artifact) {
+    throw new Error("Screenshot artifact metadata was not persisted");
+  }
+
+  const artifactPath = path.resolve(
+    artifactRoot,
+    ...artifact.storageKey.split("/"),
+  );
+  const rootPrefix = artifactRoot.endsWith(path.sep)
+    ? artifactRoot
+    : `${artifactRoot}${path.sep}`;
+  if (!artifactPath.startsWith(rootPrefix)) {
+    throw new Error("Screenshot artifact escaped storage root");
+  }
+
+  const artifactBytes = await readFile(artifactPath);
+  const artifactHash = createHash("sha256").update(artifactBytes).digest("hex");
+  if (
+    artifactBytes.length !== artifact.byteSize ||
+    artifactHash !== artifact.sha256
+  ) {
+    throw new Error("Screenshot artifact integrity check failed");
+  }
+
   console.log(
     JSON.stringify({
       ok: true,
@@ -170,12 +211,19 @@ try {
       publicFindings: publicResult.findings.length,
       privateTargetRejected,
       persistenceVerified: true,
+      screenshotStored: true,
+      screenshotBytes: artifactBytes.length,
+      screenshotIntegrityVerified: true,
     }),
   );
 } finally {
   await database.db
     .delete(organizations)
     .where(eq(organizations.id, organizationId));
+  await rm(path.join(artifactRoot, organizationId), {
+    recursive: true,
+    force: true,
+  }).catch(() => undefined);
   await Promise.all([events.close(), queue.close()]);
   await database.client.end();
 }

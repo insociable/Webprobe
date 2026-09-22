@@ -79,6 +79,14 @@ Les contrôles navigateur ne persistent pas les messages JavaScript, piles
 d'erreur, sélecteurs axe ou extraits DOM. Les résultats conservés sont limités
 aux URLs de rapport sans query/fragment, codes/règles, impacts et compteurs.
 
+Une capture visuelle optionnelle peut contenir du contenu client. Elle est donc
+traitée comme un artefact sensible : une seule image JPEG bornée à 2 MiB par
+scan, fichier privé hors PostgreSQL, chemin construit uniquement avec les UUID
+internes, métadonnées tenant-scopées et SHA-256 vérifié à la lecture. La route
+HTTP exige une session valide et recroise organisation, site et scan avant de
+servir l'image. Les captures suivent la rétention de l'historique de scan et ne
+doivent jamais être exposées directement par un serveur de fichiers statique.
+
 Cette défense vise le contenu web hostile dans le pilote privé. Elle ne remplace
 pas une politique egress noyau/conteneur face à une hypothétique évasion complète
 du sandbox Chromium ; cette couche restera requise avant une exposition de

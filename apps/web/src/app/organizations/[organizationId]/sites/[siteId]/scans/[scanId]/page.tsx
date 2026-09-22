@@ -211,6 +211,26 @@ export default async function ScanPage({ params }: ScanPageProps) {
         ) : null}
       </section>
 
+      {details.screenshotAvailable ? (
+        <section className="border-b border-white/10 py-10">
+          <p className="text-sm text-white/45">Capture visuelle</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            Aperçu de la page principale
+          </h2>
+          <p className="mt-2 text-sm text-white/40">
+            Capture bornée au viewport du navigateur au moment du scan.
+          </p>
+          <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/organizations/${organizationId}/sites/${siteId}/scans/${scanId}/screenshot`}
+              alt={`Capture de ${details.site.name}`}
+              className="h-auto w-full"
+            />
+          </div>
+        </section>
+      ) : null}
+
       {comparison ? (
         <section className="border-b border-white/10 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

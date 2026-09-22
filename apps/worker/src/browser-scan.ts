@@ -15,9 +15,15 @@ import type {
   BrowserPageObservation,
 } from "./browser-findings.js";
 
+export type BrowserScreenshot = {
+  data: Buffer;
+  mediaType: "image/jpeg";
+};
+
 export type BrowserScanResult = {
   pagesVisited: number;
   observations: BrowserPageObservation[];
+  screenshot: BrowserScreenshot | null;
 };
 
 export type BrowserScanOptions = {
@@ -25,6 +31,7 @@ export type BrowserScanOptions = {
   maxPages?: number;
   navigationTimeoutMs?: number;
   checkAccessibility?: boolean;
+  captureScreenshot?: boolean;
   createSession?: (
     options: BrowserRuntimeOptions,
   ) => Promise<IsolatedBrowserSession>;
@@ -44,6 +51,33 @@ function boundedCrawlPages(value?: number): number {
 
 function boundedNavigationTimeout(value?: number): number {
   return Math.max(1_000, Math.min(value ?? 20_000, 60_000));
+}
+
+const maxScreenshotBytes = 2 * 1024 * 1024;
+
+async function capturePrimaryScreenshot(
+  page: Page,
+): Promise<BrowserScreenshot | null> {
+  try {
+    const data = await page.screenshot({
+      type: "jpeg",
+      quality: 70,
+      fullPage: false,
+      animations: "disabled",
+      caret: "hide",
+    });
+
+    if (data.length === 0 || data.length > maxScreenshotBytes) {
+      return null;
+    }
+
+    return {
+      data,
+      mediaType: "image/jpeg",
+    };
+  } catch {
+    return null;
+  }
 }
 
 function reportSafeUrl(rawUrl: string): string {
@@ -140,6 +174,7 @@ export async function runBrowserScan(
     options.navigationTimeoutMs,
   );
   const checkAccessibility = options.checkAccessibility ?? true;
+  const captureScreenshot = options.captureScreenshot ?? false;
   const createSession = options.createSession ?? createIsolatedBrowserSession;
   const analyzeAccessibility =
     options.analyzeAccessibility ?? defaultAccessibilityAnalyzer;
@@ -163,6 +198,7 @@ export async function runBrowserScan(
     const observations: BrowserPageObservation[] = [];
     let crawlOrigin: string | null = null;
     const javascriptErrorsByUrl = new Map<string, number>();
+    let screenshot: BrowserScreenshot | null = null;
 
     page.on("pageerror", () => {
       try {
@@ -219,6 +255,10 @@ export async function runBrowserScan(
         await page.waitForTimeout(100);
       }
 
+      if (captureScreenshot && !screenshot && sameOrigin && healthyDocument) {
+        screenshot = await capturePrimaryScreenshot(page);
+      }
+
       const accessibilityViolations =
         sameOrigin && healthyDocument && checkAccessibility
           ? await analyzeAccessibility(page)
@@ -261,6 +301,7 @@ export async function runBrowserScan(
     return {
       pagesVisited: observations.length,
       observations,
+      screenshot,
     };
   } finally {
     await session.close();
