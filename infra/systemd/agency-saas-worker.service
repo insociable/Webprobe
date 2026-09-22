@@ -1,0 +1,31 @@
+[Unit]
+Description=Agency SaaS scanner worker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vboxuser
+Group=vboxuser
+WorkingDirectory=/srv/agency-saas
+Environment=NODE_ENV=production
+EnvironmentFile=/srv/agency-saas/.env
+ExecStart=/usr/bin/node /srv/agency-saas/apps/worker/dist/index.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
