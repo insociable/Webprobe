@@ -4,7 +4,7 @@ import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "./database";
-import { sendAuthOtpEmail } from "./email";
+import { deliverAuthOtpEmail } from "./auth-email-delivery";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -108,9 +108,7 @@ export const auth = betterAuth({
       storeOTP: "hashed",
       resendStrategy: "rotate",
       async sendVerificationOTP({ email, otp, type }) {
-        void sendAuthOtpEmail({ email, otp, type }).catch(() => {
-          console.error("Authentication email delivery failed");
-        });
+        await deliverAuthOtpEmail({ email, otp, type });
       },
     }),
   ],
