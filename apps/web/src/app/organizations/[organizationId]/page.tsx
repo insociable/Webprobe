@@ -2,6 +2,7 @@ import { OrganizationReadSchema } from "@agency-saas/contracts";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SignOutButton } from "@/components/sign-out-button";
+import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getOrganizationOverview } from "@/lib/organization-overview";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
@@ -68,6 +69,7 @@ export default async function OrganizationPage({
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl px-6 py-8 lg:px-10">
+      <ScanStatusRefresher active={scansInProgress > 0} />
       <nav className="flex items-center justify-between border-b border-white/10 pb-6">
         <Link href="/dashboard" className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-emerald-300 font-black text-emerald-950">
@@ -233,6 +235,38 @@ export default async function OrganizationPage({
                     className="mt-5 inline-flex rounded-lg border border-emerald-300/20 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.05]"
                   >
                     Vérifier le domaine
+                  </Link>
+                ) : null}
+
+                {scanActive ? (
+                  <div className="mt-5 rounded-xl border border-sky-300/15 bg-sky-300/[0.05] px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <span className="size-2 animate-pulse rounded-full bg-sky-300" />
+                      <p className="text-sm font-medium text-sky-100">
+                        Scan en cours
+                      </p>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-white/45">
+                      Le statut se met à jour automatiquement. Vous pouvez
+                      ouvrir le suivi détaillé.
+                    </p>
+                    {site.latestScan ? (
+                      <Link
+                        href={`/organizations/${organizationId}/sites/${site.id}/scans/${site.latestScan.id}`}
+                        className="mt-3 inline-flex text-sm font-semibold text-sky-200 transition hover:text-sky-100"
+                      >
+                        Suivre le scan →
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {site.latestScan?.status === "completed" ? (
+                  <Link
+                    href={`/organizations/${organizationId}/sites/${site.id}/scans/${site.latestScan.id}`}
+                    className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-white/90"
+                  >
+                    Voir le rapport
                   </Link>
                 ) : null}
 

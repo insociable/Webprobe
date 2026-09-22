@@ -6,10 +6,11 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
+import { getFindingRemediation } from "@/lib/finding-remediation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
-import { ScanStatusRefresher } from "../../scan-status-refresher";
+import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
@@ -215,10 +216,28 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </dl>
 
         {pending ? (
-          <p className="mt-6 text-sm text-white/50">
-            Le scan est encore en cours. Cette page se rafraîchit
-            automatiquement.
-          </p>
+          <div
+            aria-live="polite"
+            aria-busy="true"
+            className="mt-6 rounded-2xl border border-sky-300/15 bg-sky-300/[0.05] p-5"
+          >
+            <div className="flex items-center gap-3">
+              <span className="size-2.5 animate-pulse rounded-full bg-sky-300" />
+              <p className="font-semibold text-sky-50">
+                {details.scan.status === "queued"
+                  ? "Scan en attente de démarrage"
+                  : "Scan en cours d’analyse"}
+              </p>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-white/50">
+              La page se met à jour automatiquement toutes les quelques
+              secondes. Le rapport apparaîtra ici dès que l’analyse sera
+              terminée.
+            </p>
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-300/70" />
+            </div>
+          </div>
         ) : null}
       </section>
 
@@ -316,6 +335,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <div className="mt-6 space-y-4">
             {orderedFindings.map((finding) => {
               const evidence = visibleEvidence(finding.evidence);
+              const remediation = getFindingRemediation(finding.code);
               const change =
                 comparison?.changesByFingerprint[finding.fingerprint];
               return (
@@ -367,6 +387,34 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         </div>
                       ))}
                     </dl>
+                  ) : null}
+
+                  {remediation ? (
+                    <div className="mt-5 rounded-xl border border-sky-300/15 bg-sky-300/[0.045] p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-200/70">
+                        Comment corriger
+                      </p>
+                      <h4 className="mt-2 font-semibold text-sky-50">
+                        {remediation.title}
+                      </h4>
+                      <p className="mt-2 text-sm leading-6 text-white/55">
+                        {remediation.summary}
+                      </p>
+                      <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
+                        {remediation.steps.map((step, index) => (
+                          <li key={step} className="flex gap-3">
+                            <span className="text-sky-300">{index + 1}.</span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                      <p className="mt-4 border-t border-white/10 pt-4 text-xs leading-5 text-white/45">
+                        <span className="font-semibold text-white/65">
+                          Vérification :
+                        </span>{" "}
+                        {remediation.verification}
+                      </p>
+                    </div>
                   ) : null}
                 </article>
               );
