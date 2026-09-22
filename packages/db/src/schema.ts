@@ -197,6 +197,32 @@ export const sites = pgTable(
   ],
 );
 
+export const siteVerificationChallenges = pgTable(
+  "site_verification_challenges",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull(),
+    recordName: text("record_name").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("site_verification_challenges_site_unique").on(table.siteId),
+    index("site_verification_challenges_org_idx").on(table.organizationId),
+  ],
+);
+
 export const scans = pgTable(
   "scans",
   {

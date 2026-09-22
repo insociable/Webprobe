@@ -106,6 +106,16 @@ export default async function OrganizationPage({
                       : "À vérifier"}
                 </span>
               </div>
+
+              {site.status === "pending_verification" &&
+              access.role !== "member" ? (
+                <Link
+                  href={`/organizations/${organizationId}/sites/${site.id}/verify`}
+                  className="mt-5 inline-flex rounded-lg border border-emerald-300/20 px-4 py-2 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300/40 hover:bg-emerald-300/[0.05]"
+                >
+                  Vérifier le domaine
+                </Link>
+              ) : null}
             </article>
           ))}
         </section>
