@@ -52,12 +52,16 @@ describe("browser crawl", () => {
         "https://example.com/",
         [
           "https://example.com/ok?token=secret#fragment",
+          "https://EXAMPLE.com:443/ok?token=secret",
           "https://example.com/bad",
           "https://outside.example/",
           "mailto:test@example.com",
         ],
       ],
-      ["https://example.com/ok?token=secret", ["https://example.com/down"]],
+      [
+        "https://example.com/ok?token=secret",
+        ["https://example.com/down", "https://example.com/#loop"],
+      ],
     ]);
 
     const fakePage = {
@@ -162,7 +166,28 @@ describe("browser crawl", () => {
     });
     expect(JSON.stringify(result)).not.toContain("token=secret");
     expect(JSON.stringify(result)).not.toContain("navigation detail");
-    expect(JSON.stringify(result)).not.toContain("outside.example");
+    expect(result.observations.map((item) => item.url)).not.toContain(
+      "https://outside.example/",
+    );
+    expect(result.scannerV2.crawl.urls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://outside.example/",
+          state: "ignored",
+          exclusionReason: "external-origin",
+        }),
+      ]),
+    );
+    expect(
+      result.scannerV2.crawl.urls.find(
+        (entry) => entry.url === "https://example.com/ok",
+      )?.duplicateDiscoveryCount,
+    ).toBeGreaterThan(0);
+    expect(
+      result.scannerV2.crawl.urls.find(
+        (entry) => entry.url === "https://example.com/",
+      )?.duplicateDiscoveryCount,
+    ).toBeGreaterThan(0);
   });
 
   it("skips axe when accessibility checks are disabled", async () => {
@@ -277,5 +302,174 @@ describe("browser crawl", () => {
 
     expect(result.pagesVisited).toBe(1);
     expect(result.screenshot).toBeNull();
+  });
+
+  it("returns structured scanner v2 observations without persisting them", async () => {
+    let currentUrl = "about:blank";
+    const handlers: Record<string, ((value: unknown) => void) | undefined> = {};
+    const scriptResponse = {
+      request: () => ({
+        resourceType: () => "script",
+        sizes: async () => ({
+          responseBodySize: 1200,
+          responseHeadersSize: 80,
+        }),
+      }),
+      allHeaders: async () => ({
+        "cache-control": "public, max-age=60",
+        "content-encoding": "br",
+      }),
+      url: () => "https://example.com/assets/app.js",
+      status: () => 404,
+    } as unknown as Response;
+    const stylesheetRequest = {
+      resourceType: () => "stylesheet",
+      url: () => "https://example.com/assets/site.css",
+      failure: () => ({ errorText: "net::ERR_ABORTED" }),
+    };
+    const fakePage = {
+      on: (event: string, handler: (value: unknown) => void) => {
+        handlers[event] = handler;
+        return fakePage;
+      },
+      addInitScript: async () => undefined,
+      evaluate: async (expression: string) =>
+        expression.includes("__agencyMonitorLabPerformanceV2")
+          ? {
+              timing: {
+                requestStart: 10,
+                responseStart: 110,
+                domContentLoadedEventEnd: 510,
+                firstContentfulPaint: 160,
+                largestContentfulPaint: 400,
+                cumulativeLayoutShift: 0.04,
+                totalBlockingTime: 20,
+              },
+              userAgent: "AgencyMonitorTest/1.0",
+            }
+          : {
+              title: "Accueil Example",
+              metaDescription: "Description test",
+              canonicalHref: "/",
+              robots: ["index, follow"],
+              lang: "fr",
+              h1Count: 1,
+              internalLinkCount: 0,
+              sitemapHrefs: ["/sitemap.xml"],
+            },
+      goto: async (url: string) => {
+        currentUrl = url;
+        handlers.response?.(scriptResponse);
+        handlers.requestfailed?.(stylesheetRequest);
+        handlers.console?.({
+          type: () => "error",
+          text: () => "ReferenceError: app",
+        });
+        handlers.pageerror?.(new Error("ReferenceError: app"));
+        return {
+          status: () => 200,
+          headers: () => ({ "x-robots-tag": "googlebot: noindex" }),
+        } as unknown as Response;
+      },
+      url: () => currentUrl,
+      viewportSize: () => ({ width: 1440, height: 900 }),
+      waitForTimeout: async () => undefined,
+      locator: () => ({ evaluateAll: async () => [] }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.scannerV2.crawl).toMatchObject({
+      visitedUrlCount: 1,
+      budgetReached: false,
+    });
+    expect(result.scannerV2.network.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "http-4xx", resourceType: "script" }),
+        expect.objectContaining({
+          kind: "request-failed",
+          resourceType: "stylesheet",
+        }),
+        expect.objectContaining({ kind: "console-error" }),
+        expect.objectContaining({ kind: "javascript-error" }),
+      ]),
+    );
+    expect(result.scannerV2.performance).toEqual([
+      expect.objectContaining({
+        ttfbMs: 100,
+        totalRequestCount: 1,
+        transferBytes: 1280,
+        transferBytesByCategory: expect.objectContaining({ javascript: 1280 }),
+      }),
+    ]);
+    expect(result.scannerV2.network.resources).toEqual([
+      expect.objectContaining({
+        cacheControlled: true,
+        contentEncoding: "br",
+      }),
+    ]);
+    expect(result.scannerV2.seo.pages).toEqual([
+      expect.objectContaining({
+        titlePresent: true,
+        titleLength: 15,
+        canonicalStatus: "valid",
+        indexability: "noindex",
+        robots: expect.arrayContaining(["noindex"]),
+        sitemapUrls: ["https://example.com/sitemap.xml"],
+      }),
+    ]);
+    expect(JSON.stringify(result)).not.toContain("Accueil Example");
+    expect(JSON.stringify(result)).not.toContain("Description test");
+    expect(JSON.stringify(result)).not.toContain("max-age=60");
+    expect(JSON.stringify(result)).not.toContain("googlebot:");
+  });
+
+  it("reports partial browser collection without failing the scan", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async () => {
+          throw new Error("browser DOM became unavailable");
+        },
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness).toMatchObject({
+      crawl: { status: "partial", linkExtractionFailureCount: 1 },
+      performance: { status: "unavailable", observedPageCount: 0 },
+      seo: { status: "unavailable", observedPageCount: 0 },
+    });
   });
 });

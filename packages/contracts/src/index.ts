@@ -25,6 +25,8 @@ export const FindingCategorySchema = z.enum([
   "security-header",
   "accessibility",
   "performance",
+  "seo",
+  "network",
 ]);
 export type FindingCategory = z.infer<typeof FindingCategorySchema>;
 

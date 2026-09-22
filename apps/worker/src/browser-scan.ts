@@ -4,7 +4,7 @@ import {
   defaultDnsResolver,
   type DnsResolver,
 } from "@agency-saas/security";
-import type { Page } from "playwright";
+import type { Page, Request, Response } from "playwright";
 import {
   createIsolatedBrowserSession,
   type BrowserRuntimeOptions,
@@ -14,6 +14,34 @@ import type {
   AccessibilityViolationObservation,
   BrowserPageObservation,
 } from "./browser-findings.js";
+import {
+  CrawlCoverageTracker,
+  classifyCrawlCandidate,
+  type CrawlCandidate,
+  type CrawlCoverage,
+} from "./scanner-v2/crawl.js";
+import {
+  NetworkObservationCollector,
+  type NetworkObservation,
+  type NetworkResourceType,
+} from "./scanner-v2/network.js";
+import {
+  createLabPerformanceObservation,
+  type LabPerformanceObservation,
+} from "./scanner-v2/performance.js";
+import {
+  installLabPerformanceObserver,
+  readLabPerformanceSnapshot,
+  type BrowserLabRuntimeSnapshot,
+} from "./scanner-v2/performance-runtime.js";
+import {
+  analyzeSeoPage,
+  findDuplicateSeoTitles,
+  type SeoPageObservation,
+  type SeoSignal,
+} from "./scanner-v2/seo.js";
+import { extractSeoDocumentFacts } from "./scanner-v2/seo-runtime.js";
+import { observeUrl } from "./scanner-v2/url.js";
 
 export type BrowserScreenshot = {
   data: Buffer;
@@ -24,6 +52,37 @@ export type BrowserScanResult = {
   pagesVisited: number;
   observations: BrowserPageObservation[];
   screenshot: BrowserScreenshot | null;
+  scannerV2: {
+    crawl: CrawlCoverage;
+    network: NetworkObservation;
+    performance: LabPerformanceObservation[];
+    seo: { pages: SeoPageObservation[]; signals: SeoSignal[] };
+    completeness: ScannerV2Completeness;
+  };
+};
+
+export type ScannerV2AnalyzerStatus = "complete" | "partial" | "unavailable";
+
+export type ScannerV2Completeness = {
+  crawl: {
+    status: ScannerV2AnalyzerStatus;
+    linkExtractionFailureCount: number;
+  };
+  network: {
+    status: ScannerV2AnalyzerStatus;
+    captureFailureCount: number;
+  };
+  performance: {
+    status: ScannerV2AnalyzerStatus;
+    eligiblePageCount: number;
+    observedPageCount: number;
+    observerInstalled: boolean;
+  };
+  seo: {
+    status: ScannerV2AnalyzerStatus;
+    eligiblePageCount: number;
+    observedPageCount: number;
+  };
 };
 
 export type BrowserScanOptions = {
@@ -41,7 +100,7 @@ export type BrowserScanOptions = {
 };
 
 type CrawlTarget = {
-  url: string;
+  candidate: CrawlCandidate;
   sourcePageUrl: string | null;
 };
 
@@ -95,6 +154,29 @@ function safeRuleId(value: string): string {
     .slice(0, 80);
   return normalized || "unknown";
 }
+
+function networkResourceType(value: string): NetworkResourceType {
+  switch (value) {
+    case "document":
+    case "stylesheet":
+    case "script":
+    case "image":
+    case "font":
+    case "xhr":
+    case "fetch":
+    case "media":
+      return value;
+    default:
+      return "other";
+  }
+}
+
+function pageViewport(page: Page): { width: number; height: number } {
+  const compatiblePage = page as unknown as {
+    viewportSize?: () => { width: number; height: number } | null;
+  };
+  return compatiblePage.viewportSize?.() ?? { width: 1280, height: 720 };
+}
 export function normalizeInternalLink(
   rawHref: string,
   currentPageUrl: string,
@@ -138,30 +220,97 @@ async function defaultAccessibilityAnalyzer(
     nodeCount: violation.nodes.length,
   }));
 }
-async function extractInternalLinks(
-  page: Page,
-  currentPageUrl: string,
-  crawlOrigin: string,
-): Promise<string[]> {
-  const hrefs = await page.locator("a[href]").evaluateAll((anchors) =>
+async function extractPageHrefs(page: Page): Promise<string[]> {
+  return page.locator("a[href]").evaluateAll((anchors) =>
     anchors.slice(0, 100).flatMap((anchor) => {
       const href = (anchor as unknown as { href?: unknown }).href;
       return typeof href === "string" && href ? [href] : [];
     }),
   );
+}
 
-  return [
-    ...new Set(
-      hrefs.flatMap((href) => {
-        const normalized = normalizeInternalLink(
-          href,
-          currentPageUrl,
-          crawlOrigin,
-        );
-        return normalized ? [normalized] : [];
-      }),
-    ),
-  ];
+function trackPromise(
+  pending: Set<Promise<void>>,
+  work: Promise<void>,
+  onFailure: () => void,
+): void {
+  const handled = work.catch(() => onFailure());
+  pending.add(handled);
+  void handled.finally(() => pending.delete(handled));
+}
+
+function responseRobotsDirectives(response: Response | null): {
+  values: string[];
+  truncated: boolean;
+} {
+  if (!response) {
+    return { values: [], truncated: false };
+  }
+  try {
+    const value = response.headers()["x-robots-tag"];
+    if (typeof value !== "string") {
+      return { values: [], truncated: false };
+    }
+    const preview = value.slice(0, 512);
+    if (!preview.trim()) {
+      return { values: [], truncated: value.length > 512 };
+    }
+    return {
+      values: [preview],
+      truncated: value.length > 512,
+    };
+  } catch {
+    return { values: [], truncated: false };
+  }
+}
+
+function analyzerStatus(
+  eligiblePageCount: number,
+  observedPageCount: number,
+): ScannerV2AnalyzerStatus {
+  if (eligiblePageCount === 0 || observedPageCount === 0) {
+    return "unavailable";
+  }
+  return observedPageCount < eligiblePageCount ? "partial" : "complete";
+}
+
+async function recordNetworkResponse(
+  response: Response,
+  pageUrl: string,
+  collector: NetworkObservationCollector,
+): Promise<void> {
+  const request = response.request();
+  const [headers, sizes] = await Promise.all([
+    response.allHeaders().catch(() => null),
+    request.sizes().catch(() => null),
+  ]);
+  collector.recordResponse(
+    {
+      pageUrl,
+      resourceUrl: response.url(),
+      resourceType: networkResourceType(request.resourceType()),
+      statusCode: response.status(),
+      transferBytes: sizes
+        ? sizes.responseBodySize + sizes.responseHeadersSize
+        : null,
+      cacheControl: headers?.["cache-control"] ?? null,
+      contentEncoding: headers?.["content-encoding"] ?? null,
+    },
+    true,
+  );
+}
+
+function recordFailedNetworkRequest(
+  request: Request,
+  pageUrl: string,
+  collector: NetworkObservationCollector,
+): void {
+  collector.recordFailure({
+    pageUrl,
+    resourceUrl: request.url(),
+    resourceType: networkResourceType(request.resourceType()),
+    failureCode: request.failure()?.errorText ?? null,
+  });
 }
 
 export async function runBrowserScan(
@@ -180,6 +329,17 @@ export async function runBrowserScan(
     options.analyzeAccessibility ?? defaultAccessibilityAnalyzer;
 
   const initialTarget = await assertPublicHttpUrl(rawUrl, resolver);
+  const initialCandidateResult = classifyCrawlCandidate(
+    initialTarget.url.toString(),
+    initialTarget.url.toString(),
+    initialTarget.url.origin,
+  );
+  if (!initialCandidateResult.accepted) {
+    throw new Error(
+      "Initial browser target could not be prepared for crawling",
+    );
+  }
+  const initialCandidate = initialCandidateResult.candidate;
   const session = await createSession({
     resolver,
     maxPages: 1,
@@ -190,37 +350,79 @@ export async function runBrowserScan(
     const page = await session.context.newPage();
     const pending: CrawlTarget[] = [
       {
-        url: initialTarget.url.toString(),
+        candidate: initialCandidate,
         sourcePageUrl: null,
       },
     ];
     const seen = new Set<string>();
     const observations: BrowserPageObservation[] = [];
+    const crawlCoverage = new CrawlCoverageTracker(maxPages);
+    crawlCoverage.discover(initialCandidate, null);
+    const networkCollector = new NetworkObservationCollector(
+      initialTarget.url.origin,
+    );
+    const pendingNetworkCaptures = new Set<Promise<void>>();
+    const labSnapshots: Array<{
+      url: string;
+      snapshot: BrowserLabRuntimeSnapshot;
+    }> = [];
+    const seoPages: SeoPageObservation[] = [];
     let crawlOrigin: string | null = null;
     const javascriptErrorsByUrl = new Map<string, number>();
     let screenshot: BrowserScreenshot | null = null;
+    let activePageUrl = initialCandidate.navigationUrl;
+    let networkCaptureFailureCount = 0;
+    let linkExtractionFailureCount = 0;
+    let performanceEligiblePageCount = 0;
+    let seoEligiblePageCount = 0;
 
-    page.on("pageerror", () => {
+    const performanceObserverInstalled = await installLabPerformanceObserver(
+      page,
+    ).catch(() => false);
+
+    page.on("pageerror", (error) => {
       try {
         const pageUrl = reportSafeUrl(page.url());
         javascriptErrorsByUrl.set(
           pageUrl,
           (javascriptErrorsByUrl.get(pageUrl) ?? 0) + 1,
         );
+        networkCollector.recordJavascriptError(activePageUrl, error.message);
       } catch {
         // A transient non-HTTP document is intentionally not reported.
       }
     });
+    page.on("console", (message) => {
+      if (message.type() === "error") {
+        networkCollector.recordConsoleError(activePageUrl, message.text());
+      }
+    });
+    page.on("response", (response) => {
+      if (!networkCollector.reserveResponseCapture()) {
+        return;
+      }
+      trackPromise(
+        pendingNetworkCaptures,
+        recordNetworkResponse(response, activePageUrl, networkCollector),
+        () => {
+          networkCaptureFailureCount += 1;
+        },
+      );
+    });
+    page.on("requestfailed", (request) => {
+      recordFailedNetworkRequest(request, activePageUrl, networkCollector);
+    });
 
     while (pending.length > 0 && observations.length < maxPages) {
       const target = pending.shift();
-      if (!target || seen.has(target.url)) {
+      if (!target || seen.has(target.candidate.navigationUrl)) {
         continue;
       }
-      seen.add(target.url);
+      seen.add(target.candidate.navigationUrl);
+      activePageUrl = target.candidate.navigationUrl;
       let response;
       try {
-        response = await page.goto(target.url, {
+        response = await page.goto(target.candidate.navigationUrl, {
           waitUntil: "domcontentloaded",
           timeout: navigationTimeoutMs,
         });
@@ -230,23 +432,30 @@ export async function runBrowserScan(
         }
 
         observations.push({
-          url: reportSafeUrl(target.url),
+          url: reportSafeUrl(target.candidate.navigationUrl),
           sourcePageUrl: target.sourcePageUrl,
           statusCode: null,
           navigationFailed: true,
           javascriptErrorCount: 0,
           accessibilityViolations: [],
         });
+        crawlCoverage.markVisited(target.candidate, {
+          finalUrl: target.candidate.navigationUrl,
+          statusCode: null,
+          navigationFailed: true,
+        });
         continue;
       }
 
       const validatedFinal = await assertPublicHttpUrl(page.url(), resolver);
       const finalUrl = validatedFinal.url.toString();
+      seen.add(finalUrl);
       const reportUrl = reportSafeUrl(finalUrl);
       const statusCode = response?.status() ?? null;
 
       if (!crawlOrigin) {
         crawlOrigin = validatedFinal.url.origin;
+        networkCollector.setFirstPartyOrigin(crawlOrigin);
       }
       const sameOrigin = validatedFinal.url.origin === crawlOrigin;
       const healthyDocument = statusCode === null || statusCode < 400;
@@ -274,34 +483,169 @@ export async function runBrowserScan(
           : 0,
         accessibilityViolations,
       });
+      crawlCoverage.markVisited(target.candidate, {
+        finalUrl,
+        statusCode,
+        navigationFailed: false,
+      });
 
-      if (!sameOrigin || !healthyDocument || observations.length >= maxPages) {
+      if (sameOrigin && healthyDocument) {
+        performanceEligiblePageCount += 1;
+        seoEligiblePageCount += 1;
+        const [labSnapshot, seoFacts] = await Promise.all([
+          readLabPerformanceSnapshot(page),
+          extractSeoDocumentFacts(page),
+        ]);
+        if (labSnapshot) {
+          labSnapshots.push({ url: finalUrl, snapshot: labSnapshot });
+        }
+        if (seoFacts) {
+          const headerRobots = responseRobotsDirectives(response ?? null);
+          const seoPage = analyzeSeoPage({
+            url: finalUrl,
+            statusCode,
+            facts: {
+              ...seoFacts,
+              robots: [...seoFacts.robots, ...headerRobots.values],
+              contentTruncated:
+                seoFacts.contentTruncated || headerRobots.truncated,
+            },
+          });
+          if (seoPage) {
+            seoPages.push(seoPage);
+          }
+        }
+      }
+
+      if (
+        !crawlOrigin ||
+        !sameOrigin ||
+        !healthyDocument ||
+        observations.length >= maxPages
+      ) {
         continue;
       }
 
-      const links = await extractInternalLinks(page, finalUrl, crawlOrigin);
-      for (const link of links) {
-        if (seen.size + pending.length >= maxPages) {
-          break;
+      let hrefs: string[];
+      try {
+        hrefs = await extractPageHrefs(page);
+      } catch {
+        linkExtractionFailureCount += 1;
+        continue;
+      }
+      for (const href of hrefs) {
+        const candidateResult = classifyCrawlCandidate(
+          href,
+          finalUrl,
+          crawlOrigin,
+        );
+        if (!candidateResult.accepted) {
+          crawlCoverage.ignore(candidateResult, reportUrl);
+          continue;
         }
+        const candidate = candidateResult.candidate;
         if (
-          seen.has(link) ||
-          pending.some((candidate) => candidate.url === link)
+          seen.has(candidate.navigationUrl) ||
+          pending.some(
+            (pendingTarget) =>
+              pendingTarget.candidate.navigationUrl === candidate.navigationUrl,
+          )
         ) {
+          crawlCoverage.discover(candidate, reportUrl);
           continue;
         }
 
+        if (seen.size + pending.length >= maxPages) {
+          crawlCoverage.markBudgetExceeded(candidate, reportUrl);
+          continue;
+        }
+
+        crawlCoverage.discover(candidate, reportUrl);
         pending.push({
-          url: link,
+          candidate,
           sourcePageUrl: reportUrl,
         });
       }
     }
 
+    if (observations.length >= maxPages || pending.length > 0) {
+      crawlCoverage.markRemainingBudgetExceeded();
+    }
+    await Promise.all([...pendingNetworkCaptures]);
+    const network = networkCollector.snapshot();
+    const performance = labSnapshots.flatMap(({ url, snapshot }) => {
+      const observedUrl = observeUrl(url);
+      if (!observedUrl) {
+        return [];
+      }
+      const observation = createLabPerformanceObservation({
+        url,
+        context: {
+          viewport: pageViewport(page),
+          userAgent: snapshot.userAgent,
+          measuredAt: new Date().toISOString(),
+          scanProfile: { maxPages, navigationTimeoutMs },
+          cacheState: "unknown",
+          engineVersion: "scanner-v2-browser-1",
+        },
+        timing: snapshot.timing,
+        resources: network.resources.filter(
+          (resource) => resource.pageUrl === observedUrl.displayUrl,
+        ),
+      });
+      return observation ? [observation] : [];
+    });
+    const seoSignals = [
+      ...seoPages.flatMap((pageObservation) => pageObservation.signals),
+      ...findDuplicateSeoTitles(seoPages),
+    ];
+    const performanceStatus = analyzerStatus(
+      performanceEligiblePageCount,
+      performance.length,
+    );
+    const seoStatus = analyzerStatus(seoEligiblePageCount, seoPages.length);
+    const seoAnalysisStatus =
+      seoStatus === "complete" && seoPages.some((page) => page.contentTruncated)
+        ? "partial"
+        : seoStatus;
+
     return {
       pagesVisited: observations.length,
       observations,
       screenshot,
+      scannerV2: {
+        crawl: crawlCoverage.coverage(),
+        network,
+        performance,
+        seo: { pages: seoPages, signals: seoSignals },
+        completeness: {
+          crawl: {
+            status: linkExtractionFailureCount > 0 ? "partial" : "complete",
+            linkExtractionFailureCount,
+          },
+          network: {
+            status:
+              networkCaptureFailureCount > 0 || network.collection.truncated
+                ? "partial"
+                : "complete",
+            captureFailureCount: networkCaptureFailureCount,
+          },
+          performance: {
+            status:
+              !performanceObserverInstalled && performanceStatus === "complete"
+                ? "partial"
+                : performanceStatus,
+            eligiblePageCount: performanceEligiblePageCount,
+            observedPageCount: performance.length,
+            observerInstalled: performanceObserverInstalled,
+          },
+          seo: {
+            status: seoAnalysisStatus,
+            eligiblePageCount: seoEligiblePageCount,
+            observedPageCount: seoPages.length,
+          },
+        },
+      },
     };
   } finally {
     await session.close();

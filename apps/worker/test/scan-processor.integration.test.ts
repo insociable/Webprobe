@@ -119,6 +119,60 @@ describeDatabase("scan processor browser findings", () => {
               accessibilityViolations: [],
             },
           ],
+          scannerV2: {
+            crawl: {
+              maxPages: 3,
+              discoveredUrlCount: 3,
+              visitedUrlCount: 3,
+              ignoredUrlCount: 0,
+              unvisitedUrlCount: 0,
+              budgetReached: false,
+              urls: [],
+              redirects: [],
+              malformedUrlCount: 0,
+            },
+            network: {
+              resources: [],
+              failedRequests: [],
+              consoleErrors: [],
+              javascriptErrors: [],
+              issues: [],
+              suppressedThirdPartyIssueCount: 0,
+              collection: {
+                maxRetainedObservationCount: 400,
+                retainedObservationCount: 0,
+                droppedObservationCount: 0,
+                truncated: false,
+              },
+            },
+            performance: [],
+            seo: {
+              pages: [],
+              signals: [
+                {
+                  code: "seo.title.missing",
+                  level: "warning",
+                  pageUrl: "https://example.com/about",
+                  evidence: {},
+                },
+              ],
+            },
+            completeness: {
+              crawl: { status: "complete", linkExtractionFailureCount: 0 },
+              network: { status: "complete", captureFailureCount: 0 },
+              performance: {
+                status: "unavailable",
+                eligiblePageCount: 0,
+                observedPageCount: 0,
+                observerInstalled: true,
+              },
+              seo: {
+                status: "complete",
+                eligiblePageCount: 3,
+                observedPageCount: 3,
+              },
+            },
+          },
         }),
       });
 
@@ -128,7 +182,9 @@ describeDatabase("scan processor browser findings", () => {
         "accessibility.color-contrast",
         "broken-link.http-error",
         "javascript.uncaught-error",
+        "seo.title.missing",
       ]);
+      expect(result.scannerV2?.completeness.seo.status).toBe("complete");
 
       const { db } = getDatabase();
       const [persistedScan] = await db
@@ -157,9 +213,17 @@ describeDatabase("scan processor browser findings", () => {
       expect(persistedScan).toMatchObject({
         status: "completed",
         pageCount: 3,
-        summary: expect.objectContaining({ findingCount: 3 }),
+        summary: expect.objectContaining({
+          findingCount: 4,
+          scannerV2: expect.objectContaining({
+            version: 1,
+            completeness: expect.objectContaining({
+              seo: expect.objectContaining({ status: "complete" }),
+            }),
+          }),
+        }),
       });
-      expect(persistedFindings).toHaveLength(3);
+      expect(persistedFindings).toHaveLength(4);
       expect(JSON.stringify(persistedFindings)).not.toContain(
         "secret navigation",
       );

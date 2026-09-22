@@ -273,6 +273,55 @@ function accessibilityRemediation(code: string): FindingRemediation {
     verification: `Relancez le scan et vérifiez que la règle ${ruleId} n’est plus signalée.`,
   };
 }
+function scannerV2Remediation(code: string): FindingRemediation | null {
+  if (code.startsWith("seo.")) {
+    return {
+      title: "Corriger le signal SEO détecté",
+      summary:
+        "Le scan a identifié un signal SEO déterministe sur cette page. Corrigez la balise ou la directive concernée dans le HTML généré.",
+      steps: [
+        "Repérez la page et le code SEO indiqués dans le finding.",
+        "Corrigez la balise title, meta description, canonical, lang, H1 ou directive robots concernée.",
+        "Vérifiez que la valeur finale est cohérente avec l’intention d’indexation de la page.",
+      ],
+      verification:
+        "Relancez le scan et vérifiez que le code SEO concerné n’est plus signalé.",
+    };
+  }
+
+  if (code.startsWith("network.")) {
+    return {
+      title: "Corriger la ressource réseau en erreur",
+      summary:
+        "Une ressource first-party nécessaire au site échoue ou retourne un statut HTTP invalide pendant le chargement.",
+      steps: [
+        "Identifiez la ressource et son type dans les preuves du finding.",
+        "Corrigez son URL, son routage, son déploiement ou la dépendance qui provoque l’échec.",
+        "Contrôlez ensuite le chargement depuis un navigateur sans cache.",
+      ],
+      verification:
+        "Relancez le scan et vérifiez que la ressource ne génère plus d’erreur réseau.",
+    };
+  }
+
+  if (code.startsWith("performance.")) {
+    return {
+      title: "Optimiser la métrique de performance signalée",
+      summary:
+        "La mesure de laboratoire dépasse le seuil retenu par Agency Monitor pour cette métrique.",
+      steps: [
+        "Comparez la valeur observée et le seuil affichés dans les preuves.",
+        "Traitez d’abord les ressources ou traitements dominants : serveur, JavaScript, images, CSS, polices ou nombre de requêtes.",
+        "Mesurez à nouveau après chaque changement significatif pour éviter les optimisations à l’aveugle.",
+      ],
+      verification:
+        "Relancez plusieurs scans et vérifiez que la métrique repasse sous le seuil d’alerte de façon stable.",
+    };
+  }
+
+  return null;
+}
+
 export function getFindingRemediation(code: string): FindingRemediation | null {
   const exact = exactRemediations[code];
   if (exact) {
@@ -283,5 +332,5 @@ export function getFindingRemediation(code: string): FindingRemediation | null {
     return accessibilityRemediation(code);
   }
 
-  return null;
+  return scannerV2Remediation(code);
 }
