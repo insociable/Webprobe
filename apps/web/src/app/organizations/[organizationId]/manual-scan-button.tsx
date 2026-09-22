@@ -1,14 +1,12 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState } from "react";
 import { startManualScanAction } from "./manual-scan-actions";
 import type { ManualScanActionState } from "./manual-scan-actions";
 
 const initialManualScanActionState: ManualScanActionState = {
   error: null,
   message: null,
-  scanId: null,
 };
 
 type ManualScanButtonProps = {
@@ -20,22 +18,11 @@ export function ManualScanButton({
   organizationId,
   siteId,
 }: ManualScanButtonProps) {
-  const router = useRouter();
   const action = startManualScanAction.bind(null, organizationId, siteId);
   const [state, formAction, pending] = useActionState(
     action,
     initialManualScanActionState,
   );
-
-  useEffect(() => {
-    if (!state.scanId) {
-      return;
-    }
-
-    router.push(
-      `/organizations/${organizationId}/sites/${siteId}/scans/${state.scanId}`,
-    );
-  }, [organizationId, router, siteId, state.scanId]);
 
   return (
     <div className="mt-5">
