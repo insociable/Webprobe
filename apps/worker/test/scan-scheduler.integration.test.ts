@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
-import { organizations, scanSchedules, scans, sites } from "@agency-saas/db";
+import {
+  organizations,
+  scanAttempts,
+  scanDispatches,
+  scanSchedules,
+  scans,
+  sites,
+} from "@agency-saas/db";
 import { eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import {
   cancelInvalidQueuedScheduledScans,
   claimDueScheduledScans,
-  dispatchQueuedScheduledScans,
   initializeMissingScheduleCursors,
   recoverOrphanedRunningScans,
 } from "../src/scan-scheduler.js";
@@ -76,6 +82,7 @@ describeDatabase("scheduled scan coordinator persistence", () => {
 
       const persisted = await db
         .select({
+          id: scans.id,
           trigger: scans.trigger,
           scheduleId: scans.scheduleId,
           scheduledFor: scans.scheduledFor,
@@ -91,6 +98,12 @@ describeDatabase("scheduled scan coordinator persistence", () => {
         scheduledFor: dueAt,
         status: "queued",
       });
+
+      const [dispatch] = await db
+        .select({ status: scanDispatches.status })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, persisted[0]!.id));
+      expect(dispatch?.status).toBe("pending");
 
       const [schedule] = await db
         .select({ nextRunAt: scanSchedules.nextRunAt })
@@ -130,48 +143,6 @@ describeDatabase("scheduled scan coordinator persistence", () => {
         .from(scanSchedules)
         .where(eq(scanSchedules.id, fixture.scheduleId));
       expect(schedule?.nextRunAt?.getTime()).toBeGreaterThan(dueAt.getTime());
-    } finally {
-      await deleteFixture(fixture.organizationId);
-    }
-  });
-
-  it("keeps queued scheduled scans durable when enqueue fails", async () => {
-    const { db } = getDatabase();
-    const scheduledFor = new Date("2026-09-22T07:55:00.000Z");
-    const fixture = await createFixture({
-      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
-    });
-
-    try {
-      const [scan] = await db
-        .insert(scans)
-        .values({
-          organizationId: fixture.organizationId,
-          siteId: fixture.siteId,
-          trigger: "scheduled",
-          scheduleId: fixture.scheduleId,
-          scheduledFor,
-          status: "queued",
-        })
-        .returning({ id: scans.id });
-
-      const failed = await dispatchQueuedScheduledScans(async () => {
-        throw new Error("redis unavailable");
-      });
-      expect(failed).toEqual({ attempted: 1, enqueued: 0, failed: 1 });
-
-      const [stillQueued] = await db
-        .select({ status: scans.status })
-        .from(scans)
-        .where(eq(scans.id, scan!.id));
-      expect(stillQueued?.status).toBe("queued");
-
-      const delivered: string[] = [];
-      const retried = await dispatchQueuedScheduledScans(async (payload) => {
-        delivered.push(payload.scanId);
-      });
-      expect(retried).toEqual({ attempted: 1, enqueued: 1, failed: 0 });
-      expect(delivered).toEqual([scan!.id]);
     } finally {
       await deleteFixture(fixture.organizationId);
     }
@@ -240,7 +211,7 @@ describeDatabase("scheduled scan coordinator persistence", () => {
     }
   });
 
-  it("recovers orphaned scheduled scans and fails orphaned manual scans", async () => {
+  it("recovers orphaned scheduled and manual scans through the same outbox path", async () => {
     const { db } = getDatabase();
     const now = new Date("2026-09-22T08:00:00.000Z");
     const staleStartedAt = new Date("2026-09-22T07:30:00.000Z");
@@ -268,8 +239,8 @@ describeDatabase("scheduled scan coordinator persistence", () => {
       );
       expect(recovered).toEqual({
         checked: 1,
-        recoveredScheduled: 1,
-        failedManual: 0,
+        recovered: 1,
+        failed: 0,
         inspectionFailed: 0,
       });
 
@@ -298,18 +269,99 @@ describeDatabase("scheduled scan coordinator persistence", () => {
       const failed = await recoverOrphanedRunningScans(async () => false, now);
       expect(failed).toEqual({
         checked: 1,
-        recoveredScheduled: 0,
-        failedManual: 1,
+        recovered: 1,
+        failed: 0,
         inspectionFailed: 0,
       });
 
       const [manualPersisted] = await db
-        .select({ status: scans.status, summary: scans.summary })
+        .select({ status: scans.status, startedAt: scans.startedAt })
         .from(scans)
         .where(eq(scans.id, manualScan!.id));
-      expect(manualPersisted?.status).toBe("failed");
-      expect(manualPersisted?.summary).toMatchObject({
-        error: { code: "stale-worker-job" },
+      expect(manualPersisted).toEqual({
+        status: "queued",
+        startedAt: null,
+      });
+
+      const [manualDispatch] = await db
+        .select({
+          status: scanDispatches.status,
+          lastErrorCode: scanDispatches.lastErrorCode,
+        })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, manualScan!.id));
+      expect(manualDispatch).toEqual({
+        status: "pending",
+        lastErrorCode: "stale-worker-job",
+      });
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("fails a repeatedly orphaned scan after the recovery budget is exhausted", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const fixture = await createFixture({
+      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+    });
+
+    try {
+      const [scan] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          status: "running",
+          startedAt: new Date("2026-09-22T07:30:00.000Z"),
+        })
+        .returning({ id: scans.id });
+      if (!scan) throw new Error("fixture scan creation failed");
+
+      await db.insert(scanDispatches).values({
+        scanId: scan.id,
+        status: "dispatched",
+        dispatchedAt: new Date("2026-09-22T07:30:00.000Z"),
+      });
+      await db.insert(scanAttempts).values(
+        Array.from({ length: 5 }, (_, index) => ({
+          scanId: scan.id,
+          attemptNumber: index + 1,
+          status: "retrying" as const,
+          retryable: true,
+          errorCode: "worker-stalled",
+          completedAt: new Date("2026-09-22T07:31:00.000Z"),
+        })),
+      );
+
+      const result = await recoverOrphanedRunningScans(async () => false, now);
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 1,
+        inspectionFailed: 0,
+      });
+
+      const [persisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, scan.id));
+      expect(persisted?.status).toBe("failed");
+      expect(persisted?.summary).toMatchObject({
+        error: { code: "stale-worker-recovery-exhausted" },
+      });
+
+      const [dispatch] = await db
+        .select({
+          status: scanDispatches.status,
+          lastErrorCode: scanDispatches.lastErrorCode,
+        })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, scan.id));
+      expect(dispatch).toEqual({
+        status: "failed",
+        lastErrorCode: "stale-worker-recovery-exhausted",
       });
     } finally {
       await deleteFixture(fixture.organizationId);
@@ -340,8 +392,8 @@ describeDatabase("scheduled scan coordinator persistence", () => {
       }, now);
       expect(result).toEqual({
         checked: 1,
-        recoveredScheduled: 0,
-        failedManual: 0,
+        recovered: 0,
+        failed: 0,
         inspectionFailed: 1,
       });
 

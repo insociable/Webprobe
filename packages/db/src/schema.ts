@@ -29,6 +29,21 @@ export const scanStatus = pgEnum("scan_status", [
 
 export const scanTrigger = pgEnum("scan_trigger", ["manual", "scheduled"]);
 
+export const scanDispatchStatus = pgEnum("scan_dispatch_status", [
+  "pending",
+  "dispatching",
+  "dispatched",
+  "failed",
+  "cancelled",
+]);
+
+export const scanAttemptStatus = pgEnum("scan_attempt_status", [
+  "running",
+  "retrying",
+  "completed",
+  "failed",
+]);
+
 export const severity = pgEnum("severity", [
   "info",
   "low",
@@ -339,6 +354,70 @@ export const scans = pgTable(
       "scans_scheduled_metadata_consistent",
       sql`(${table.trigger} = 'manual' and ${table.scheduleId} is null and ${table.scheduledFor} is null)
           or (${table.trigger} = 'scheduled' and ${table.scheduledFor} is not null)`,
+    ),
+  ],
+);
+
+export const scanDispatches = pgTable(
+  "scan_dispatches",
+  {
+    scanId: uuid("scan_id")
+      .primaryKey()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    status: scanDispatchStatus("status").default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("scan_dispatches_due_idx")
+      .on(table.nextAttemptAt)
+      .where(sql`${table.status} = 'pending'`),
+    index("scan_dispatches_lease_idx")
+      .on(table.leaseUntil)
+      .where(sql`${table.status} = 'dispatching'`),
+    check(
+      "scan_dispatches_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
+    ),
+  ],
+);
+
+export const scanAttempts = pgTable(
+  "scan_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull(),
+    status: scanAttemptStatus("status").default("running").notNull(),
+    retryable: boolean("retryable").default(false).notNull(),
+    errorCode: text("error_code"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("scan_attempts_scan_number_unique").on(
+      table.scanId,
+      table.attemptNumber,
+    ),
+    index("scan_attempts_scan_started_idx").on(table.scanId, table.startedAt),
+    check(
+      "scan_attempts_attempt_number_positive",
+      sql`${table.attemptNumber} > 0`,
     ),
   ],
 );

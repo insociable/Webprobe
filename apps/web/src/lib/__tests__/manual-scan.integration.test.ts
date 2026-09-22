@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   memberships,
   organizations,
+  scanDispatches,
   scans,
   sites,
   users,
 } from "@agency-saas/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "../database";
 import { createManualScanForSite, ManualScanError } from "../manual-scan";
 import { OrganizationAccessError } from "../organization-site-service";
@@ -86,30 +87,17 @@ async function cleanupFixture(organizationId: string, userIds: string[]) {
 }
 
 describeDatabase("manual scan creation", () => {
-  it("creates a queued scan and enqueues the persisted target", async () => {
+  it("commits the queued scan and durable dispatch intent atomically", async () => {
     const fixture = await createFixture();
-    const enqueued: unknown[] = [];
 
     try {
       const scan = await createManualScanForSite(
         fixture.ownerId,
         fixture.organizationId,
         fixture.activeSiteId,
-        async (payload) => {
-          enqueued.push(payload);
-        },
       );
 
-      expect(enqueued).toEqual([
-        expect.objectContaining({
-          scanId: scan.id,
-          organizationId: fixture.organizationId,
-          siteId: fixture.activeSiteId,
-          targetUrl: "https://example.com/",
-        }),
-      ]);
-
-      const persisted = await db
+      const [persisted] = await db
         .select({
           status: scans.status,
           trigger: scans.trigger,
@@ -118,9 +106,22 @@ describeDatabase("manual scan creation", () => {
         .where(eq(scans.id, scan.id))
         .limit(1);
 
-      expect(persisted[0]).toEqual({
+      const [dispatch] = await db
+        .select({
+          status: scanDispatches.status,
+          attemptCount: scanDispatches.attemptCount,
+        })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, scan.id))
+        .limit(1);
+
+      expect(persisted).toEqual({
         status: "queued",
         trigger: "manual",
+      });
+      expect(dispatch).toEqual({
+        status: "pending",
+        attemptCount: 0,
       });
     } finally {
       await cleanupFixture(fixture.organizationId, [
@@ -129,6 +130,7 @@ describeDatabase("manual scan creation", () => {
       ]);
     }
   });
+
   it("rejects scans from ordinary members", async () => {
     const fixture = await createFixture();
 
@@ -138,7 +140,6 @@ describeDatabase("manual scan creation", () => {
           fixture.memberId,
           fixture.organizationId,
           fixture.activeSiteId,
-          async () => {},
         ),
       ).rejects.toBeInstanceOf(OrganizationAccessError);
     } finally {
@@ -158,7 +159,6 @@ describeDatabase("manual scan creation", () => {
           fixture.ownerId,
           fixture.organizationId,
           fixture.pendingSiteId,
-          async () => {},
         ),
       ).rejects.toMatchObject({
         code: "site-not-active",
@@ -180,13 +180,11 @@ describeDatabase("manual scan creation", () => {
           fixture.ownerId,
           fixture.organizationId,
           fixture.activeSiteId,
-          async () => {},
         ),
         createManualScanForSite(
           fixture.ownerId,
           fixture.organizationId,
           fixture.activeSiteId,
-          async () => {},
         ),
       ]);
 
@@ -205,40 +203,16 @@ describeDatabase("manual scan creation", () => {
       expect(rejectedResult.reason).toMatchObject({
         code: "scan-already-running",
       });
-    } finally {
-      await cleanupFixture(fixture.organizationId, [
-        fixture.ownerId,
-        fixture.memberId,
-      ]);
-    }
-  });
 
-  it("removes a still-queued scan when enqueue fails", async () => {
-    const fixture = await createFixture();
-
-    try {
-      await expect(
-        createManualScanForSite(
-          fixture.ownerId,
-          fixture.organizationId,
-          fixture.activeSiteId,
-          async () => {
-            throw new Error("redis unavailable detail");
-          },
-        ),
-      ).rejects.toMatchObject({ code: "queue-unavailable" });
-
-      const remaining = await db
-        .select({ id: scans.id })
-        .from(scans)
-        .where(
-          and(
-            eq(scans.organizationId, fixture.organizationId),
-            eq(scans.siteId, fixture.activeSiteId),
-          ),
-        );
-
-      expect(remaining).toHaveLength(0);
+      const [scan] = fulfilled;
+      if (scan?.status !== "fulfilled") {
+        throw new Error("Expected one committed scan");
+      }
+      const dispatches = await db
+        .select({ scanId: scanDispatches.scanId })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, scan.value.id));
+      expect(dispatches).toHaveLength(1);
     } finally {
       await cleanupFixture(fixture.organizationId, [
         fixture.ownerId,
