@@ -54,6 +54,32 @@ Mailpit est uniquement un transport de développement. La limitation de débit
 actuelle utilise la mémoire du processus et devra passer sur un stockage partagé
 avant tout déploiement multi-instance.
 
+## Runtime navigateur du pilote
+
+Le runtime Chromium utilise Playwright avec le sandbox Chromium explicitement
+activé. Chaque session crée un proxy HTTP local éphémère obligatoire :
+
+- chaque cible HTTP et chaque tunnel HTTPS CONNECT est revalidé avec les mêmes
+  règles SSRF que le probe HTTP ;
+- toutes les réponses DNS doivent être publiques et la connexion sortante est
+  épinglée sur l'adresse validée ;
+- seuls les ports HTTP/HTTPS standards sont acceptés ;
+- le bypass implicite loopback de Chromium est désactivé ;
+- la résolution DNS directe de Chromium est désactivée hors proxy ;
+- QUIC et l'UDP WebRTC non proxifié sont désactivés ;
+- les WebSockets et service workers sont bloqués dans cette première version ;
+- le runtime refuse les méthodes HTTP non idempotentes avant émission ;
+- les pages, délais, processus et descripteurs sont bornés ; le service systemd
+  ajoute des limites mémoire et de tâches.
+
+Le smoke navigateur démarre également un serveur sentinelle sur loopback et
+vérifie qu'un Chromium ayant accès à un site public ne peut pas l'atteindre.
+
+Cette défense vise le contenu web hostile dans le pilote privé. Elle ne remplace
+pas une politique egress noyau/conteneur face à une hypothétique évasion complète
+du sandbox Chromium ; cette couche restera requise avant une exposition de
+production plus large.
+
 ## Dépendances connues
 
 `pnpm audit --prod` signale actuellement `GHSA-67mh-4wv8-2f99`, de sévérité

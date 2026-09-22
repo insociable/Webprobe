@@ -69,6 +69,17 @@ pnpm dev
 Les ports PostgreSQL, Valkey, SMTP et Mailpit sont publiés uniquement sur
 `127.0.0.1`. Le fichier `.env` n'est jamais versionné.
 
+Pour préparer le runtime navigateur du worker :
+
+```bash
+PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
+  pnpm --filter @agency-saas/worker exec playwright install chromium
+pnpm --filter @agency-saas/worker smoke:browser
+```
+
+Le cache Chromium local est ignoré par Git. Le smoke charge une cible publique et
+vérifie qu'un accès loopback/metadata ne contourne pas le proxy egress sécurisé.
+
 ## Invariants de sécurité
 
 - seules les URL HTTP(S) sur ports standards sont acceptées ;

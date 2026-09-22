@@ -16,6 +16,10 @@ RestartSec=3
 TimeoutStopSec=30
 KillSignal=SIGTERM
 UMask=0077
+MemoryHigh=768M
+MemoryMax=1G
+TasksMax=256
+LimitNOFILE=4096
 
 NoNewPrivileges=true
 PrivateTmp=true
