@@ -36,6 +36,8 @@ export function observeUrl(rawUrl: string): ObservedUrl | null {
   }
 
   const hasQuery = url.search.length > 0;
+  url.username = "";
+  url.password = "";
   url.search = "";
 
   return {

@@ -92,6 +92,8 @@ function firstHeaderValue(
 
 function reportSafeUrl(input: URL): string {
   const safeUrl = new URL(input.toString());
+  safeUrl.username = "";
+  safeUrl.password = "";
   safeUrl.search = "";
   safeUrl.hash = "";
   return safeUrl.toString();

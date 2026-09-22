@@ -31,6 +31,20 @@ describe("scanner v2 crawl coverage", () => {
     });
   });
 
+  it("removes URL credentials from retained observations", () => {
+    const observed = observeUrl(
+      "https://alice:secret@example.com/private?token=secret#top",
+    );
+
+    expect(observed).toMatchObject({
+      displayUrl: "https://example.com/private",
+      origin: "https://example.com",
+      hasQuery: true,
+    });
+    expect(JSON.stringify(observed)).not.toContain("alice");
+    expect(JSON.stringify(observed)).not.toContain("secret");
+  });
+
   it("deduplicates normalized URL forms and link loops without losing sources", () => {
     const tracker = new CrawlCoverageTracker(3);
     const root = classifyCrawlCandidate(

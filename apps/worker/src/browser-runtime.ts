@@ -86,6 +86,8 @@ export function isAllowedBrowserRequest(
 
 function reportSafeUrl(rawUrl: string): string {
   const url = new URL(rawUrl);
+  url.username = "";
+  url.password = "";
   url.search = "";
   url.hash = "";
   return url.toString();
