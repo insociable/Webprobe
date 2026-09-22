@@ -74,6 +74,11 @@ function visibleEvidence(
     protocol: "Protocole TLS",
     value: "Valeur observée",
     kind: "Type",
+    sourcePageUrl: "Page source",
+    errorCount: "Erreurs JavaScript",
+    ruleId: "Règle accessibilité",
+    impact: "Impact",
+    nodeCount: "Éléments concernés",
   };
 
   return Object.entries(labels).flatMap(([key, label]) => {

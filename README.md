@@ -11,6 +11,7 @@ Le dépôt contient le socle technique du pilote :
 - worker de scans séparé et file de tâches BullMQ ;
 - contrats de données partagés et validés avec Zod ;
 - garde-fous SSRF testés avant toute navigation ;
+- runtime Chromium isolé pour crawl interne borné, JavaScript et axe-core ;
 - PostgreSQL, Valkey et Mailpit sous Docker Compose ;
 - commandes communes avec pnpm et Turborepo.
 
