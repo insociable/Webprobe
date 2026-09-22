@@ -71,6 +71,13 @@
       "when": 1790070857525,
       "tag": "0009_lyrical_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790079062278,
+      "tag": "0010_useful_magdalene",
+      "breakpoints": true
     }
   ]
 }

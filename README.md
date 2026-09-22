@@ -81,6 +81,20 @@ pnpm --filter @agency-saas/worker smoke:browser
 Le cache Chromium local est ignoré par Git. Le smoke charge une cible publique et
 vérifie qu'un accès loopback/metadata ne contourne pas le proxy egress sécurisé.
 
+## Captures du pilote
+
+Quand `captureScreenshots` est activé, le worker conserve au plus une capture
+JPEG du viewport de la page principale par scan, avec une limite de 2 MiB. Les
+octets restent hors PostgreSQL sous `SCAN_ARTIFACTS_DIR` (par défaut
+`storage/scan-artifacts`) ; la base ne contient que la clé, le type, la taille
+et le SHA-256.
+
+Les captures suivent la rétention de l'historique de scan. Le pilote ne propose
+pas encore de suppression de scans : les captures sont donc conservées tant que
+leur scan l'est. Toute future purge de scans devra supprimer les fichiers
+associés ; les fichiers orphelins peuvent être supprimés lors d'une maintenance
+après vérification de l'absence de métadonnée `scan_artifacts`.
+
 ## Invariants de sécurité
 
 - seules les URL HTTP(S) sur ports standards sont acceptées ;

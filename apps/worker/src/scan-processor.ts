@@ -14,6 +14,7 @@ import {
   probeHttpTarget as defaultProbeHttpTarget,
   type HttpProbeResult,
 } from "./http-probe.js";
+import { persistPrimaryScreenshot as defaultPersistPrimaryScreenshot } from "./scan-artifacts.js";
 import {
   markScanRunning,
   persistScanCompletion,
@@ -23,11 +24,13 @@ import {
 
 export type ScanExecutionResult = ScanResult & {
   http: HttpProbeResult;
+  screenshotStored: boolean;
 };
 
 export type ScanProcessorDependencies = {
   probeHttpTarget?: typeof defaultProbeHttpTarget;
   runBrowserScan?: typeof defaultRunBrowserScan;
+  persistPrimaryScreenshot?: typeof defaultPersistPrimaryScreenshot;
 };
 
 function isHtmlDocument(
@@ -50,6 +53,8 @@ export async function processScanJob(
   const probeHttpTarget =
     dependencies.probeHttpTarget ?? defaultProbeHttpTarget;
   const runBrowserScan = dependencies.runBrowserScan ?? defaultRunBrowserScan;
+  const persistPrimaryScreenshot =
+    dependencies.persistPrimaryScreenshot ?? defaultPersistPrimaryScreenshot;
 
   await markScanRunning(context);
 
@@ -66,6 +71,7 @@ export async function processScanJob(
         maxPages: payload.profile.maxPages,
         navigationTimeoutMs: payload.profile.navigationTimeoutMs,
         checkAccessibility: payload.profile.checkAccessibility,
+        captureScreenshot: payload.profile.captureScreenshots,
       });
     }
 
@@ -99,9 +105,24 @@ export async function processScanJob(
 
     await persistScanCompletion(context, result, httpProbe, generatedFindings);
 
+    let screenshotStored = false;
+    if (payload.profile.captureScreenshots && browserScan?.screenshot) {
+      try {
+        screenshotStored = await persistPrimaryScreenshot({
+          organizationId: context.organizationId,
+          siteId: context.siteId,
+          scanId: context.scanId,
+          screenshot: browserScan.screenshot,
+        });
+      } catch {
+        screenshotStored = false;
+      }
+    }
+
     return {
       ...result,
       http: httpProbe,
+      screenshotStored,
     };
   } catch (error) {
     try {

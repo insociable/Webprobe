@@ -129,6 +129,7 @@ describe("browser crawl", () => {
     expect(requestedSessionMaxPages).toBe(1);
     expect(sessionClosed).toBe(true);
     expect(result.pagesVisited).toBe(4);
+    expect(result.screenshot).toBeNull();
     expect(result.observations.map((item) => item.url)).toEqual([
       "https://example.com/",
       "https://example.com/ok",
@@ -201,5 +202,80 @@ describe("browser crawl", () => {
 
     expect(analyzed).toBe(false);
     expect(result.pagesVisited).toBe(1);
+  });
+
+  it("captures one bounded primary screenshot when enabled", async () => {
+    let currentUrl = "about:blank";
+    let screenshotCalls = 0;
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      screenshot: async () => {
+        screenshotCalls += 1;
+        return Buffer.from("fake-jpeg");
+      },
+      locator: () => ({
+        evaluateAll: async () => [],
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      captureScreenshot: true,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(screenshotCalls).toBe(1);
+    expect(result.screenshot?.mediaType).toBe("image/jpeg");
+    expect(result.screenshot?.data.equals(Buffer.from("fake-jpeg"))).toBe(true);
+  });
+
+  it("keeps the browser scan successful when screenshot capture fails", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      screenshot: async () => {
+        throw new Error("capture failed");
+      },
+      locator: () => ({
+        evaluateAll: async () => [],
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      captureScreenshot: true,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.pagesVisited).toBe(1);
+    expect(result.screenshot).toBeNull();
   });
 });

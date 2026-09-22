@@ -49,6 +49,7 @@ const worker = new Worker<ScanJob>(
         redirects: result.http.redirects.length,
         pagesVisited: result.pagesVisited,
         findings: result.findings.length,
+        screenshotStored: result.screenshotStored,
       },
       "scan completed",
     );

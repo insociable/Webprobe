@@ -86,6 +86,7 @@ describeDatabase("scan processor browser findings", () => {
         probeHttpTarget: async () => successfulProbe(),
         runBrowserScan: async () => ({
           pagesVisited: 3,
+          screenshot: null,
           observations: [
             {
               url: "https://example.com/",
@@ -162,6 +163,72 @@ describeDatabase("scan processor browser findings", () => {
       expect(JSON.stringify(persistedFindings)).not.toContain(
         "secret navigation",
       );
+    } finally {
+      await cleanup(fixture.organizationId);
+    }
+  });
+
+  it("stores a captured screenshot without changing scan completion semantics", async () => {
+    const fixture = await createFixture();
+    fixture.payload.profile.captureScreenshots = true;
+    let persisted = false;
+
+    try {
+      const result = await processScanJob(fixture.payload, {
+        probeHttpTarget: async () => successfulProbe(),
+        runBrowserScan: async () => ({
+          pagesVisited: 1,
+          observations: [],
+          screenshot: {
+            data: Buffer.from("jpeg-bytes"),
+            mediaType: "image/jpeg",
+          },
+        }),
+        persistPrimaryScreenshot: async (input) => {
+          persisted =
+            input.scanId === fixture.scanId &&
+            input.screenshot.data.equals(Buffer.from("jpeg-bytes"));
+          return true;
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.screenshotStored).toBe(true);
+      expect(persisted).toBe(true);
+    } finally {
+      await cleanup(fixture.organizationId);
+    }
+  });
+
+  it("keeps a completed scan when screenshot persistence fails", async () => {
+    const fixture = await createFixture();
+    fixture.payload.profile.captureScreenshots = true;
+
+    try {
+      const result = await processScanJob(fixture.payload, {
+        probeHttpTarget: async () => successfulProbe(),
+        runBrowserScan: async () => ({
+          pagesVisited: 1,
+          observations: [],
+          screenshot: {
+            data: Buffer.from("jpeg-bytes"),
+            mediaType: "image/jpeg",
+          },
+        }),
+        persistPrimaryScreenshot: async () => {
+          throw new Error("artifact store unavailable");
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.screenshotStored).toBe(false);
+
+      const { db } = getDatabase();
+      const [persistedScan] = await db
+        .select({ status: scans.status })
+        .from(scans)
+        .where(eq(scans.id, fixture.scanId));
+      expect(persistedScan?.status).toBe("completed");
     } finally {
       await cleanup(fixture.organizationId);
     }
