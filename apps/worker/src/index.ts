@@ -6,6 +6,7 @@ import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
 import { startNotificationDeliveryCoordinator } from "./notification-delivery.js";
 import { sendScanNotificationEmail } from "./notification-email.js";
+import { startWorkerObservability } from "./observability.js";
 import { startReportDeliveryCoordinator } from "./report-delivery.js";
 import { startScanDispatchCoordinator } from "./scan-dispatch.js";
 import { persistScanFailureForJob } from "./scan-persistence.js";
@@ -218,8 +219,14 @@ const reportDeliveryCoordinator = startReportDeliveryCoordinator({
   logger,
 });
 
+const observabilityCoordinator = startWorkerObservability({
+  queue: scanQueue,
+  logger,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
+  await observabilityCoordinator.stop();
   await schedulerCoordinator.stop();
   await dispatchCoordinator.stop();
   await notificationCoordinator.stop();
