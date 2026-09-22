@@ -1,5 +1,5 @@
 import { ReportRecipientEmailSchema } from "@agency-saas/contracts";
-import { reportDeliveries, reportShares, scans } from "@agency-saas/db";
+import { reportDeliveries, reportShares, scans, sites } from "@agency-saas/db";
 import {
   decryptReportShareToken,
   encryptReportShareToken,
@@ -28,6 +28,13 @@ export class ReportShareRateLimitError extends Error {
   ) {
     super(message);
     this.name = "ReportShareRateLimitError";
+  }
+}
+
+export class ReportShareEligibilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReportShareEligibilityError";
   }
 }
 
@@ -83,8 +90,20 @@ async function requireManageableCompletedScan(
   }
 
   const [scan] = await db
-    .select({ id: scans.id })
+    .select({
+      id: scans.id,
+      scanMode: scans.scanMode,
+      siteStatus: sites.status,
+      siteVerifiedAt: sites.verifiedAt,
+    })
     .from(scans)
+    .innerJoin(
+      sites,
+      and(
+        eq(scans.siteId, sites.id),
+        eq(scans.organizationId, sites.organizationId),
+      ),
+    )
     .where(
       and(
         eq(scans.id, scanId),
@@ -99,7 +118,30 @@ async function requireManageableCompletedScan(
     throw new OrganizationAccessError("Completed scan not found");
   }
 
-  return access;
+  return { access, scan };
+}
+
+async function requireShareableCompletedScan(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+  scanId: string,
+): Promise<void> {
+  const { scan } = await requireManageableCompletedScan(
+    userId,
+    organizationId,
+    siteId,
+    scanId,
+  );
+
+  if (
+    scan.scanMode === "public_audit" &&
+    (scan.siteStatus !== "active" || !scan.siteVerifiedAt)
+  ) {
+    throw new ReportShareEligibilityError(
+      "Public audit reports cannot be shared before site verification",
+    );
+  }
 }
 
 function newShareValues(input: {
@@ -131,7 +173,7 @@ export async function createReportShare(
   scanId: string,
   now = new Date(),
 ) {
-  await requireManageableCompletedScan(userId, organizationId, siteId, scanId);
+  await requireShareableCompletedScan(userId, organizationId, siteId, scanId);
 
   return db.transaction(async (tx) => {
     await tx.execute(
@@ -192,7 +234,7 @@ export async function queueReportEmail(
   rawRecipientEmail: string,
   now = new Date(),
 ) {
-  await requireManageableCompletedScan(userId, organizationId, siteId, scanId);
+  await requireShareableCompletedScan(userId, organizationId, siteId, scanId);
   const recipientEmail = ReportRecipientEmailSchema.parse(rawRecipientEmail);
 
   return db.transaction(async (tx) => {
@@ -358,7 +400,7 @@ export async function revokeReportShare(
   shareId: string,
   now = new Date(),
 ): Promise<boolean> {
-  await requireManageableCompletedScan(userId, organizationId, siteId, scanId);
+  await requireShareableCompletedScan(userId, organizationId, siteId, scanId);
 
   return db.transaction(async (tx) => {
     const revoked = await tx

@@ -17,6 +17,7 @@ import { getPublicReportByToken } from "../public-report-service";
 import {
   createReportShare,
   queueReportEmail,
+  ReportShareEligibilityError,
   ReportShareRateLimitError,
   revokeReportShare,
 } from "../report-share-service";
@@ -227,6 +228,53 @@ describeDatabase("shareable scan reports", () => {
       const rawToken = queued.url.split("/").at(-1)!;
       expect(shareRow?.tokenHash).not.toBe(rawToken);
       expect(shareRow?.tokenCiphertext).not.toContain(rawToken);
+    } finally {
+      if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
+      else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      await cleanup(f);
+    }
+  });
+
+  it("keeps an unverified public audit private", async () => {
+    const f = await fixture();
+    const previousSecret = process.env.REPORT_TOKEN_SECRET;
+    process.env.REPORT_TOKEN_SECRET =
+      "report-test-secret-that-is-at-least-thirty-two-characters";
+
+    try {
+      await db
+        .update(sites)
+        .set({ status: "pending_verification", verifiedAt: null })
+        .where(eq(sites.id, f.siteId));
+      await db
+        .update(scans)
+        .set({ scanMode: "public_audit" })
+        .where(eq(scans.id, f.scanId));
+
+      await expect(
+        createReportShare(f.ownerId, f.organizationId, f.siteId, f.scanId),
+      ).rejects.toBeInstanceOf(ReportShareEligibilityError);
+      await expect(
+        queueReportEmail(
+          f.ownerId,
+          f.organizationId,
+          f.siteId,
+          f.scanId,
+          "client@example.com",
+        ),
+      ).rejects.toBeInstanceOf(ReportShareEligibilityError);
+
+      const shares = await db
+        .select({ id: reportShares.id })
+        .from(reportShares)
+        .where(eq(reportShares.scanId, f.scanId));
+      const deliveries = await db
+        .select({ id: reportDeliveries.id })
+        .from(reportDeliveries)
+        .where(eq(reportDeliveries.scanId, f.scanId));
+
+      expect(shares).toHaveLength(0);
+      expect(deliveries).toHaveLength(0);
     } finally {
       if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
       else process.env.REPORT_TOKEN_SECRET = previousSecret;
