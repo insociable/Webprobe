@@ -28,8 +28,8 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "env": ["RUN_DB_INTEGRATION"],
-      "passThroughEnv": ["DATABASE_URL"]
+      "env": ["RUN_DB_INTEGRATION", "RUN_REDIS_INTEGRATION"],
+      "passThroughEnv": ["DATABASE_URL", "REDIS_URL"]
     }
   }
 }

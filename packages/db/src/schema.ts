@@ -249,6 +249,9 @@ export const scans = pgTable(
   (table) => [
     index("scans_org_idx").on(table.organizationId),
     index("scans_site_queued_idx").on(table.siteId, table.queuedAt),
+    uniqueIndex("scans_site_active_unique")
+      .on(table.siteId)
+      .where(sql`${table.status} in ('queued', 'running')`),
   ],
 );
 
