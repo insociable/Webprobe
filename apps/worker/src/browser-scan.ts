@@ -412,6 +412,7 @@ export async function runBrowserScan(
     let activePageUrl = initialCandidate.navigationUrl;
     let networkCaptureFailureCount = 0;
     let linkExtractionFailureCount = 0;
+    let analyzedSameOriginPageCount = 0;
     let performanceEligiblePageCount = 0;
     let seoEligiblePageCount = 0;
 
@@ -537,6 +538,7 @@ export async function runBrowserScan(
       });
 
       if (sameOrigin && healthyDocument) {
+        analyzedSameOriginPageCount += 1;
         performanceEligiblePageCount += 1;
         seoEligiblePageCount += 1;
         const [labSnapshot, seoFacts] = await withinTimeout(
@@ -638,6 +640,7 @@ export async function runBrowserScan(
         networkCaptureFailureCount += pendingNetworkCaptures.size;
       });
     }
+    const crawl = crawlCoverage.coverage();
     const network = networkCollector.snapshot();
     const performance = labSnapshots.flatMap(({ url, snapshot }) => {
       const observedUrl = observeUrl(url);
@@ -680,20 +683,27 @@ export async function runBrowserScan(
       observations,
       screenshot,
       scannerV2: {
-        crawl: crawlCoverage.coverage(),
+        crawl,
         network,
         performance,
         seo: { pages: seoPages, signals: seoSignals },
         completeness: {
           crawl: {
-            status: linkExtractionFailureCount > 0 ? "partial" : "complete",
+            status:
+              analyzedSameOriginPageCount === 0
+                ? "unavailable"
+                : linkExtractionFailureCount > 0 || crawl.budgetReached
+                  ? "partial"
+                  : "complete",
             linkExtractionFailureCount,
           },
           network: {
             status:
-              networkCaptureFailureCount > 0 || network.collection.truncated
-                ? "partial"
-                : "complete",
+              analyzedSameOriginPageCount === 0
+                ? "unavailable"
+                : networkCaptureFailureCount > 0 || network.collection.truncated
+                  ? "partial"
+                  : "complete",
             captureFailureCount: networkCaptureFailureCount,
           },
           performance: {

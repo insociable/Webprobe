@@ -46,6 +46,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
       siteUrl: sites.canonicalUrl,
       completedAt: scans.completedAt,
       pageCount: scans.pageCount,
+      summary: scans.summary,
     })
     .from(reportShares)
     .innerJoin(organizations, eq(reportShares.organizationId, organizations.id))
@@ -81,7 +82,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
 
   const currentFindings = await loadFindings(row.organizationId, row.scanId);
   const [previousScan] = await db
-    .select({ id: scans.id })
+    .select({ id: scans.id, summary: scans.summary })
     .from(scans)
     .where(
       and(
@@ -99,6 +100,10 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
     ? compareScanFindings(
         currentFindings,
         await loadFindings(row.organizationId, previousScan.id),
+        {
+          current: row.summary,
+          previous: previousScan.summary,
+        },
       )
     : null;
 

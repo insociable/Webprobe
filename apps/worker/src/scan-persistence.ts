@@ -8,7 +8,13 @@ import {
   sites,
   users,
 } from "@agency-saas/db";
-import type { ScanJob, ScanResult, Severity } from "@agency-saas/contracts";
+import {
+  canCompareMissingFinding,
+  canResolveFindingFromSummary,
+  type ScanJob,
+  type ScanResult,
+  type Severity,
+} from "@agency-saas/contracts";
 import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
@@ -293,7 +299,7 @@ export async function persistScanCompletion(
     }
 
     const [previousScan] = await tx
-      .select({ id: scans.id })
+      .select({ id: scans.id, summary: scans.summary })
       .from(scans)
       .where(
         and(
@@ -312,6 +318,7 @@ export async function persistScanCompletion(
           .select({
             fingerprint: findings.fingerprint,
             severity: findings.severity,
+            code: findings.code,
           })
           .from(findings)
           .where(
@@ -322,8 +329,17 @@ export async function persistScanCompletion(
           )
       : [];
 
+    const currentSummary = scannerV2 ? { scannerV2 } : {};
     const degradations = previousScan
-      ? detectScanDegradations(generatedFindings, previousFindings)
+      ? detectScanDegradations(generatedFindings, previousFindings).filter(
+          (degradation) =>
+            degradation.change === "worsened" ||
+            canCompareMissingFinding(
+              degradation.code,
+              currentSummary,
+              previousScan.summary,
+            ),
+        )
       : [];
 
     const recipients = await tx
@@ -452,6 +468,10 @@ export async function persistScanCompletion(
 
     for (const incident of activeIncidents) {
       if (currentFingerprints.has(incident.fingerprint)) {
+        continue;
+      }
+
+      if (!canResolveFindingFromSummary(incident.code, currentSummary)) {
         continue;
       }
 

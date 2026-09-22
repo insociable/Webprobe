@@ -105,6 +105,7 @@ export async function getScanDetailsForSite(
       .select({
         id: scans.id,
         completedAt: scans.completedAt,
+        summary: scans.summary,
       })
       .from(scans)
       .where(
@@ -134,7 +135,10 @@ export async function getScanDetailsForSite(
       comparison = {
         previousScanId: previousScan.id,
         previousCompletedAt: previousScan.completedAt,
-        ...compareScanFindings(scanFindings, previousFindings),
+        ...compareScanFindings(scanFindings, previousFindings, {
+          current: scan.summary,
+          previous: previousScan.summary,
+        }),
       };
     }
   }

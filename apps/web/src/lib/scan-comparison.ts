@@ -1,4 +1,7 @@
-import type { Severity } from "@agency-saas/contracts";
+import {
+  canCompareMissingFinding,
+  type Severity,
+} from "@agency-saas/contracts";
 
 export type ComparableFinding = {
   fingerprint: string;
@@ -37,6 +40,10 @@ const severityRank: Record<Severity, number> = {
 export function compareScanFindings(
   current: ComparableFinding[],
   previous: ComparableFinding[],
+  summaries: {
+    current: unknown;
+    previous: unknown;
+  } = { current: {}, previous: {} },
 ): ScanComparison {
   const previousByFingerprint = new Map(
     previous.map((finding) => [finding.fingerprint, finding]),
@@ -56,6 +63,15 @@ export function compareScanFindings(
   for (const finding of current) {
     const prior = previousByFingerprint.get(finding.fingerprint);
     if (!prior) {
+      if (
+        !canCompareMissingFinding(
+          finding.code,
+          summaries.current,
+          summaries.previous,
+        )
+      ) {
+        continue;
+      }
       changesByFingerprint[finding.fingerprint] = {
         change: "new",
         previousSeverity: null,
@@ -93,7 +109,13 @@ export function compareScanFindings(
   }
 
   const resolvedFindings = previous.filter(
-    (finding) => !currentFingerprints.has(finding.fingerprint),
+    (finding) =>
+      !currentFingerprints.has(finding.fingerprint) &&
+      canCompareMissingFinding(
+        finding.code,
+        summaries.current,
+        summaries.previous,
+      ),
   );
   counts.resolved = resolvedFindings.length;
 

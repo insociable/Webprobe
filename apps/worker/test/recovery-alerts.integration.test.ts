@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import type { GeneratedFinding } from "../src/findings.js";
 import type { HttpProbeResult } from "../src/http-probe.js";
+import type { ScannerV2PersistentSummary } from "../src/scanner-v2/findings.js";
 import { dispatchDueNotificationDeliveries } from "../src/notification-delivery.js";
 import {
   persistScanCompletion,
@@ -63,6 +64,55 @@ const highFinding: GeneratedFinding = {
   fingerprint: "r".repeat(64),
   evidence: { statusCode: 503 },
 };
+
+const networkFinding: GeneratedFinding = {
+  category: "network",
+  severity: "high",
+  code: "network.http-5xx",
+  title: "Une ressource du site retourne une erreur serveur",
+  pageUrl: "https://example.com/app.js",
+  fingerprint: "n".repeat(64),
+  evidence: { statusCode: 503 },
+};
+
+function scannerSummary(
+  networkStatus: "complete" | "partial" | "unavailable",
+): ScannerV2PersistentSummary {
+  return {
+    version: 1,
+    completeness: {
+      crawl: { status: "complete", linkExtractionFailureCount: 0 },
+      network: { status: networkStatus, captureFailureCount: 0 },
+      performance: {
+        status: "complete",
+        eligiblePageCount: 1,
+        observedPageCount: 1,
+        observerInstalled: true,
+      },
+      seo: {
+        status: "complete",
+        eligiblePageCount: 1,
+        observedPageCount: 1,
+      },
+    },
+    crawl: {
+      discoveredUrlCount: 1,
+      visitedUrlCount: 1,
+      unvisitedUrlCount: 0,
+      ignoredUrlCount: 0,
+      redirectCount: 0,
+      malformedUrlCount: 0,
+      budgetReached: false,
+    },
+    network: {
+      issueCount: 0,
+      suppressedThirdPartyIssueCount: 0,
+      collectionTruncated: networkStatus === "partial",
+    },
+    performance: { observedPageCount: 1 },
+    seo: { observedPageCount: 1, signalCount: 0 },
+  };
+}
 
 type Fixture = {
   organizationId: string;
@@ -178,6 +228,7 @@ async function createRunningScan(
 async function completeScan(
   context: ValidatedScanContext,
   generatedFindings: GeneratedFinding[],
+  scannerV2: ScannerV2PersistentSummary | null = null,
 ): Promise<void> {
   await persistScanCompletion(
     context,
@@ -188,6 +239,7 @@ async function completeScan(
     ),
     successfulProbe(),
     generatedFindings,
+    scannerV2,
   );
 }
 
@@ -457,6 +509,65 @@ describeDatabase("recovery alert lifecycle", () => {
       expect(incidents).toEqual([{ recipientUserId: fixture.ownerUserId }]);
       expect(recoveries).toEqual([{ recipientUserId: fixture.ownerUserId }]);
       expect(fixture.adminUserId).not.toBe(fixture.ownerUserId);
+    } finally {
+      await cleanup(fixture);
+    }
+  });
+  it("does not emit recovery for a network incident when the current network analysis is partial", async () => {
+    const fixture = await createFixture();
+    const { db } = getDatabase();
+
+    try {
+      const [baseline] = await db
+        .select({ id: scans.id })
+        .from(scans)
+        .where(
+          and(
+            eq(scans.organizationId, fixture.organizationId),
+            eq(scans.siteId, fixture.siteId),
+          ),
+        )
+        .limit(1);
+      if (!baseline) throw new Error("baseline scan missing");
+      await db
+        .update(scans)
+        .set({ summary: { scannerV2: scannerSummary("complete") } })
+        .where(eq(scans.id, baseline.id));
+
+      const degradedScan = await createRunningScan(fixture);
+      await completeScan(
+        degradedScan,
+        [networkFinding],
+        scannerSummary("complete"),
+      );
+      await dispatchSuccessfully(degradedScan.scanId);
+
+      const partialScan = await createRunningScan(fixture);
+      await completeScan(partialScan, [], scannerSummary("partial"));
+
+      const partialRecoveries = await db
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(
+          and(
+            eq(notificationDeliveries.scanId, partialScan.scanId),
+            eq(notificationDeliveries.kind, "scan-recovery"),
+          ),
+        );
+      expect(partialRecoveries).toHaveLength(0);
+
+      const completeScanContext = await createRunningScan(fixture);
+      await completeScan(completeScanContext, [], scannerSummary("complete"));
+      const confirmedRecoveries = await db
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(
+          and(
+            eq(notificationDeliveries.scanId, completeScanContext.scanId),
+            eq(notificationDeliveries.kind, "scan-recovery"),
+          ),
+        );
+      expect(confirmedRecoveries).toHaveLength(1);
     } finally {
       await cleanup(fixture);
     }

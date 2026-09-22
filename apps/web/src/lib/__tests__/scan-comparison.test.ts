@@ -50,6 +50,50 @@ describe("scan finding comparison", () => {
     expect(comparison.resolvedFindings).toEqual([finding("gone", "critical")]);
   });
 
+  it("treats missing scanner-v2 findings as unknown unless both analyzers were complete", () => {
+    const networkFinding: ComparableFinding = {
+      fingerprint: "network",
+      severity: "high",
+      code: "network.http-5xx",
+      title: "Network failure",
+      pageUrl: "https://example.com/app.js",
+    };
+    const complete = {
+      scannerV2: {
+        completeness: {
+          network: { status: "complete" },
+        },
+      },
+    };
+    const partial = {
+      scannerV2: {
+        completeness: {
+          network: { status: "partial" },
+        },
+      },
+    };
+
+    const partialRecovery = compareScanFindings([], [networkFinding], {
+      current: partial,
+      previous: complete,
+    });
+    expect(partialRecovery.counts.resolved).toBe(0);
+    expect(partialRecovery.resolvedFindings).toEqual([]);
+
+    const legacyBaseline = compareScanFindings([networkFinding], [], {
+      current: complete,
+      previous: {},
+    });
+    expect(legacyBaseline.counts.new).toBe(0);
+    expect(legacyBaseline.changesByFingerprint).toEqual({});
+
+    const confirmedRecovery = compareScanFindings([], [networkFinding], {
+      current: complete,
+      previous: complete,
+    });
+    expect(confirmedRecovery.counts.resolved).toBe(1);
+  });
+
   it("treats an empty current scan as all previous findings resolved", () => {
     const comparison = compareScanFindings(
       [],
