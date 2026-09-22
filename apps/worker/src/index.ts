@@ -2,14 +2,12 @@ import { config } from "dotenv";
 import { Worker } from "bullmq";
 import pino from "pino";
 import { z } from "zod";
-import {
-  SCAN_QUEUE_NAME,
-  ScanJobSchema,
-  type ScanJob,
-} from "@agency-saas/contracts";
-import { probeHttpTarget } from "./http-probe.js";
+import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
+import { closeDatabase, getDatabase } from "./database.js";
+import { processScanJob } from "./scan-processor.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
+void getDatabase();
 
 const logger = pino({ name: "scanner-worker" });
 const redisUrl = new URL(z.string().url().parse(process.env.REDIS_URL));
@@ -25,27 +23,22 @@ const connection = {
 const worker = new Worker<ScanJob>(
   SCAN_QUEUE_NAME,
   async (job) => {
-    const payload = ScanJobSchema.parse(job.data);
-    const httpProbe = await probeHttpTarget(payload.targetUrl);
+    const result = await processScanJob(job.data);
 
     logger.info(
       {
         jobId: job.id,
-        scanId: payload.scanId,
-        ok: httpProbe.ok,
-        statusCode: httpProbe.ok ? httpProbe.statusCode : undefined,
-        failureKind: httpProbe.ok ? undefined : httpProbe.error.kind,
-        redirects: httpProbe.redirects.length,
+        scanId: result.scanId,
+        status: result.status,
+        statusCode: result.http.ok ? result.http.statusCode : undefined,
+        failureKind: result.http.ok ? undefined : result.http.error.kind,
+        redirects: result.http.redirects.length,
+        findings: result.findings.length,
       },
-      "HTTP probe completed",
+      "scan completed",
     );
 
-    return {
-      scanId: payload.scanId,
-      completedAt: new Date().toISOString(),
-      targetUrl: payload.targetUrl,
-      http: httpProbe,
-    };
+    return result;
   },
   { connection, concurrency: 2 },
 );
@@ -55,12 +48,23 @@ worker.on("completed", (job) => {
 });
 
 worker.on("failed", (job, error) => {
-  logger.error({ jobId: job?.id, error }, "scan job failed");
+  const errorCode =
+    "code" in error && typeof error.code === "string" ? error.code : undefined;
+
+  logger.error(
+    {
+      jobId: job?.id,
+      errorName: error.name,
+      errorCode,
+    },
+    "scan job failed",
+  );
 });
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   await worker.close();
+  await closeDatabase();
   process.exitCode = 0;
 }
 

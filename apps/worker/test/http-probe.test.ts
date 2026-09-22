@@ -75,16 +75,20 @@ describe("probeHttpTarget", () => {
     ).toMatchObject({ expected: true, present: true });
   });
 
-  it("revalidates every redirect before requesting it", async () => {
+  it("revalidates redirects while redacting query strings from results", async () => {
     const requestedHosts: string[] = [];
+    const requestedUrls: string[] = [];
     const requester: HttpRequester = async (target) => {
       requestedHosts.push(target.hostname);
+      requestedUrls.push(target.url.toString());
       if (target.hostname === "example.com") {
         return {
           statusCode: 302,
           durationMs: 10,
           tls: null,
-          headers: { location: "https://redirect.example/final" },
+          headers: {
+            location: "https://redirect.example/final?token=secret#fragment",
+          },
         };
       }
       return {
@@ -101,6 +105,7 @@ describe("probeHttpTarget", () => {
     });
 
     expect(requestedHosts).toEqual(["example.com", "redirect.example"]);
+    expect(requestedUrls[1]).toContain("?token=secret");
     expect(result).toMatchObject({
       ok: true,
       finalUrl: "https://redirect.example/final",
@@ -113,6 +118,7 @@ describe("probeHttpTarget", () => {
         },
       ],
     });
+    expect(JSON.stringify(result)).not.toContain("token=secret");
   });
   it("rejects an unsafe redirect before a second connection", async () => {
     let requestCount = 0;
