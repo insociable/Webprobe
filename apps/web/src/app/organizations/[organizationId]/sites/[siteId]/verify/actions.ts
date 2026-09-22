@@ -17,7 +17,7 @@ export type VerificationActionState = {
   expiresAt: string | null;
 };
 
-export const initialVerificationActionState: VerificationActionState = {
+const initialVerificationActionState: VerificationActionState = {
   error: null,
   token: null,
   recordName: null,

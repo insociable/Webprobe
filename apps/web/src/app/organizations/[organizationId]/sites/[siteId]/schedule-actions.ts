@@ -18,7 +18,7 @@ export type ScanScheduleActionState = {
   message: string | null;
 };
 
-export const initialScanScheduleActionState: ScanScheduleActionState = {
+const initialScanScheduleActionState: ScanScheduleActionState = {
   error: null,
   message: null,
 };

@@ -14,11 +14,10 @@ export type ScanAlertPreferenceActionState = {
   message: string | null;
 };
 
-export const initialScanAlertPreferenceActionState: ScanAlertPreferenceActionState =
-  {
-    error: null,
-    message: null,
-  };
+const initialScanAlertPreferenceActionState: ScanAlertPreferenceActionState = {
+  error: null,
+  message: null,
+};
 
 export async function updateScanAlertPreferencesAction(
   organizationId: string,

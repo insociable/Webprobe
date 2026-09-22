@@ -1,10 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  initialScanScheduleActionState,
-  updateScanScheduleAction,
-} from "./schedule-actions";
+import { updateScanScheduleAction } from "./schedule-actions";
+import type { ScanScheduleActionState } from "./schedule-actions";
+
+const initialScanScheduleActionState: ScanScheduleActionState = {
+  error: null,
+  message: null,
+};
 
 type ScheduleView = {
   enabled: boolean;

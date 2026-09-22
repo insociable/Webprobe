@@ -1,10 +1,13 @@
 "use client";
 
 import { useActionState } from "react";
-import {
-  initialScanAlertPreferenceActionState,
-  updateScanAlertPreferencesAction,
-} from "./alert-preference-actions";
+import { updateScanAlertPreferencesAction } from "./alert-preference-actions";
+import type { ScanAlertPreferenceActionState } from "./alert-preference-actions";
+
+const initialScanAlertPreferenceActionState: ScanAlertPreferenceActionState = {
+  error: null,
+  message: null,
+};
 
 type AlertPreferencePanelProps = {
   organizationId: string;

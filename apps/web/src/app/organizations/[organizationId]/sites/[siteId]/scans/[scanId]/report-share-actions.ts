@@ -20,11 +20,6 @@ export type ReportShareActionState = {
   message: string | null;
 };
 
-export const initialReportShareActionState: ReportShareActionState = {
-  error: null,
-  message: null,
-};
-
 function validScope(
   organizationId: string,
   siteId: string,

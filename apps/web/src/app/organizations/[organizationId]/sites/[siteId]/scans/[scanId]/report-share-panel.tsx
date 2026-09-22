@@ -3,10 +3,15 @@
 import { useActionState } from "react";
 import {
   createReportShareAction,
-  initialReportShareActionState,
   revokeReportShareAction,
   sendReportEmailAction,
 } from "./report-share-actions";
+import type { ReportShareActionState } from "./report-share-actions";
+
+const initialReportShareActionState: ReportShareActionState = {
+  error: null,
+  message: null,
+};
 
 type ActiveShare = {
   id: string;
