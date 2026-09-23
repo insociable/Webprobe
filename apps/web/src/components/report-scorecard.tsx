@@ -76,6 +76,7 @@ function CategoryRow({
       <div className="sm:text-center">
         {category.grade ? (
           <span
+            data-grade={category.grade}
             className={
               "inline-flex size-9 items-center justify-center rounded-md border text-sm font-bold " +
               gradeStyles[category.grade]
@@ -164,6 +165,7 @@ export function ReportScorecard({
           <div className="mt-5 flex items-center gap-3">
             {scorecard.grade ? (
               <span
+                data-grade={scorecard.grade}
                 className={
                   "inline-flex size-11 items-center justify-center rounded-md border text-lg font-bold " +
                   gradeStyles[scorecard.grade]

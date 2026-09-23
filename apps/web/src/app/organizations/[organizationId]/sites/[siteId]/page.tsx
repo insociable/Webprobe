@@ -197,9 +197,7 @@ export default async function SitePage({
             </Link>
           ) : null}
 
-          {history.site.status === "pending_verification" &&
-          canManage &&
-          !activeScan ? (
+          {history.site.status === "pending_verification" && canManage ? (
             <Link
               href={
                 "/organizations/" +
@@ -225,7 +223,7 @@ export default async function SitePage({
             />
           ) : null}
 
-          {monitoringState.key === "inactive" && canManage && !activeScan ? (
+          {monitoringState.key === "inactive" && canManage ? (
             <a href="#monitoring-planning" className="am-button-secondary">
               Activer le monitoring
             </a>

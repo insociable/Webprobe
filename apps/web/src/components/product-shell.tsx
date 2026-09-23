@@ -104,6 +104,13 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
             </div>
           </div>
         </header>
+        <nav aria-label="Navigation mobile" className="am-mobile-nav lg:hidden">
+          {navigation.map((item) => (
+            <Link key={item.href} href={item.href}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
         <main className="am-content">{children}</main>
       </div>
     </div>

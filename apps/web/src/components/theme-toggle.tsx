@@ -19,7 +19,11 @@ function subscribe(onStoreChange: () => void) {
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.colorScheme = theme;
-  window.localStorage.setItem(STORAGE_KEY, theme);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    // The current page can still switch when browser storage is unavailable.
+  }
   window.dispatchEvent(new CustomEvent(EVENT_NAME));
 }
 
