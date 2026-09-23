@@ -28,10 +28,14 @@ l'environnement réellement déployé.
   stockage des captures, backlog et durée des scans. Le proxy ferme maintenant
   les réponses HTTP et tunnels CONNECT au délai/volume prévu ; les captures
   réseau optionnelles ne bloquent pas indéfiniment la fin d'un scan.
-- Les demandes manuelles sont limitées à 3 scans par site/heure et 30 par
-  organisation/24 h. Les rapports sont limités à 20 liens actifs par scan,
-  30 e-mails par organisation/24 h, 3 par destinataire/24 h et 20 en attente.
-  Ces quotas sont transactionnels et partagés entre instances web.
+- Les demandes manuelles de monitoring sont limitées à 3 scans par site/heure
+  et 30 par organisation/24 h. Le Public Audit est limité par défaut à 6 demandes
+  par utilisateur/heure, 2 audits simultanés par utilisateur et un cooldown de
+  10 minutes par hostname ; ces trois valeurs sont configurables avec les
+  variables `PUBLIC_AUDIT_*`. Les rapports sont limités à 20 liens actifs par
+  scan, 30 e-mails par organisation/24 h, 3 par destinataire/24 h et 20 en
+  attente. Les quotas d'audit sont transactionnels et partagés entre instances
+  web.
 
 ## Données, reprise et retour arrière
 
@@ -41,10 +45,12 @@ l'environnement réellement déployé.
 - Définir la persistance et la reprise de Valkey selon la politique de perte
   acceptée. Valider la reprise outbox/worker après arrêt brutal, sans doublon
   d'e-mail ou de scan exécuté simultanément.
-- Approuver une durée de conservation des scans et captures avant production.
-  Le pilote ne supprime pas encore automatiquement les scans ni les captures :
-  une purge ne doit pas être activée sans politique de sauvegarde et procédure
-  de restauration.
+- Le Public Audit applique par défaut une conservation de 90 jours aux scans
+  terminés et à leurs captures. Valider `PUBLIC_AUDIT_RETENTION_DAYS` selon la
+  politique de données retenue avant production ; les scans de monitoring ne
+  sont pas purgés par ce mécanisme. Vérifier que les sauvegardes et procédures de
+  restauration sont cohérentes avec cette durée. Les audits ayant encore un lien
+  partagé actif sont temporairement exclus de la purge.
 - Préparer un retour arrière applicatif compatible avec les migrations déjà
   appliquées ; ne jamais supprimer une migration ou des données en urgence sans
   sauvegarde restaurable. Faire un exercice de redéploiement web/worker.
