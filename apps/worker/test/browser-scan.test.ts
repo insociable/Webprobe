@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { DnsResolver } from "@agency-saas/security";
 import type { BrowserContext, Page, Response } from "playwright";
-import type { IsolatedBrowserSession } from "../src/browser-runtime.js";
+import type {
+  BrowserRuntimeOptions,
+  IsolatedBrowserSession,
+} from "../src/browser-runtime.js";
 import { normalizeInternalLink, runBrowserScan } from "../src/browser-scan.js";
 
 const publicResolver: DnsResolver = async () => [
@@ -197,13 +200,7 @@ describe("browser crawl", () => {
       addInitScript: async () => undefined,
       evaluate: async (_expression: unknown, argument?: string) => {
         if (argument?.endsWith("/robots.txt")) {
-          return {
-            status: 200,
-            finalUrl: "https://example.com/robots.txt",
-            text: ["User-agent: AgencyMonitor", "Disallow: /private"].join(
-              "\n",
-            ),
-          };
+          throw new Error("robots.txt must not use page JavaScript");
         }
         return null;
       },
@@ -231,6 +228,13 @@ describe("browser crawl", () => {
       scanMode: "public_audit",
       maxPages: 3,
       checkAccessibility: false,
+      loadRobotsPolicy: async () => ({
+        policy: {
+          rules: [{ directive: "disallow", pattern: "/private" }],
+          sitemaps: [],
+        },
+        unavailable: false,
+      }),
       createSession: async () =>
         ({
           browser: {},
@@ -257,6 +261,238 @@ describe("browser crawl", () => {
       ]),
     });
     expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+  });
+
+  it("blocks an initially robots-disallowed public audit target before Chromium starts", async () => {
+    let sessionCreated = false;
+    const result = await runBrowserScan("https://example.com/private", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      loadRobotsPolicy: async () => ({
+        policy: {
+          rules: [{ directive: "disallow", pattern: "/private" }],
+          sitemaps: [],
+        },
+        unavailable: false,
+      }),
+      createSession: async () => {
+        sessionCreated = true;
+        throw new Error("Chromium must not start");
+      },
+    });
+
+    expect(sessionCreated).toBe(false);
+    expect(result.pagesVisited).toBe(0);
+    expect(result.scannerV2.crawl).toMatchObject({
+      robotsRestricted: true,
+      robotsPolicyUnavailable: false,
+    });
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+  });
+
+  it("uses the configured browser User-Agent token for robots evaluation", async () => {
+    const previous = process.env.AGENCY_MONITOR_USER_AGENT;
+    process.env.AGENCY_MONITOR_USER_AGENT = "AgencyCrawler/9.9";
+    let observedUserAgent = "";
+
+    try {
+      const result = await runBrowserScan("https://example.com/private", {
+        resolver: publicResolver,
+        scanMode: "public_audit",
+        loadRobotsPolicy: async (_origin, _deadline, userAgent) => {
+          observedUserAgent = userAgent;
+          return {
+            policy: {
+              rules: [{ directive: "disallow", pattern: "/private" }],
+              sitemaps: [],
+            },
+            unavailable: false,
+          };
+        },
+      });
+
+      expect(result.pagesVisited).toBe(0);
+      expect(observedUserAgent).toBe("AgencyCrawler/9.9");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENCY_MONITOR_USER_AGENT;
+      } else {
+        process.env.AGENCY_MONITOR_USER_AGENT = previous;
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: "robots-disallowed",
+      redirectUrl: "https://example.com/private",
+      disallowPrivate: true,
+      robotsRestricted: true,
+    },
+    {
+      name: "third-party",
+      redirectUrl: "https://outside.example/landing",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+    {
+      name: "private-address",
+      redirectUrl: "https://127.0.0.1/private",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+    {
+      name: "https-downgrade",
+      redirectUrl: "http://example.com/private",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+  ])(
+    "blocks $name document redirect before the redirected request is emitted",
+    async ({ redirectUrl, disallowPrivate, robotsRestricted }) => {
+      let currentUrl = "about:blank";
+      const loadedOrigins: string[] = [];
+
+      const result = await runBrowserScan("https://example.com/go", {
+        resolver: publicResolver,
+        scanMode: "public_audit",
+        checkAccessibility: false,
+        loadRobotsPolicy: async (origin) => {
+          loadedOrigins.push(origin);
+          return {
+            policy: {
+              rules: disallowPrivate
+                ? [{ directive: "disallow" as const, pattern: "/private" }]
+                : [],
+              sitemaps: [],
+            },
+            unavailable: false,
+          };
+        },
+        createSession: async (sessionOptions: BrowserRuntimeOptions) => {
+          const policy = sessionOptions.requestPolicy;
+          if (!policy) throw new Error("Expected public audit request policy");
+          const fakePage = {
+            on: () => fakePage,
+            goto: async (url: string) => {
+              const initialAllowed = await policy({
+                url,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: null,
+              });
+              expect(initialAllowed).toBe(true);
+
+              const redirectAllowed = await policy({
+                url: redirectUrl,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: url,
+              });
+              expect(redirectAllowed).toBe(false);
+              throw new Error("blocked by public audit request policy");
+            },
+            url: () => currentUrl,
+          } as unknown as Page;
+
+          return {
+            browser: {} as IsolatedBrowserSession["browser"],
+            context: {
+              newPage: async () => fakePage,
+            } as unknown as BrowserContext,
+            proxy: {} as IsolatedBrowserSession["proxy"],
+            pageCount: () => 1,
+            close: async () => undefined,
+          };
+        },
+      });
+
+      expect(currentUrl).toBe("about:blank");
+      expect(result.pagesVisited).toBe(0);
+      expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+      expect(result.scannerV2.crawl.robotsRestricted).toBe(robotsRestricted);
+      expect(loadedOrigins[0]).toBe("https://example.com");
+      if (!redirectUrl.startsWith("https://www.example.com")) {
+        expect(loadedOrigins).toEqual(["https://example.com"]);
+      }
+    },
+  );
+
+  it("allows a conservative www canonical redirect only after loading its robots policy", async () => {
+    let currentUrl = "about:blank";
+    const loadedOrigins: string[] = [];
+    const seenUserAgents: string[] = [];
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 1,
+      checkAccessibility: false,
+      loadRobotsPolicy: async (origin, _deadline, userAgent) => {
+        loadedOrigins.push(origin);
+        seenUserAgents.push(userAgent);
+        return {
+          policy: { rules: [], sitemaps: [] },
+          unavailable: false,
+        };
+      },
+      createSession: async (sessionOptions: BrowserRuntimeOptions) => {
+        const policy = sessionOptions.requestPolicy;
+        if (!policy) throw new Error("Expected public audit request policy");
+        const fakePage = {
+          on: () => fakePage,
+          addInitScript: async () => undefined,
+          evaluate: async () => null,
+          goto: async (url: string) => {
+            expect(
+              await policy({
+                url,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: null,
+              }),
+            ).toBe(true);
+            const redirected = "https://www.example.com/";
+            expect(
+              await policy({
+                url: redirected,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: url,
+              }),
+            ).toBe(true);
+            currentUrl = redirected;
+            return { status: () => 200 } as unknown as Response;
+          },
+          url: () => currentUrl,
+          waitForTimeout: async () => undefined,
+          locator: () => ({ evaluateAll: async () => [] }),
+        } as unknown as Page;
+
+        return {
+          browser: {} as IsolatedBrowserSession["browser"],
+          context: {
+            newPage: async () => fakePage,
+          } as unknown as BrowserContext,
+          proxy: {} as IsolatedBrowserSession["proxy"],
+          pageCount: () => 1,
+          close: async () => undefined,
+        };
+      },
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://www.example.com/",
+    ]);
+    expect(loadedOrigins).toEqual([
+      "https://example.com",
+      "https://www.example.com",
+    ]);
+    expect(seenUserAgents).toEqual(["AgencyMonitor/1.0", "AgencyMonitor/1.0"]);
   });
 
   it("adopts only a conservative validated initial canonical redirect", async () => {
