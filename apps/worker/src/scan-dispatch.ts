@@ -3,6 +3,7 @@ import { scanDispatches, scanSchedules, scans, sites } from "@agency-saas/db";
 import { and, asc, eq, isNotNull, lte, or } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
+import type { ScanMode } from "./scan-engine/types.js";
 
 export type ScanDispatchEnqueuer = (payload: ScanJob) => Promise<void>;
 export type ScanJobPresenceChecker = (scanId: string) => Promise<boolean>;
@@ -11,7 +12,7 @@ export type ClaimedScanDispatch = {
   scanId: string;
   organizationId: string;
   siteId: string;
-  scanMode: "public_audit" | "verified_monitoring";
+  scanMode: ScanMode;
   targetUrl: string;
   attemptCount: number;
 };
@@ -137,8 +138,9 @@ export async function claimDueScanDispatches(
           : row.siteStatus !== "pending_verification" &&
             row.siteStatus !== "active";
       const invalidMode =
-        row.scanTrigger === "scheduled" &&
-        row.scanMode !== "verified_monitoring";
+        row.scanMode === "verified_deep_audit" ||
+        (row.scanTrigger === "scheduled" &&
+          row.scanMode !== "verified_monitoring");
 
       if (invalidSite || invalidMode || invalidSchedule) {
         await tx
@@ -147,7 +149,12 @@ export async function claimDueScanDispatches(
             status: "cancelled",
             completedAt: now,
             summary: {
-              cancellation: { code: "scan-context-invalid-before-dispatch" },
+              cancellation: {
+                code:
+                  row.scanMode === "verified_deep_audit"
+                    ? "deep-engine-unavailable"
+                    : "scan-context-invalid-before-dispatch",
+              },
             },
           })
           .where(and(eq(scans.id, row.scanId), eq(scans.status, "queued")));

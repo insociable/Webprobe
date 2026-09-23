@@ -32,6 +32,7 @@ export const scanTrigger = pgEnum("scan_trigger", ["manual", "scheduled"]);
 export const scanMode = pgEnum("scan_mode", [
   "public_audit",
   "verified_monitoring",
+  "verified_deep_audit",
 ]);
 
 export const scanDispatchStatus = pgEnum("scan_dispatch_status", [
@@ -274,6 +275,29 @@ export const siteVerificationChallenges = pgTable(
   ],
 );
 
+export const deepAuditAuthorizations = pgTable(
+  "deep_audit_authorizations",
+  {
+    siteId: uuid("site_id")
+      .primaryKey()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    proofType: text("proof_type").notNull(),
+    proofVerifiedAt: timestamp("proof_verified_at", {
+      withTimezone: true,
+    }).notNull(),
+    revalidatedAt: timestamp("revalidated_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    check("deep_audit_proof_type_dns", sql`${table.proofType} = 'dns_txt'`),
+    check(
+      "deep_audit_expiry_after_proof",
+      sql`${table.expiresAt} > ${table.proofVerifiedAt}`,
+    ),
+  ],
+);
+
 export const scanSchedules = pgTable(
   "scan_schedules",
   {
@@ -372,6 +396,38 @@ export const scans = pgTable(
     check(
       "scans_mode_trigger_consistent",
       sql`${table.scanMode} = 'verified_monitoring' or ${table.trigger} = 'manual'`,
+    ),
+  ],
+);
+
+export const scanCheckRuns = pgTable(
+  "scan_check_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    checkId: text("check_id").notNull(),
+    checkVersion: text("check_version").notNull(),
+    status: text("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    durationMs: integer("duration_ms"),
+    budgetUsed: jsonb("budget_used")
+      .$type<Record<string, number>>()
+      .default({})
+      .notNull(),
+    skipReason: text("skip_reason"),
+  },
+  (table) => [
+    index("scan_check_runs_scan_idx").on(table.scanId),
+    check(
+      "scan_check_runs_status_valid",
+      sql`${table.status} in ('completed', 'skipped', 'failed')`,
+    ),
+    check(
+      "scan_check_runs_duration_nonnegative",
+      sql`${table.durationMs} is null or ${table.durationMs} >= 0`,
     ),
   ],
 );

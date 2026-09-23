@@ -24,6 +24,7 @@ import {
   detectScanDegradations,
   filterDegradationsByMinimumSeverity,
 } from "./scan-alerts.js";
+import type { ScanMode } from "./scan-engine/types.js";
 
 export class ScanContextError extends Error {
   constructor(
@@ -34,7 +35,8 @@ export class ScanContextError extends Error {
       | "site-not-active"
       | "schedule-not-active"
       | "scan-mode-not-allowed"
-      | "target-mismatch",
+      | "target-mismatch"
+      | "deep-engine-unavailable",
   ) {
     super(message);
     this.name = "ScanContextError";
@@ -46,7 +48,7 @@ export type ValidatedScanContext = {
   organizationId: string;
   siteId: string;
   trigger: "manual" | "scheduled";
-  scanMode: "public_audit" | "verified_monitoring";
+  scanMode: ScanMode;
   scheduleId: string | null;
   scheduledFor: Date | null;
   targetUrl: string;
@@ -138,6 +140,13 @@ export async function validateScanContext(
     )
   ) {
     throw new ScanContextError("Scan is not runnable", "scan-not-runnable");
+  }
+
+  if (row.scanMode === "verified_deep_audit") {
+    throw new ScanContextError(
+      "Verified Deep Audit is not executable until its guarded pipeline is enabled",
+      "deep-engine-unavailable",
+    );
   }
 
   if (

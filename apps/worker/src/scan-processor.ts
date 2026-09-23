@@ -15,6 +15,7 @@ import {
   type HttpProbeResult,
 } from "./http-probe.js";
 import { persistPrimaryScreenshot as defaultPersistPrimaryScreenshot } from "./scan-artifacts.js";
+import { resolveLegacyBrowserOptions } from "./scan-engine/profiles.js";
 import {
   generateScannerV2Findings,
   summarizeScannerV2,
@@ -56,6 +57,10 @@ export async function processScanJobAttempt(
 ): Promise<ScanExecutionResult> {
   const payload = ScanJobSchema.parse(jobData);
   const context = await validateScanContext(payload);
+  if (context.scanMode === "verified_deep_audit") {
+    // Deep jobs stay closed until the guarded transport and check pipeline are wired.
+    throw new Error("Verified Deep Audit engine is not available yet");
+  }
   const probeHttpTarget =
     dependencies.probeHttpTarget ?? defaultProbeHttpTarget;
   const runBrowserScan = dependencies.runBrowserScan ?? defaultRunBrowserScan;
@@ -69,18 +74,10 @@ export async function processScanJobAttempt(
   let browserScan: BrowserScanResult | null = null;
 
   if (httpProbe.ok && isHtmlDocument(httpProbe)) {
-    const publicAudit = context.scanMode === "public_audit";
-    browserScan = await runBrowserScan(context.targetUrl, {
-      scanMode: context.scanMode,
-      maxPages: publicAudit
-        ? Math.min(payload.profile.maxPages, 15)
-        : payload.profile.maxPages,
-      navigationTimeoutMs: publicAudit
-        ? Math.min(payload.profile.navigationTimeoutMs, 20_000)
-        : payload.profile.navigationTimeoutMs,
-      checkAccessibility: payload.profile.checkAccessibility,
-      captureScreenshot: payload.profile.captureScreenshots,
-    });
+    browserScan = await runBrowserScan(
+      context.targetUrl,
+      resolveLegacyBrowserOptions(context.scanMode, payload.profile),
+    );
   }
 
   const generatedFindings = [
