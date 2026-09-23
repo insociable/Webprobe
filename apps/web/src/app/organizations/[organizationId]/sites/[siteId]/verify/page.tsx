@@ -61,29 +61,22 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
   }
 
   const session = await requireCurrentSession();
-  const { access, state } = await loadVerificationPageData(
+  const { state } = await loadVerificationPageData(
     session.user.id,
     organizationId,
     siteId,
   );
 
   if (state.site.status === "active" && state.site.verifiedAt) {
-    redirect("/organizations/" + organizationId);
+    redirect("/organizations/" + organizationId + "/sites/" + siteId);
   }
 
   return (
     <WorkspaceShell
-      trail={[
-        {
-          label: access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: state.site.name },
-        { label: "Vérification DNS" },
-      ]}
+      trail={[{ label: state.site.name }, { label: "Vérification DNS" }]}
     >
       <section className="max-w-4xl border-b border-[#242d40] pb-9">
-        <p className="am-kicker">Vérification du domaine</p>
+        <p className="am-kicker">Activer le monitoring</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
           {state.site.name}
         </h1>
@@ -91,9 +84,10 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           {state.site.canonicalUrl}
         </p>
         <p className="mt-5 max-w-2xl leading-7 text-[#8793a8]">
-          Ajoutez le TXT demandé dans la zone DNS. Agency Monitor reste
-          volontairement fail-closed : aucun scan n’est possible tant que le
-          challenge attendu n’est pas retrouvé.
+          Ajoutez le TXT demandé dans la zone DNS pour prouver le contrôle du
+          domaine. Les audits publics restent possibles sans cette étape, mais
+          le monitoring planifié, les alertes et les automatisations restent
+          désactivés tant que le challenge n’est pas validé.
         </p>
       </section>
 
@@ -102,7 +96,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           {[
             ["01", "Générer", "Obtenir le secret TXT"],
             ["02", "Publier", "Ajouter le TXT au DNS"],
-            ["03", "Vérifier", "Activer la supervision"],
+            ["03", "Vérifier", "Activer le monitoring"],
           ].map(([number, title, detail]) => (
             <div key={number} className="am-panel-soft p-4">
               <p className="font-mono text-[10px] text-[#6d7cff]">{number}</p>
@@ -111,6 +105,44 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
             </div>
           ))}
         </div>
+
+        <section className="mb-8">
+          <p className="am-kicker">Après vérification</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            Ce que le contrôle du domaine débloque
+          </h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              [
+                "Monitoring continu",
+                "Scans de monitoring manuels et planning hebdomadaire sur le domaine vérifié.",
+              ],
+              [
+                "Alertes",
+                "Notifications sur les incidents et rétablissements observés par le monitoring.",
+              ],
+              [
+                "Partage de rapports",
+                "Liens temporaires et envoi de rapports lorsque le domaine a été vérifié.",
+              ],
+              [
+                "Historique distinct",
+                "Les audits publics passés restent visibles selon la politique de rétention et leurs comparaisons restent séparées du monitoring.",
+              ],
+            ].map(([title, detail]) => (
+              <article key={title} className="am-panel-soft p-5">
+                <h3 className="font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#7f8a9f]">
+                  {detail}
+                </p>
+              </article>
+            ))}
+          </div>
+          <p className="mt-4 border-l-2 border-[#40506d] pl-4 text-xs leading-5 text-[#68758c]">
+            La vérification n’altère pas les audits déjà réalisés : elle
+            autorise les futurs scans de monitoring et leurs propres baselines.
+          </p>
+        </section>
 
         <VerificationPanel
           organizationId={organizationId}

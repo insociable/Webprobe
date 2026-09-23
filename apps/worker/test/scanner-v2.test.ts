@@ -12,7 +12,10 @@ import {
   parseRobotsTxt,
   parseSitemapXml,
 } from "../src/scanner-v2/seo.js";
-import { observeUrl } from "../src/scanner-v2/url.js";
+import {
+  isAllowedCanonicalOriginShift,
+  observeUrl,
+} from "../src/scanner-v2/url.js";
 import {
   crawlFixture,
   networkFixture,
@@ -22,6 +25,56 @@ import {
 } from "./fixtures/scanner-v2.js";
 
 describe("scanner v2 crawl coverage", () => {
+  it("allows only conservative canonical origin shifts", () => {
+    expect(
+      isAllowedCanonicalOriginShift(
+        "http://example.com/",
+        "https://www.example.com/",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedCanonicalOriginShift(
+        "https://www.example.com/",
+        "https://example.com/",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedCanonicalOriginShift(
+        "https://example.com/",
+        "https://unrelated-third-party.com/",
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedCanonicalOriginShift(
+        "https://example.com:8443/",
+        "https://example.com:9443/",
+      ),
+    ).toBe(false);
+  });
+
+  it("records robots exclusions as a partial crawl constraint", () => {
+    const tracker = new CrawlCoverageTracker(3);
+    const candidate = classifyCrawlCandidate(
+      "/private",
+      "https://example.com/",
+      "https://example.com",
+    );
+    if (!candidate.accepted) throw new Error("candidate must be accepted");
+
+    tracker.markRobotsDisallowed(candidate.candidate, "https://example.com/");
+    expect(tracker.coverage()).toMatchObject({
+      robotsRestricted: true,
+      robotsPolicyUnavailable: false,
+      unvisitedUrlCount: 1,
+      urls: [
+        expect.objectContaining({
+          exclusionReason: "robots-disallowed",
+          state: "not-visited",
+        }),
+      ],
+    });
+  });
+
   it("removes query strings from retained URLs while keeping a distinct identity", () => {
     expect(
       observeUrl("https://example.com/search?page=2&token=secret#top"),

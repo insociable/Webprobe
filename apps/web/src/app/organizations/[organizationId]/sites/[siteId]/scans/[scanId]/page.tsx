@@ -9,10 +9,21 @@ import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
+import {
+  getFindingBusinessContext,
+  getFindingDisplayTitle,
+  getPriorityFindings,
+  summarizeReportFindings,
+  summarizeReportSections,
+} from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
+import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
+import { PrintReportButton } from "@/components/print-report-button";
+import { ReportAffectedPages } from "@/components/report-affected-pages";
+import { ReportActionPlan } from "@/components/report-action-plan";
 import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
@@ -230,10 +241,28 @@ export default async function ScanPage({ params }: ScanPageProps) {
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(orderedFindings);
+  const distinctFindings = findingGroups.map((group) => group.primary);
+  const reportSummary = summarizeReportFindings(distinctFindings);
+  const sectionSummaries = summarizeReportSections(distinctFindings);
+  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
+  const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
+  const analysisCoverage = scannerV2QualityState
+    ? Object.values(scannerV2QualityState).every(
+        (status) => status === "complete",
+      )
+      ? "Complète"
+      : "Partielle"
+    : "Non mesurée";
+  const isUnverifiedPublicAudit =
+    details.scan.scanMode === "public_audit" &&
+    (details.site.status !== "active" || !details.site.verifiedAt);
+  const canShareReport = !isUnverifiedPublicAudit;
   const activeShares =
-    details.scan.status === "completed" && details.access.role !== "member"
+    details.scan.status === "completed" &&
+    details.access.role !== "member" &&
+    canShareReport
       ? await listActiveReportShares(
           session.user.id,
           organizationId,
@@ -249,31 +278,76 @@ export default async function ScanPage({ params }: ScanPageProps) {
           label: details.site.name,
           href: "/organizations/" + organizationId + "/sites/" + siteId,
         },
-        { label: "Rapport de scan" },
+        {
+          label:
+            details.scan.scanMode === "public_audit"
+              ? "Audit public"
+              : "Monitoring vérifié",
+        },
       ]}
     >
       <ScanStatusRefresher active={pending} />
 
+      <div className="print-only am-print-brand" aria-hidden="true">
+        <div>
+          <strong>Agency Monitor</strong>
+          <span>Rapport d’audit technique</span>
+        </div>
+        <div className="am-print-brand-meta">
+          <span>
+            {details.scan.scanMode === "public_audit"
+              ? "Audit public"
+              : "Monitoring vérifié"}
+          </span>
+          <span>{formatDate(details.scan.completedAt)}</span>
+        </div>
+      </div>
+
       <section className="border-b border-[#242d40] pb-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="am-kicker">Résultat du scan</p>
+            <p className="am-kicker">
+              {details.scan.scanMode === "public_audit"
+                ? "Audit public"
+                : "Monitoring vérifié"}
+            </p>
             <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
               {details.site.name}
             </h1>
             <p className="mt-3 break-all text-white/45">
               {details.site.canonicalUrl}
             </p>
-          </div>
-          <span className="inline-flex items-center gap-2 rounded-md border border-[#33405a] bg-[#101622] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#aeb8ca]">
-            {pending ? (
-              <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+            {isUnverifiedPublicAudit && details.access.role !== "member" ? (
+              <Link
+                href={`/organizations/${organizationId}/sites/${siteId}/verify`}
+                className="am-button-secondary no-print mt-5 inline-flex"
+              >
+                Activer le monitoring
+              </Link>
             ) : null}
-            {scanStatusLabels[details.scan.status]}
-          </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {details.scan.status === "completed" ? <PrintReportButton /> : null}
+            <span className="inline-flex items-center gap-2 rounded-md border border-[#33405a] bg-[#101622] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#aeb8ca]">
+              {pending ? (
+                <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+              ) : null}
+              {scanStatusLabels[details.scan.status]}
+            </span>
+          </div>
         </div>
 
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="am-panel-soft p-4">
+            <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
+              Mode
+            </dt>
+            <dd className="mt-2 text-sm">
+              {details.scan.scanMode === "public_audit"
+                ? "Audit public"
+                : "Monitoring vérifié"}
+            </dd>
+          </div>
           <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Déclenchement
@@ -321,33 +395,260 @@ export default async function ScanPage({ params }: ScanPageProps) {
               </p>
             </div>
             <p className="mt-2 text-sm leading-6 text-white/50">
-              La page se met à jour automatiquement toutes les quelques
-              secondes. Le rapport apparaîtra ici dès que l’analyse sera
-              terminée.
+              {details.scan.status === "queued"
+                ? "Étape 1 sur 3 · le scan attend un worker disponible. Aucun trafic vers la cible n’est encore nécessaire."
+                : "Étape 2 sur 3 · navigation bornée, collecte et analyses sont en cours. Le rapport sera généré à la fin de cette étape."}
             </p>
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-300/70" />
+              <div
+                className={
+                  "h-full animate-pulse rounded-full bg-sky-300/70 " +
+                  (details.scan.status === "queued" ? "w-1/3" : "w-2/3")
+                }
+              />
+            </div>
+            <div className="mt-2 flex justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-white/30">
+              <span>File</span>
+              <span>Collecte</span>
+              <span>Rapport</span>
             </div>
           </div>
         ) : null}
       </section>
 
+      {details.scan.scanMode === "public_audit" ? (
+        <section className="border-b border-[#242d40] py-8">
+          <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+              Portée de l’audit
+            </p>
+            <h2 className="mt-2 text-xl font-semibold">
+              Audit public passif et borné
+            </h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-white/50">
+              Agency Monitor observe uniquement des ressources accessibles
+              publiquement, respecte les limites de crawl et robots.txt et
+              n’effectue pas de pentest actif. Ce rapport décrit les signaux
+              effectivement observés ; il ne constitue pas une certification de
+              sécurité ni la preuve de l’absence de vulnérabilité.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <section className="border-b border-[#242d40] py-10">
+          <p className="am-kicker">Résumé exécutif</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            Les points à retenir
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
+            Vue synthétique destinée à prioriser les actions sans masquer les
+            limites de collecte du scan.
+          </p>
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Problèmes distincts
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold">
+                {reportSummary.total}
+              </dd>
+            </div>
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Occurrences
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold">
+                {orderedFindings.length}
+              </dd>
+            </div>
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Hauts / critiques
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold">
+                {reportSummary.highOrCritical}
+              </dd>
+            </div>
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Pages observées
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold">
+                {details.scan.pageCount}
+              </dd>
+            </div>
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Couverture
+              </dt>
+              <dd className="mt-2 text-lg font-semibold">{analysisCoverage}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+
+      {details.scan.status === "completed" && priorityFindings.length > 0 ? (
+        <section className="border-b border-[#242d40] py-10">
+          <p className="am-kicker">Priorités</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            À traiter en premier
+          </h2>
+          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+            {priorityFindings.map((finding, index) => {
+              const businessContext = getFindingBusinessContext(finding);
+              return (
+                <article
+                  key={`${finding.fingerprint}:priority`}
+                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="font-mono text-xs text-[#56627a]">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span
+                      data-severity={finding.severity}
+                      className={
+                        "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
+                        severityStyles[finding.severity]
+                      }
+                    >
+                      {severityLabels[finding.severity]}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 font-semibold">
+                    {getFindingDisplayTitle(finding)}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-white/50">
+                    {businessContext.impact}
+                  </p>
+                  <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
+                    <div>
+                      <dt className="text-white/30">Intervention</dt>
+                      <dd className="mt-1 text-white/65">
+                        {businessContext.intervention}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-white/30">Effort estimé</dt>
+                      <dd className="mt-1 text-white/65">
+                        {businessContext.effort}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      {details.scan.status === "completed" && sectionSummaries.length > 0 ? (
+        <section className="border-b border-[#242d40] py-10">
+          <p className="am-kicker">Analyse par domaine</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            Où concentrer l’attention
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
+            Les constats sont regroupés par domaine pour distinguer rapidement
+            sécurité, visibilité, performance et disponibilité.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {sectionSummaries.map((section) => (
+              <article
+                key={section.definition.key}
+                className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-semibold">{section.definition.label}</h3>
+                  {section.highestSeverity ? (
+                    <span
+                      data-severity={section.highestSeverity}
+                      className={
+                        "rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] " +
+                        severityStyles[section.highestSeverity]
+                      }
+                    >
+                      {severityLabels[section.highestSeverity]}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/45">
+                  {section.definition.description}
+                </p>
+                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
+                  <div>
+                    <dt className="text-white/30">Problèmes distincts</dt>
+                    <dd className="mt-1 text-lg font-semibold text-white/80">
+                      {section.total}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-white/30">Hauts / critiques</dt>
+                    <dd className="mt-1 text-lg font-semibold text-white/80">
+                      {section.highOrCritical}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {details.scan.status === "failed" ||
+      details.scan.status === "cancelled" ? (
+        <section className="border-b border-[#242d40] py-10">
+          <div className="border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
+            <p className="font-semibold text-amber-100">
+              {details.scan.status === "failed"
+                ? "Le scan n’a pas pu produire un rapport complet."
+                : "Le scan a été annulé avant la fin."}
+            </p>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-100/70">
+              Les données éventuellement collectées restent visibles ci-dessous,
+              mais elles ne doivent pas être interprétées comme une couverture
+              complète. Relancez le scan lorsque la cause de l’interruption est
+              résolue.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       {details.scan.status === "completed" &&
-      details.access.role !== "member" ? (
-        <ReportSharePanel
-          organizationId={organizationId}
-          siteId={siteId}
-          scanId={scanId}
-          shares={activeShares.map((share) => ({
-            ...share,
-            expiresAt: share.expiresAt.toISOString(),
-            createdAt: share.createdAt.toISOString(),
-          }))}
-        />
+      details.access.role !== "member" &&
+      canShareReport ? (
+        <div className="no-print">
+          <ReportSharePanel
+            organizationId={organizationId}
+            siteId={siteId}
+            scanId={scanId}
+            shares={activeShares.map((share) => ({
+              ...share,
+              expiresAt: share.expiresAt.toISOString(),
+              createdAt: share.createdAt.toISOString(),
+            }))}
+          />
+        </div>
+      ) : details.scan.status === "completed" &&
+        details.access.role !== "member" &&
+        isUnverifiedPublicAudit ? (
+        <section className="no-print border-b border-[#242d40] py-10">
+          <p className="text-sm text-white/45">Confidentialité</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            Rapport privé tant que le site n’est pas vérifié
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/45">
+            Cet audit reste visible uniquement dans votre organisation. La
+            création d’un lien public ou l’envoi par e-mail sera disponible
+            après activation du monitoring par vérification DNS.
+          </p>
+        </section>
       ) : null}
 
       {details.screenshotAvailable ? (
-        <section className="border-b border-white/10 py-10">
+        <section className="no-print border-b border-white/10 py-10">
           <p className="text-sm text-white/45">Capture visuelle</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">
             Aperçu de la page principale
@@ -377,6 +678,13 @@ export default async function ScanPage({ params }: ScanPageProps) {
             exploitables, mais que certaines observations n’ont pas pu être
             collectées. Cela ne transforme pas le scan en échec.
           </p>
+          {crawlLimitation ? (
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-200/70">
+              {crawlLimitation === "robots-restricted"
+                ? "Le fichier robots.txt limite volontairement les pages que l’audit public peut parcourir."
+                : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
+            </p>
+          ) : null}
           <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {(
               Object.entries(scannerV2QualityState) as Array<
@@ -436,11 +744,17 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
+      {details.scan.status === "completed" && findingGroups.length > 0 ? (
+        <ReportActionPlan groups={findingGroups} />
+      ) : null}
+
       <section className="py-10">
         <p className="text-sm text-white/45">Analyse</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
           {findingGroups.length} problème
-          {findingGroups.length > 1 ? "s" : ""}
+          {findingGroups.length > 1 ? "s" : ""} distinct
+          {findingGroups.length > 1 ? "s" : ""} · {orderedFindings.length}{" "}
+          occurrence{orderedFindings.length > 1 ? "s" : ""}
         </h2>
 
         {orderedFindings.length === 0 ? (
@@ -453,16 +767,17 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <div className="mt-6 space-y-4">
             {findingGroups.map((group) => {
               const finding = group.primary;
-              const grouped = group.findings.length > 1;
+              const grouped = group.occurrenceCount > 1;
               const evidence = grouped ? [] : visibleEvidence(finding.evidence);
               const remediation = getFindingRemediation(finding.code);
+              const businessContext = getFindingBusinessContext(finding);
               const change = grouped
                 ? null
                 : comparison?.changesByFingerprint[finding.fingerprint];
               return (
                 <article
                   key={group.key}
-                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
+                  className="report-finding-card rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
@@ -472,21 +787,13 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         · {finding.code}
                       </p>
                       <h3 className="mt-2 text-lg font-semibold">
-                        {finding.title}
+                        {getFindingDisplayTitle(finding)}
                       </h3>
                       {grouped ? (
-                        <div className="mt-3">
-                          <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
-                            {group.pageUrls.length} pages concernées
-                          </span>
-                          <ul className="mt-3 space-y-1.5 text-sm text-white/40">
-                            {group.pageUrls.map((pageUrl) => (
-                              <li key={pageUrl} className="break-all">
-                                {pageUrl}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                        <ReportAffectedPages
+                          occurrenceCount={group.occurrenceCount}
+                          pageUrls={group.pageUrls}
+                        />
                       ) : finding.pageUrl ? (
                         <p className="mt-2 break-all text-sm text-white/40">
                           {finding.pageUrl}
@@ -504,6 +811,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         </span>
                       ) : null}
                       <span
+                        data-severity={finding.severity}
                         className={
                           "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
                           severityStyles[finding.severity]
@@ -514,8 +822,31 @@ export default async function ScanPage({ params }: ScanPageProps) {
                     </div>
                   </div>
 
+                  <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr]">
+                    <div className="rounded-lg bg-black/15 px-4 py-3">
+                      <dt className="text-xs text-white/35">Impact concret</dt>
+                      <dd className="mt-1 text-sm leading-6 text-white/65">
+                        {businessContext.impact}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-black/15 px-4 py-3">
+                      <dt className="text-xs text-white/35">
+                        Type d’intervention
+                      </dt>
+                      <dd className="mt-1 text-sm text-white/70">
+                        {businessContext.intervention}
+                      </dd>
+                    </div>
+                    <div className="rounded-lg bg-black/15 px-4 py-3">
+                      <dt className="text-xs text-white/35">Effort estimé</dt>
+                      <dd className="mt-1 text-sm text-white/70">
+                        {businessContext.effort}
+                      </dd>
+                    </div>
+                  </dl>
+
                   {evidence.length > 0 ? (
-                    <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {evidence.map(([label, value]) => (
                         <div
                           key={label}
@@ -531,15 +862,21 @@ export default async function ScanPage({ params }: ScanPageProps) {
                   ) : null}
 
                   {remediation ? (
-                    <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                    <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
                       <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                         Comment corriger
                       </p>
                       <h4 className="mt-2 font-semibold text-[#eef1ff]">
                         {remediation.title}
                       </h4>
-                      <p className="mt-2 text-sm leading-6 text-white/55">
+                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                        Ce que cela signifie
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-white/55">
                         {remediation.summary}
+                      </p>
+                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                        Plan de correction
                       </p>
                       <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
                         {remediation.steps.map((step, index) => (

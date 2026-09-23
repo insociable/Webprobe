@@ -92,6 +92,13 @@
       "when": 1790098355313,
       "tag": "0012_solid_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790112745220,
+      "tag": "0013_giant_mentallo",
+      "breakpoints": true
     }
   ]
 }

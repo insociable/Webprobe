@@ -114,5 +114,5 @@ export async function verifyDnsChallengeAction(
     };
   }
 
-  redirect(`/organizations/${organizationId}`);
+  redirect(`/organizations/${organizationId}/sites/${siteId}`);
 }

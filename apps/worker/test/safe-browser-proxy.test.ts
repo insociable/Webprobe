@@ -225,6 +225,51 @@ describe("safe browser egress proxy", () => {
     }
   });
 
+  it("blocks OPTIONS when the proxy is configured for public audit", async () => {
+    const proxy = await startSafeBrowserProxy({
+      resolver: publicResolver,
+      allowOptions: false,
+    });
+
+    try {
+      const response = await rawProxyRequest(
+        proxy.port,
+        [
+          "OPTIONS http://example.com/ HTTP/1.1",
+          "Host: example.com",
+          "",
+          "",
+        ].join("\r\n"),
+      );
+
+      expect(response).toContain("405 Method Not Allowed");
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it("fails closed before upstream connection when the proxy request budget is exhausted", async () => {
+    const proxy = await startSafeBrowserProxy({
+      resolver: publicResolver,
+      maxRequests: 0,
+      maxRequestsPerHostname: 0,
+    });
+
+    try {
+      const response = await rawProxyRequest(
+        proxy.port,
+        ["GET http://example.com/ HTTP/1.1", "Host: example.com", "", ""].join(
+          "\r\n",
+        ),
+      );
+
+      expect(response).toContain("429");
+      expect(response).toContain("Request budget exceeded");
+    } finally {
+      await proxy.close();
+    }
+  });
+
   it("rejects private HTTP proxy targets", async () => {
     const proxy = await startSafeBrowserProxy();
 

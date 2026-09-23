@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ProductMark } from "@/components/product-shell";
+import { ProductMark } from "@/components/product-mark";
 
 const signals = [
   { label: "Sites suivis", value: "20 max.", detail: "périmètre pilote" },

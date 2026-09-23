@@ -156,6 +156,8 @@ function pinnedLookup(target: ValidatedHttpTarget): LookupFunction {
   };
 }
 
+const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+
 export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
   const transport = target.url.protocol === "https:" ? https : http;
   const startedAt = performance.now();
@@ -211,7 +213,197 @@ export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
     request.end();
   });
 };
-const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+
+export type BoundedTextFetchOptions = {
+  resolver?: DnsResolver;
+  timeoutMs?: number;
+  maxRedirects?: number;
+  maxBytes?: number;
+  userAgent?: string;
+  allowRedirect?: (from: URL, to: URL) => boolean;
+};
+
+export type BoundedTextFetchResult = {
+  statusCode: number;
+  finalUrl: string;
+  text: string;
+  redirects: ProbeRedirect[];
+};
+
+type RawTextResponse = {
+  statusCode: number;
+  headers: IncomingHttpHeaders;
+  text: string;
+};
+
+function codedError(code: string, message: string): NodeJS.ErrnoException {
+  const error = new Error(message) as NodeJS.ErrnoException;
+  error.code = code;
+  return error;
+}
+
+async function requestPinnedTextTarget(
+  target: ValidatedHttpTarget,
+  timeoutMs: number,
+  maxBytes: number,
+  userAgent: string,
+): Promise<RawTextResponse> {
+  const transport = target.url.protocol === "https:" ? https : http;
+
+  return new Promise<RawTextResponse>((resolve, reject) => {
+    let settled = false;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const clearRequestTimeout = () => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+    };
+    const resolveOnce = (value: RawTextResponse) => {
+      if (settled) return;
+      settled = true;
+      clearRequestTimeout();
+      resolve(value);
+    };
+    const rejectOnce = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearRequestTimeout();
+      reject(error);
+    };
+
+    const request = transport.request(
+      target.url,
+      {
+        method: "GET",
+        lookup: pinnedLookup(target),
+        headers: {
+          accept: "text/plain,*/*;q=0.1",
+          "user-agent": userAgent,
+        },
+        setHost: true,
+      },
+      (response) => {
+        const statusCode = response.statusCode ?? 0;
+        const headers = response.headers;
+        if (
+          redirectStatuses.has(statusCode) ||
+          statusCode < 200 ||
+          statusCode >= 300
+        ) {
+          response.destroy();
+          resolveOnce({ statusCode, headers, text: "" });
+          return;
+        }
+
+        const declaredLength = Number(
+          firstHeaderValue(headers, "content-length"),
+        );
+        if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+          response.destroy();
+          rejectOnce(
+            codedError(
+              "ERR_RESPONSE_TOO_LARGE",
+              "Response body exceeds configured limit",
+            ),
+          );
+          return;
+        }
+
+        const chunks: Buffer[] = [];
+        let receivedBytes = 0;
+        response.on("data", (chunk: Buffer) => {
+          receivedBytes += chunk.length;
+          if (receivedBytes > maxBytes) {
+            response.destroy();
+            rejectOnce(
+              codedError(
+                "ERR_RESPONSE_TOO_LARGE",
+                "Response body exceeds configured limit",
+              ),
+            );
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.once("end", () => {
+          resolveOnce({
+            statusCode,
+            headers,
+            text: Buffer.concat(chunks).toString("utf8"),
+          });
+        });
+        response.once("error", rejectOnce);
+      },
+    );
+
+    timeoutHandle = setTimeout(() => {
+      request.destroy(codedError("ETIMEDOUT", "HTTP text fetch timed out"));
+    }, timeoutMs);
+    request.once("error", rejectOnce);
+    request.end();
+  });
+}
+
+export async function fetchBoundedTextResource(
+  rawUrl: string,
+  options: BoundedTextFetchOptions = {},
+): Promise<BoundedTextFetchResult> {
+  const resolver = options.resolver ?? defaultDnsResolver;
+  const timeoutMs = Math.max(250, Math.min(options.timeoutMs ?? 5_000, 20_000));
+  const maxRedirects = Math.max(0, Math.min(options.maxRedirects ?? 3, 5));
+  const maxBytes = Math.max(1, Math.min(options.maxBytes ?? 65_536, 1_048_576));
+  const userAgent = options.userAgent?.trim() || "AgencyMonitor/1.0";
+  const allowRedirect =
+    options.allowRedirect ??
+    ((from: URL, to: URL) => from.origin === to.origin);
+  const redirects: ProbeRedirect[] = [];
+  const deadline = Date.now() + timeoutMs;
+  let currentUrl = rawUrl;
+
+  while (true) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      throw codedError("ETIMEDOUT", "HTTP text fetch timed out");
+    }
+    const target = await assertPublicHttpUrl(currentUrl, resolver);
+    const response = await requestPinnedTextTarget(
+      target,
+      remainingMs,
+      maxBytes,
+      userAgent,
+    );
+    const location = firstHeaderValue(response.headers, "location");
+    if (redirectStatuses.has(response.statusCode) && location) {
+      if (redirects.length >= maxRedirects) {
+        throw codedError("ERR_TOO_MANY_REDIRECTS", "Too many redirects");
+      }
+
+      let nextUrl: URL;
+      try {
+        nextUrl = new URL(location, target.url);
+      } catch {
+        throw codedError("ERR_INVALID_REDIRECT", "Invalid redirect target");
+      }
+      if (!allowRedirect(target.url, nextUrl)) {
+        throw codedError("ERR_UNSAFE_REDIRECT", "Redirect target not allowed");
+      }
+
+      redirects.push({
+        statusCode: response.statusCode,
+        from: reportSafeUrl(target.url),
+        to: reportSafeUrl(nextUrl),
+      });
+      currentUrl = nextUrl.toString();
+      continue;
+    }
+
+    return {
+      statusCode: response.statusCode,
+      finalUrl: target.url.toString(),
+      text: response.text,
+      redirects,
+    };
+  }
+}
+
 const tlsErrorCodes = new Set([
   "CERT_HAS_EXPIRED",
   "DEPTH_ZERO_SELF_SIGNED_CERT",

@@ -116,8 +116,9 @@ export function VerificationPanel({
         </h2>
         <p className="mt-3 text-sm leading-6 text-white/50">
           Après avoir créé le TXT chez votre fournisseur DNS, lancez la
-          vérification. Tant que le challenge ne correspond pas, le site reste
-          inactif et aucun scan n’est autorisé.
+          vérification. Tant que le challenge ne correspond pas, les audits
+          publics restent disponibles mais le monitoring continu demeure
+          désactivé.
         </p>
 
         <form action={verifyFormAction} className="mt-5">

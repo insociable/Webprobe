@@ -12,7 +12,7 @@ import {
   type DnsResolver,
 } from "@agency-saas/security";
 
-const allowedHttpMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const alwaysAllowedHttpMethods = new Set(["GET", "HEAD"]);
 const hopByHopHeaders = new Set([
   "connection",
   "keep-alive",
@@ -42,6 +42,9 @@ export type SafeBrowserProxyOptions = {
   maxTunnelLifetimeMs?: number;
   maxTunnelBytes?: number;
   maxTotalTransferredBytes?: number;
+  maxRequests?: number;
+  maxRequestsPerHostname?: number;
+  allowOptions?: boolean;
 };
 
 export type SafeBrowserProxy = {
@@ -133,7 +136,7 @@ function endHttpError(
 
 function endConnectError(
   socket: Duplex,
-  statusCode: 400 | 403 | 502 | 504,
+  statusCode: 400 | 403 | 429 | 502 | 504,
   statusText: string,
 ): void {
   if (socket.destroyed) {
@@ -154,12 +157,17 @@ async function handleHttpRequest(
       | "connectTimeoutMs"
       | "maxHttpResponseBytes"
       | "maxHttpResponseMs"
+      | "allowOptions"
     >
   >,
   consumeBytes: (bytes: number) => boolean,
+  consumeRequest: (hostname: string) => boolean,
 ): Promise<void> {
   const method = request.method ?? "GET";
-  if (!allowedHttpMethods.has(method)) {
+  if (
+    !alwaysAllowedHttpMethods.has(method) &&
+    !(options.allowOptions && method === "OPTIONS")
+  ) {
     request.resume();
     endHttpError(response, 405, "Method not allowed");
     return;
@@ -184,6 +192,11 @@ async function handleHttpRequest(
   if (target.url.protocol !== "http:" || target.port !== 80) {
     request.resume();
     endHttpError(response, 400, "HTTPS must use CONNECT");
+    return;
+  }
+  if (!consumeRequest(target.url.hostname)) {
+    request.resume();
+    endHttpError(response, 429, "Request budget exceeded");
     return;
   }
 
@@ -281,6 +294,7 @@ async function handleConnect(
   >,
   upstreamSockets: Set<Socket>,
   consumeBytes: (bytes: number) => boolean,
+  consumeRequest: (hostname: string) => boolean,
 ): Promise<void> {
   const authority = request.url ?? "";
   let target: SafeProxyTarget;
@@ -293,6 +307,10 @@ async function handleConnect(
 
   if (target.port !== 443) {
     endConnectError(clientSocket, 403, "Forbidden");
+    return;
+  }
+  if (!consumeRequest(target.url.hostname)) {
+    endConnectError(clientSocket, 429, "Too Many Requests");
     return;
   }
 
@@ -378,11 +396,31 @@ export async function startSafeBrowserProxy(
     maxTunnelBytes: options.maxTunnelBytes ?? 50 * 1024 * 1024,
     maxTotalTransferredBytes:
       options.maxTotalTransferredBytes ?? 100 * 1024 * 1024,
+    maxRequests: options.maxRequests ?? 10_000,
+    maxRequestsPerHostname: options.maxRequestsPerHostname ?? 5_000,
+    allowOptions: options.allowOptions ?? true,
   };
   let transferredBytes = 0;
   const consumeBytes = (bytes: number) => {
     transferredBytes += bytes;
     return transferredBytes <= resolvedOptions.maxTotalTransferredBytes;
+  };
+  let requestCount = 0;
+  const requestCountByHostname = new Map<string, number>();
+  const consumeRequest = (hostname: string) => {
+    const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
+    const nextTotal = requestCount + 1;
+    const nextForHostname =
+      (requestCountByHostname.get(normalizedHostname) ?? 0) + 1;
+    if (
+      nextTotal > resolvedOptions.maxRequests ||
+      nextForHostname > resolvedOptions.maxRequestsPerHostname
+    ) {
+      return false;
+    }
+    requestCount = nextTotal;
+    requestCountByHostname.set(normalizedHostname, nextForHostname);
+    return true;
   };
   const clientSockets = new Set<Socket>();
   const upstreamSockets = new Set<Socket>();
@@ -393,6 +431,7 @@ export async function startSafeBrowserProxy(
       response,
       resolvedOptions,
       consumeBytes,
+      consumeRequest,
     ).catch(() => {
       endHttpError(response, 502, "Proxy request failed");
     });
@@ -415,6 +454,7 @@ export async function startSafeBrowserProxy(
       resolvedOptions,
       upstreamSockets,
       consumeBytes,
+      consumeRequest,
     ).catch(() => endConnectError(socket, 502, "Bad Gateway"));
   });
   server.on("clientError", (_error, socket) => {

@@ -28,7 +28,9 @@ function successfulProbe(
   };
 }
 
-async function createFixture() {
+async function createFixture(
+  scanMode: "public_audit" | "verified_monitoring" = "verified_monitoring",
+) {
   const { db } = getDatabase();
   const organizationId = randomUUID();
   const siteId = randomUUID();
@@ -43,14 +45,15 @@ async function createFixture() {
     organizationId,
     name: "Browser processor target",
     canonicalUrl: "https://example.com/",
-    status: "active",
-    verifiedAt: new Date(),
+    status: scanMode === "public_audit" ? "pending_verification" : "active",
+    verifiedAt: scanMode === "public_audit" ? null : new Date(),
   });
   await db.insert(scans).values({
     id: scanId,
     organizationId,
     siteId,
     trigger: "manual",
+    scanMode,
   });
 
   return {
@@ -78,6 +81,82 @@ async function cleanup(organizationId: string) {
 }
 
 describeDatabase("scan processor browser findings", () => {
+  it("derives the browser policy from the persisted public audit mode", async () => {
+    const fixture = await createFixture("public_audit");
+    fixture.payload.profile.maxPages = 20;
+    fixture.payload.profile.navigationTimeoutMs = 60_000;
+    let receivedOptions:
+      | { scanMode?: string; maxPages?: number; navigationTimeoutMs?: number }
+      | undefined;
+
+    try {
+      const result = await processScanJob(fixture.payload, {
+        probeHttpTarget: async () => successfulProbe(),
+        runBrowserScan: async (_url, options) => {
+          receivedOptions = options;
+          return {
+            pagesVisited: 1,
+            screenshot: null,
+            observations: [],
+          };
+        },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(receivedOptions).toMatchObject({
+        scanMode: "public_audit",
+        maxPages: 15,
+        navigationTimeoutMs: 20_000,
+      });
+    } finally {
+      await cleanup(fixture.organizationId);
+    }
+  });
+
+  it("preserves lower public limits and the verified monitoring profile", async () => {
+    const publicFixture = await createFixture("public_audit");
+    const verifiedFixture = await createFixture("verified_monitoring");
+    verifiedFixture.payload.profile.maxPages = 20;
+    verifiedFixture.payload.profile.navigationTimeoutMs = 60_000;
+    const received: Array<{
+      scanMode?: string;
+      maxPages?: number;
+      navigationTimeoutMs?: number;
+    }> = [];
+
+    try {
+      for (const fixture of [publicFixture, verifiedFixture]) {
+        await processScanJob(fixture.payload, {
+          probeHttpTarget: async () => successfulProbe(),
+          runBrowserScan: async (_url, options) => {
+            received.push(options);
+            return {
+              pagesVisited: 1,
+              screenshot: null,
+              observations: [],
+            };
+          },
+        });
+      }
+
+      expect(received).toMatchObject([
+        {
+          scanMode: "public_audit",
+          maxPages: 3,
+          navigationTimeoutMs: 5_000,
+        },
+        {
+          scanMode: "verified_monitoring",
+          maxPages: 20,
+          navigationTimeoutMs: 60_000,
+        },
+      ]);
+    } finally {
+      await cleanup(publicFixture.organizationId);
+      await cleanup(verifiedFixture.organizationId);
+    }
+  });
+
   it("persists browser findings and browser page count atomically", async () => {
     const fixture = await createFixture();
 

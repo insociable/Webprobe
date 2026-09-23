@@ -44,7 +44,12 @@ function successfulProbe(): Extract<HttpProbeResult, { ok: true }> {
   };
 }
 
-async function createFixture() {
+async function createFixture(
+  options: {
+    siteStatus?: "pending_verification" | "active";
+    scanMode?: "public_audit" | "verified_monitoring";
+  } = {},
+) {
   const { db } = getDatabase();
   const organizationId = randomUUID();
   const siteId = randomUUID();
@@ -59,14 +64,16 @@ async function createFixture() {
     organizationId,
     name: "Persistence target",
     canonicalUrl: "https://example.com/",
-    status: "active",
-    verifiedAt: new Date(),
+    status: options.siteStatus ?? "active",
+    verifiedAt:
+      (options.siteStatus ?? "active") === "active" ? new Date() : null,
   });
   await db.insert(scans).values({
     id: scanId,
     organizationId,
     siteId,
     trigger: "manual",
+    scanMode: options.scanMode ?? "verified_monitoring",
   });
 
   return {
@@ -213,6 +220,46 @@ describeDatabase("scan persistence", () => {
 
       expect(persistedScan[0]?.status).toBe("cancelled");
       expect(persistedFindings).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("runs a public audit while the site is still pending verification", async () => {
+    const { db } = getDatabase();
+    const fixture = await createFixture({
+      siteStatus: "pending_verification",
+      scanMode: "public_audit",
+    });
+
+    try {
+      const context = await validateScanContext(fixture.payload);
+      expect(context.scanMode).toBe("public_audit");
+
+      await markScanRunning(context);
+
+      const [persisted] = await db
+        .select({ status: scans.status, scanMode: scans.scanMode })
+        .from(scans)
+        .where(eq(scans.id, fixture.scanId))
+        .limit(1);
+
+      expect(persisted).toEqual({
+        status: "running",
+        scanMode: "public_audit",
+      });
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("rejects verified monitoring while the site is pending verification", async () => {
+    const fixture = await createFixture({ siteStatus: "pending_verification" });
+
+    try {
+      await expect(validateScanContext(fixture.payload)).rejects.toMatchObject({
+        code: "site-not-active",
+      });
     } finally {
       await deleteFixture(fixture.organizationId);
     }

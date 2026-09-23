@@ -6,10 +6,13 @@ import {
 } from "@agency-saas/security";
 import type { Page, Request, Response } from "playwright";
 import {
+  browserUserAgent,
   createIsolatedBrowserSession,
+  type BrowserRequestPolicyInput,
   type BrowserRuntimeOptions,
   type IsolatedBrowserSession,
 } from "./browser-runtime.js";
+import { fetchBoundedTextResource } from "./http-probe.js";
 import type {
   AccessibilityViolationObservation,
   BrowserPageObservation,
@@ -41,7 +44,13 @@ import {
   type SeoSignal,
 } from "./scanner-v2/seo.js";
 import { extractSeoDocumentFacts } from "./scanner-v2/seo-runtime.js";
-import { observeUrl } from "./scanner-v2/url.js";
+import {
+  isRobotsPathAllowed,
+  MAX_ROBOTS_BYTES,
+  parseRobotsTxt,
+  type RobotsPolicy,
+} from "./scanner-v2/robots.js";
+import { isAllowedCanonicalOriginShift, observeUrl } from "./scanner-v2/url.js";
 
 export type BrowserScreenshot = {
   data: Buffer;
@@ -85,14 +94,27 @@ export type ScannerV2Completeness = {
   };
 };
 
+export type PublicRobotsLoadResult = {
+  policy: RobotsPolicy | null;
+  unavailable: boolean;
+};
+
+export type PublicRobotsLoader = (
+  origin: string,
+  deadline: number,
+  userAgent: string,
+) => Promise<PublicRobotsLoadResult>;
+
 export type BrowserScanOptions = {
   resolver?: DnsResolver;
+  scanMode?: "public_audit" | "verified_monitoring";
   maxPages?: number;
   navigationTimeoutMs?: number;
   scanTimeoutMs?: number;
   networkCaptureTimeoutMs?: number;
   checkAccessibility?: boolean;
   captureScreenshot?: boolean;
+  loadRobotsPolicy?: PublicRobotsLoader;
   createSession?: (
     options: BrowserRuntimeOptions,
   ) => Promise<IsolatedBrowserSession>;
@@ -120,6 +142,65 @@ function boundedScanTimeout(value?: number): number {
 
 function boundedNetworkCaptureTimeout(value?: number): number {
   return Math.max(100, Math.min(value ?? 2_500, 5_000));
+}
+
+function isSafePublicAuditRedirect(from: URL, to: URL): boolean {
+  if (
+    !["http:", "https:"].includes(from.protocol) ||
+    !["http:", "https:"].includes(to.protocol) ||
+    to.username ||
+    to.password
+  ) {
+    return false;
+  }
+  if (from.protocol === "https:" && to.protocol === "http:") {
+    return false;
+  }
+  return (
+    from.origin === to.origin ||
+    isAllowedCanonicalOriginShift(from.toString(), to.toString())
+  );
+}
+
+async function loadPublicRobotsPolicy(
+  origin: string,
+  deadline: number,
+  userAgent: string,
+  resolver: DnsResolver,
+): Promise<PublicRobotsLoadResult> {
+  const robotsUrl = new URL("/robots.txt", origin).toString();
+  const timeoutMs = Math.min(5_000, remainingScanTime(deadline));
+  const result = await withinTimeout(
+    fetchBoundedTextResource(robotsUrl, {
+      resolver,
+      timeoutMs,
+      maxRedirects: 3,
+      maxBytes: MAX_ROBOTS_BYTES,
+      userAgent,
+      allowRedirect: isSafePublicAuditRedirect,
+    }),
+    timeoutMs,
+    "robots.txt collection timed out",
+  ).catch(() => null);
+
+  if (!result) {
+    return { policy: null, unavailable: true };
+  }
+  if (result.statusCode === 404 || result.statusCode === 410) {
+    return { policy: { rules: [], sitemaps: [] }, unavailable: false };
+  }
+  if (result.statusCode < 200 || result.statusCode >= 300) {
+    return { policy: null, unavailable: true };
+  }
+
+  const policy = parseRobotsTxt(result.text, userAgent, {
+    // fetchBoundedTextResource only resolves after EOF and rejects > maxBytes.
+    completeAtByteLimit: true,
+  });
+  if (policy.unavailableReason) {
+    return { policy: null, unavailable: true };
+  }
+  return { policy, unavailable: false };
 }
 
 function remainingScanTime(deadline: number): number {
@@ -351,15 +432,56 @@ function recordFailedNetworkRequest(
   });
 }
 
+function publicAuditNoNavigationResult(
+  crawlCoverage: CrawlCoverageTracker,
+  crawlOrigin: string,
+): BrowserScanResult {
+  return {
+    pagesVisited: 0,
+    observations: [],
+    screenshot: null,
+    scannerV2: {
+      crawl: crawlCoverage.coverage(),
+      network: new NetworkObservationCollector(crawlOrigin).snapshot(),
+      performance: [],
+      seo: { pages: [], signals: [] },
+      completeness: {
+        crawl: { status: "partial", linkExtractionFailureCount: 0 },
+        network: { status: "unavailable", captureFailureCount: 0 },
+        performance: {
+          status: "unavailable",
+          eligiblePageCount: 0,
+          observedPageCount: 0,
+          observerInstalled: false,
+        },
+        seo: {
+          status: "unavailable",
+          eligiblePageCount: 0,
+          observedPageCount: 0,
+        },
+      },
+    },
+  };
+}
+
 export async function runBrowserScan(
   rawUrl: string,
   options: BrowserScanOptions = {},
 ): Promise<BrowserScanResult> {
   const resolver = options.resolver ?? defaultDnsResolver;
-  const maxPages = boundedCrawlPages(options.maxPages);
-  const navigationTimeoutMs = boundedNavigationTimeout(
+  const scanMode = options.scanMode ?? "verified_monitoring";
+  const requestedMaxPages = boundedCrawlPages(options.maxPages);
+  const requestedNavigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
   );
+  const maxPages =
+    scanMode === "public_audit"
+      ? Math.min(requestedMaxPages, 15)
+      : requestedMaxPages;
+  const navigationTimeoutMs =
+    scanMode === "public_audit"
+      ? Math.min(requestedNavigationTimeoutMs, 20_000)
+      : requestedNavigationTimeoutMs;
   const scanTimeoutMs = boundedScanTimeout(options.scanTimeoutMs);
   const networkCaptureTimeoutMs = boundedNetworkCaptureTimeout(
     options.networkCaptureTimeoutMs,
@@ -383,10 +505,110 @@ export async function runBrowserScan(
     );
   }
   const initialCandidate = initialCandidateResult.candidate;
+  const crawlCoverage = new CrawlCoverageTracker(maxPages);
+  let crawlOrigin = initialTarget.url.origin;
+  let robotsPolicy: RobotsPolicy | null = null;
+  let stopPublicCrawl = false;
+  const robotsPolicies = new Map<string, RobotsPolicy>();
+  const userAgent = browserUserAgent();
+  const robotsLoader: PublicRobotsLoader =
+    options.loadRobotsPolicy ??
+    ((origin, deadline, requestedUserAgent) =>
+      loadPublicRobotsPolicy(origin, deadline, requestedUserAgent, resolver));
+
+  if (scanMode === "public_audit") {
+    const robots = await robotsLoader(crawlOrigin, scanDeadline, userAgent);
+    if (robots.unavailable || !robots.policy) {
+      crawlCoverage.discover(initialCandidate, null);
+      crawlCoverage.markRobotsPolicyUnavailable();
+      return publicAuditNoNavigationResult(crawlCoverage, crawlOrigin);
+    }
+    robotsPolicy = robots.policy;
+    robotsPolicies.set(crawlOrigin, robots.policy);
+    if (!isRobotsPathAllowed(robots.policy, initialTarget.url)) {
+      crawlCoverage.markRobotsDisallowed(initialCandidate, null);
+      return publicAuditNoNavigationResult(crawlCoverage, crawlOrigin);
+    }
+  }
+  crawlCoverage.discover(initialCandidate, null);
+
+  let publicDocumentPolicyBlocked = false;
+  const blockPublicDocument = (): false => {
+    publicDocumentPolicyBlocked = true;
+    return false;
+  };
+
+  const requestPolicy =
+    scanMode === "public_audit"
+      ? async (request: BrowserRequestPolicyInput): Promise<boolean> => {
+          if (
+            !request.isNavigationRequest ||
+            request.resourceType !== "document"
+          ) {
+            return true;
+          }
+
+          let targetUrl: URL;
+          try {
+            targetUrl = new URL(request.url);
+          } catch {
+            return blockPublicDocument();
+          }
+          if (!["http:", "https:"].includes(targetUrl.protocol)) {
+            return blockPublicDocument();
+          }
+
+          if (request.redirectedFromUrl) {
+            let fromUrl: URL;
+            try {
+              fromUrl = new URL(request.redirectedFromUrl);
+            } catch {
+              return blockPublicDocument();
+            }
+            if (
+              !robotsPolicies.has(fromUrl.origin) ||
+              !isSafePublicAuditRedirect(fromUrl, targetUrl)
+            ) {
+              return blockPublicDocument();
+            }
+          } else if (
+            targetUrl.origin !== crawlOrigin &&
+            targetUrl.origin !== initialTarget.url.origin
+          ) {
+            return blockPublicDocument();
+          }
+
+          let policy = robotsPolicies.get(targetUrl.origin);
+          if (!policy) {
+            const robots = await robotsLoader(
+              targetUrl.origin,
+              scanDeadline,
+              userAgent,
+            );
+            if (robots.unavailable || !robots.policy) {
+              crawlCoverage.markRobotsPolicyUnavailable();
+              stopPublicCrawl = true;
+              return blockPublicDocument();
+            }
+            policy = robots.policy;
+            robotsPolicies.set(targetUrl.origin, policy);
+          }
+
+          const allowed = isRobotsPathAllowed(policy, targetUrl);
+          if (!allowed) {
+            crawlCoverage.markRobotsRestricted();
+            return blockPublicDocument();
+          }
+          return true;
+        }
+      : undefined;
+
   const session = await createSession({
     resolver,
+    scanMode,
     maxPages: 1,
     navigationTimeoutMs,
+    ...(requestPolicy ? { requestPolicy } : {}),
   });
 
   try {
@@ -399,9 +621,6 @@ export async function runBrowserScan(
     ];
     const seen = new Set<string>();
     const observations: BrowserPageObservation[] = [];
-    const crawlCoverage = new CrawlCoverageTracker(maxPages);
-    crawlCoverage.discover(initialCandidate, null);
-    const crawlOrigin = initialTarget.url.origin;
     const networkCollector = new NetworkObservationCollector(crawlOrigin);
     const pendingNetworkCaptures = new Set<Promise<void>>();
     const labSnapshots: Array<{
@@ -477,6 +696,9 @@ export async function runBrowserScan(
         });
       } catch {
         if (!target.sourcePageUrl) {
+          if (scanMode === "public_audit" && publicDocumentPolicyBlocked) {
+            return publicAuditNoNavigationResult(crawlCoverage, crawlOrigin);
+          }
           throw new Error("Initial browser navigation failed");
         }
 
@@ -503,6 +725,29 @@ export async function runBrowserScan(
       const statusCode = response?.status() ?? null;
 
       activePageUrl = finalUrl;
+      if (!target.sourcePageUrl && validatedFinal.url.origin !== crawlOrigin) {
+        const canonicalRedirectAllowed =
+          scanMode === "public_audit"
+            ? isSafePublicAuditRedirect(initialTarget.url, validatedFinal.url)
+            : isAllowedCanonicalOriginShift(
+                initialTarget.url.toString(),
+                validatedFinal.url.toString(),
+              );
+        if (scanMode === "public_audit" && !canonicalRedirectAllowed) {
+          return publicAuditNoNavigationResult(crawlCoverage, crawlOrigin);
+        }
+        if (canonicalRedirectAllowed) {
+          crawlOrigin = validatedFinal.url.origin;
+          networkCollector.setFirstPartyOrigin(crawlOrigin);
+          if (scanMode === "public_audit") {
+            robotsPolicy = robotsPolicies.get(crawlOrigin) ?? null;
+            if (!robotsPolicy) {
+              crawlCoverage.markRobotsPolicyUnavailable();
+              stopPublicCrawl = true;
+            }
+          }
+        }
+      }
       const sameOrigin = validatedFinal.url.origin === crawlOrigin;
       const healthyDocument = statusCode === null || statusCode < 400;
 
@@ -604,6 +849,20 @@ export async function runBrowserScan(
         }
         const candidate = candidateResult.candidate;
         if (
+          scanMode === "public_audit" &&
+          (stopPublicCrawl ||
+            !robotsPolicy ||
+            !isRobotsPathAllowed(
+              robotsPolicy,
+              new URL(candidate.navigationUrl),
+            ))
+        ) {
+          if (robotsPolicy && !stopPublicCrawl) {
+            crawlCoverage.markRobotsDisallowed(candidate, reportUrl);
+          }
+          continue;
+        }
+        if (
           seen.has(candidate.navigationUrl) ||
           pending.some(
             (pendingTarget) =>
@@ -614,7 +873,7 @@ export async function runBrowserScan(
           continue;
         }
 
-        if (seen.size + pending.length >= maxPages) {
+        if (observations.length + pending.length >= maxPages) {
           crawlCoverage.markBudgetExceeded(candidate, reportUrl);
           continue;
         }
@@ -642,6 +901,9 @@ export async function runBrowserScan(
         networkCaptureFailureCount += pendingNetworkCaptures.size;
       });
     }
+    const requestBudgetExhausted =
+      scanMode === "public_audit" &&
+      (session.requestBudget?.().exhausted ?? false);
     const crawl = crawlCoverage.coverage();
     const network = networkCollector.snapshot();
     const performance = labSnapshots.flatMap(({ url, snapshot }) => {
@@ -694,7 +956,11 @@ export async function runBrowserScan(
             status:
               analyzedSameOriginPageCount === 0
                 ? "unavailable"
-                : linkExtractionFailureCount > 0 || crawl.budgetReached
+                : linkExtractionFailureCount > 0 ||
+                    crawl.budgetReached ||
+                    crawl.robotsRestricted ||
+                    crawl.robotsPolicyUnavailable ||
+                    requestBudgetExhausted
                   ? "partial"
                   : "complete",
             linkExtractionFailureCount,
@@ -703,7 +969,9 @@ export async function runBrowserScan(
             status:
               analyzedSameOriginPageCount === 0
                 ? "unavailable"
-                : networkCaptureFailureCount > 0 || network.collection.truncated
+                : networkCaptureFailureCount > 0 ||
+                    network.collection.truncated ||
+                    requestBudgetExhausted
                   ? "partial"
                   : "complete",
             captureFailureCount: networkCaptureFailureCount,
@@ -713,7 +981,8 @@ export async function runBrowserScan(
               performanceStatus === "complete" &&
               (!performanceObserverInstalled ||
                 networkCaptureFailureCount > 0 ||
-                network.collection.truncated)
+                network.collection.truncated ||
+                requestBudgetExhausted)
                 ? "partial"
                 : performanceStatus,
             eligiblePageCount: performanceEligiblePageCount,

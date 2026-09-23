@@ -28,13 +28,13 @@ export function ReportBrandingPanel({
 
   return (
     <section className="am-panel mb-6 p-6">
-      <p className="text-sm text-white/45">Rapports clients</p>
+      <p className="text-sm text-white/45">Rapports</p>
       <h2 className="mt-2 text-xl font-semibold tracking-tight">
-        Branding agence
+        Identité des rapports
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-white/45">
-        Le nom et la couleur ci-dessous apparaissent sur les rapports publics et
-        dans les e-mails envoyés aux clients.
+        Le nom et la couleur ci-dessous apparaissent sur les rapports partagés
+        et dans les e-mails envoyés depuis Agency Monitor.
       </p>
 
       <form
@@ -47,7 +47,7 @@ export function ReportBrandingPanel({
             name="brandName"
             defaultValue={brandName ?? ""}
             maxLength={80}
-            placeholder="Nom de l’agence"
+            placeholder="Nom affiché sur les rapports"
             className="am-field mt-2"
           />
         </label>

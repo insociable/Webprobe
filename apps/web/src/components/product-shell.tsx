@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
+import { WorkspaceAccountMenu } from "@/components/workspace-account-menu";
+import { ProductMark } from "@/components/product-mark";
 
 type TrailItem = {
   label: string;
@@ -10,26 +12,6 @@ type WorkspaceShellProps = {
   children: React.ReactNode;
   trail?: TrailItem[];
 };
-
-export function ProductMark({ withName = true }: { withName?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-3">
-      <span className="am-brand-mark" aria-hidden="true">
-        <span className="am-brand-dot" />
-      </span>
-      {withName ? (
-        <span>
-          <span className="block text-sm font-semibold tracking-[-0.01em] text-white">
-            Agency Monitor
-          </span>
-          <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-[#6f7b91]">
-            Site observatory
-          </span>
-        </span>
-      ) : null}
-    </span>
-  );
-}
 
 export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
   return (
@@ -61,40 +43,12 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
           </nav>
         </div>
 
-        {trail.length > 0 ? (
-          <div className="mt-8 border-t border-[#20283a] pt-6">
-            <p className="px-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#59647a]">
-              Contexte
-            </p>
-            <div className="mt-3 space-y-1">
-              {trail.map((item) =>
-                item.href ? (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="block truncate rounded-md px-3 py-2 text-sm text-[#8d98ad] transition hover:bg-[#101622] hover:text-white"
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <span
-                    key={item.label}
-                    className="block truncate rounded-md bg-[#111827] px-3 py-2 text-sm font-medium text-[#dfe5f2]"
-                  >
-                    {item.label}
-                  </span>
-                ),
-              )}
-            </div>
-          </div>
-        ) : null}
-
         <div className="mt-auto border-t border-[#20283a] pt-5">
-          <div className="mb-4 flex items-center gap-2 px-2 text-xs text-[#7f8a9f]">
+          <div className="mb-3 flex items-center gap-2 px-2 text-[11px] text-[#6f7b91]">
             <span className="am-status-dot" />
-            Pilote opérationnel
+            Plateforme opérationnelle
           </div>
-          <SignOutButton />
+          <WorkspaceAccountMenu />
         </div>
       </aside>
 
@@ -105,7 +59,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
           </Link>
           <div className="hidden min-w-0 items-center gap-2 text-xs text-[#738097] lg:flex">
             <span className="font-mono uppercase tracking-[0.12em]">
-              Workspace
+              Portail
             </span>
             {trail.map((item) => (
               <span

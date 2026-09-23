@@ -194,6 +194,7 @@ async function createFixture(): Promise<Fixture> {
 
 async function createRunningScan(
   fixture: Fixture,
+  scanMode: "public_audit" | "verified_monitoring" = "verified_monitoring",
 ): Promise<ValidatedScanContext> {
   const { db } = getDatabase();
   const scanId = randomUUID();
@@ -208,6 +209,7 @@ async function createRunningScan(
     organizationId: fixture.organizationId,
     siteId: fixture.siteId,
     trigger: "manual",
+    scanMode,
     status: "running",
     queuedAt: new Date(startedAt.getTime() - 60_000),
     startedAt,
@@ -218,6 +220,7 @@ async function createRunningScan(
     organizationId: fixture.organizationId,
     siteId: fixture.siteId,
     trigger: "manual",
+    scanMode,
     scheduleId: null,
     scheduledFor: null,
     targetUrl: "https://example.com/",
@@ -513,6 +516,25 @@ describeDatabase("recovery alert lifecycle", () => {
       await cleanup(fixture);
     }
   });
+  it("does not create monitoring notifications for a public audit", async () => {
+    const fixture = await createFixture();
+
+    try {
+      const publicAudit = await createRunningScan(fixture, "public_audit");
+      await completeScan(publicAudit, [highFinding]);
+
+      const { db } = getDatabase();
+      const deliveries = await db
+        .select({ id: notificationDeliveries.id })
+        .from(notificationDeliveries)
+        .where(eq(notificationDeliveries.scanId, publicAudit.scanId));
+
+      expect(deliveries).toHaveLength(0);
+    } finally {
+      await cleanup(fixture);
+    }
+  });
+
   it("does not emit recovery for a network incident when the current network analysis is partial", async () => {
     const fixture = await createFixture();
     const { db } = getDatabase();

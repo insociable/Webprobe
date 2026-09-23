@@ -46,7 +46,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
         disabled={pending}
         className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {pending ? "Ajout…" : "Ajouter le site"}
+        {pending ? "Lancement…" : "Lancer l’audit public"}
       </button>
       {state.error ? (
         <p

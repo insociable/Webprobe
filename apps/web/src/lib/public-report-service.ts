@@ -46,6 +46,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
       siteUrl: sites.canonicalUrl,
       completedAt: scans.completedAt,
       pageCount: scans.pageCount,
+      scanMode: scans.scanMode,
       summary: scans.summary,
     })
     .from(reportShares)
@@ -88,6 +89,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
       and(
         eq(scans.organizationId, row.organizationId),
         eq(scans.siteId, row.siteId),
+        eq(scans.scanMode, row.scanMode),
         eq(scans.status, "completed"),
         isNotNull(scans.completedAt),
         lt(scans.completedAt, row.completedAt),
@@ -124,6 +126,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
     scan: {
       completedAt: row.completedAt,
       pageCount: row.pageCount,
+      scanMode: row.scanMode,
       summary: row.summary,
       findings: currentFindings,
     },

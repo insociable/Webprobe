@@ -323,3 +323,295 @@ select {
     padding: 0 32px;
   }
 }
+
+.print-only {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 12mm 12mm 15mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    color: #172033 !important;
+  }
+
+  body {
+    min-height: auto;
+    font-size: 9.7pt;
+    line-height: 1.45;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .am-rail,
+  .am-topbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .am-workspace,
+  .am-workspace-main {
+    min-height: auto;
+  }
+
+  .am-workspace-main {
+    margin-left: 0 !important;
+  }
+
+  .am-content {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .am-print-brand {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8mm;
+    margin-bottom: 7mm;
+    border: 1px solid #202b43;
+    border-left: 4px solid #6d7cff;
+    border-radius: 4px;
+    background: #101827 !important;
+    padding: 5mm 6mm;
+  }
+
+  .am-print-brand strong,
+  .am-print-brand span {
+    display: block;
+  }
+
+  .am-print-brand strong {
+    color: #ffffff !important;
+    font-size: 16pt;
+    letter-spacing: -0.025em;
+  }
+
+  .am-print-brand span {
+    margin-top: 1mm;
+    color: #cbd5e1 !important;
+    font-size: 8pt;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }
+
+  .am-print-brand-meta {
+    text-align: right;
+  }
+
+  .am-print-brand-meta span:first-child {
+    color: #b7c0ff !important;
+    font-weight: 700;
+  }
+
+  .am-content > section {
+    border-color: #d8dee9 !important;
+  }
+
+  .am-content > section:first-of-type {
+    padding-bottom: 7mm !important;
+  }
+
+  .am-content > section:first-of-type h1 {
+    color: #111827 !important;
+    font-size: 24pt !important;
+    line-height: 1.05 !important;
+  }
+
+  .am-content h1,
+  .am-content h2,
+  .am-content h3,
+  .am-content h4,
+  .am-content dd {
+    color: #172033 !important;
+  }
+
+  .am-content h2 {
+    font-size: 16pt !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .am-content h3 {
+    font-size: 11.5pt !important;
+  }
+
+  .am-content p,
+  .am-content dt,
+  .am-content li,
+  .am-content span {
+    color: #526076 !important;
+  }
+
+  .am-content .am-kicker {
+    color: #5968d9 !important;
+    font-weight: 700;
+  }
+
+  .am-content .am-panel,
+  .am-content .am-panel-soft,
+  .am-content .report-action-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-color: #d8dee9 !important;
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  .am-content .am-panel-soft {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+  }
+
+  .am-content .report-finding-card {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    border: 1px solid #cbd5e1 !important;
+    border-left: 3px solid #7c86e8 !important;
+    border-radius: 5px !important;
+    background: #ffffff !important;
+    padding: 5mm !important;
+  }
+
+  .am-content .report-remediation {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+    border: 1px solid #d8daf8 !important;
+    border-left: 3px solid #6d7cff !important;
+    border-radius: 4px !important;
+    background: #f6f6ff !important;
+    padding: 4.5mm !important;
+  }
+
+  .am-content .report-remediation h4 {
+    color: #202a62 !important;
+  }
+
+  .am-content .report-remediation ol {
+    margin-top: 2.5mm !important;
+  }
+
+  .am-content [class*="bg-black"] {
+    background: #f8fafc !important;
+  }
+
+  .am-content [class*="border-[#"],
+  .am-content [class*="border-white"] {
+    border-color: #d8dee9 !important;
+  }
+
+  .am-content [data-severity] {
+    border-width: 1px !important;
+    font-weight: 700;
+  }
+
+  .am-content [data-severity="info"],
+  .am-content [data-severity="low"] {
+    color: #334155 !important;
+    border-color: #94a3b8 !important;
+    background: #f1f5f9 !important;
+  }
+
+  .am-content [data-severity="medium"] {
+    color: #7c4a03 !important;
+    border-color: #d6a85f !important;
+    background: #fff7e6 !important;
+  }
+
+  .am-content [data-severity="high"] {
+    color: #9f1239 !important;
+    border-color: #e6a4b8 !important;
+    background: #fff1f4 !important;
+  }
+
+  .am-content [data-severity="critical"] {
+    color: #991b1b !important;
+    border-color: #e59b9b !important;
+    background: #fff0f0 !important;
+  }
+
+  .am-content a,
+  .am-content [class*="break-all"] {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .am-content a {
+    color: #27316f !important;
+    text-decoration: none;
+  }
+
+  .am-content img {
+    max-width: 100% !important;
+  }
+
+  .am-content section,
+  .am-content article {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .am-content section {
+    break-after: auto;
+  }
+
+  .am-content .report-finding-card + .report-finding-card {
+    margin-top: 4mm !important;
+  }
+
+  .am-content .report-print-pages {
+    display: block !important;
+    margin-top: 3mm;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 2.5mm;
+  }
+
+  .am-content .report-print-pages-title {
+    margin: 0 0 1.5mm !important;
+    color: #475569 !important;
+    font-size: 7.8pt !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .am-content .report-print-pages ul {
+    margin: 0;
+    padding-left: 4mm;
+  }
+
+  .am-content .report-print-pages li {
+    margin: 0 0 0.8mm;
+    color: #526076 !important;
+    font-size: 8pt;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .am-content .report-action-plan {
+    break-before: auto;
+  }
+
+  .am-content h2,
+  .am-content h3,
+  .am-content h4,
+  .am-content .report-print-pages-title {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+
+  .am-content .report-remediation li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

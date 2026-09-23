@@ -4,6 +4,7 @@ import {
   memberships,
   organizations,
   siteVerificationChallenges,
+  scans,
   sites,
   users,
 } from "@agency-saas/db";
@@ -77,6 +78,19 @@ describeDatabase("site DNS verification", () => {
     const fixture = await createFixture();
 
     try {
+      const [publicAudit] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          scanMode: "public_audit",
+          requestedByUserId: fixture.ownerId,
+          status: "completed",
+          completedAt: new Date(),
+        })
+        .returning({ id: scans.id });
+
       const challenge = await createSiteVerificationChallenge(
         fixture.ownerId,
         fixture.organizationId,
@@ -119,6 +133,18 @@ describeDatabase("site DNS verification", () => {
 
       expect(verified.status).toBe("active");
       expect(verified.verifiedAt).toBeInstanceOf(Date);
+
+      const preservedAudit = publicAudit
+        ? await db
+            .select({ id: scans.id, scanMode: scans.scanMode })
+            .from(scans)
+            .where(eq(scans.id, publicAudit.id))
+            .limit(1)
+        : [];
+      expect(preservedAudit[0]).toEqual({
+        id: publicAudit?.id,
+        scanMode: "public_audit",
+      });
 
       const remainingChallenges = await db
         .select({ id: siteVerificationChallenges.id })

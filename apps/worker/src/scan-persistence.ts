@@ -33,6 +33,7 @@ export class ScanContextError extends Error {
       | "scan-not-runnable"
       | "site-not-active"
       | "schedule-not-active"
+      | "scan-mode-not-allowed"
       | "target-mismatch",
   ) {
     super(message);
@@ -45,6 +46,7 @@ export type ValidatedScanContext = {
   organizationId: string;
   siteId: string;
   trigger: "manual" | "scheduled";
+  scanMode: "public_audit" | "verified_monitoring";
   scheduleId: string | null;
   scheduledFor: Date | null;
   targetUrl: string;
@@ -89,6 +91,7 @@ export async function validateScanContext(
       scanId: scans.id,
       scanStatus: scans.status,
       scanTrigger: scans.trigger,
+      scanMode: scans.scanMode,
       scheduleId: scans.scheduleId,
       scheduledFor: scans.scheduledFor,
       scheduleEnabled: scanSchedules.enabled,
@@ -96,6 +99,7 @@ export async function validateScanContext(
       organizationId: scans.organizationId,
       siteId: scans.siteId,
       siteStatus: sites.status,
+      siteVerifiedAt: sites.verifiedAt,
       canonicalUrl: sites.canonicalUrl,
     })
     .from(scans)
@@ -136,8 +140,35 @@ export async function validateScanContext(
     throw new ScanContextError("Scan is not runnable", "scan-not-runnable");
   }
 
-  if (row.siteStatus !== "active") {
-    throw new ScanContextError("Site is not active", "site-not-active");
+  if (
+    row.scanMode === "verified_monitoring" &&
+    (row.siteStatus !== "active" || !row.siteVerifiedAt)
+  ) {
+    throw new ScanContextError(
+      "Verified monitoring requires an active verified site",
+      "site-not-active",
+    );
+  }
+
+  if (
+    row.scanMode === "public_audit" &&
+    row.siteStatus !== "pending_verification" &&
+    row.siteStatus !== "active"
+  ) {
+    throw new ScanContextError(
+      "Site is not eligible for a public audit",
+      "site-not-active",
+    );
+  }
+
+  if (
+    row.scanTrigger === "scheduled" &&
+    row.scanMode !== "verified_monitoring"
+  ) {
+    throw new ScanContextError(
+      "Scheduled scans require verified monitoring mode",
+      "scan-mode-not-allowed",
+    );
   }
 
   if (
@@ -162,6 +193,7 @@ export async function validateScanContext(
     organizationId: row.organizationId,
     siteId: row.siteId,
     trigger: row.scanTrigger,
+    scanMode: row.scanMode,
     scheduleId: row.scheduleId,
     scheduledFor: row.scheduledFor,
     targetUrl: row.canonicalUrl,
@@ -172,6 +204,26 @@ export async function markScanRunning(
   context: ValidatedScanContext,
 ): Promise<void> {
   const { db } = getDatabase();
+
+  const siteEligibility =
+    context.scanMode === "verified_monitoring"
+      ? sql`exists (
+          select 1
+          from ${sites}
+          where ${sites.id} = ${context.siteId}
+            and ${sites.organizationId} = ${context.organizationId}
+            and ${sites.status} = 'active'
+            and ${sites.verifiedAt} is not null
+            and ${sites.canonicalUrl} = ${context.targetUrl}
+        )`
+      : sql`exists (
+          select 1
+          from ${sites}
+          where ${sites.id} = ${context.siteId}
+            and ${sites.organizationId} = ${context.organizationId}
+            and ${sites.status} in ('pending_verification', 'active')
+            and ${sites.canonicalUrl} = ${context.targetUrl}
+        )`;
 
   const updated = await db
     .update(scans)
@@ -186,16 +238,9 @@ export async function markScanRunning(
         eq(scans.organizationId, context.organizationId),
         eq(scans.siteId, context.siteId),
         eq(scans.trigger, context.trigger),
+        eq(scans.scanMode, context.scanMode),
         inArray(scans.status, ["queued", "running", "failed"]),
-        sql`exists (
-          select 1
-          from ${sites}
-          where ${sites.id} = ${context.siteId}
-            and ${sites.organizationId} = ${context.organizationId}
-            and ${sites.status} = 'active'
-            and ${sites.verifiedAt} is not null
-            and ${sites.canonicalUrl} = ${context.targetUrl}
-        )`,
+        siteEligibility,
         context.trigger === "scheduled"
           ? sql`${scans.scheduleId} = ${context.scheduleId}
               and exists (
@@ -298,6 +343,10 @@ export async function persistScanCompletion(
       );
     }
 
+    if (context.scanMode === "public_audit") {
+      return;
+    }
+
     const [previousScan] = await tx
       .select({ id: scans.id, summary: scans.summary })
       .from(scans)
@@ -305,6 +354,7 @@ export async function persistScanCompletion(
         and(
           eq(scans.organizationId, context.organizationId),
           eq(scans.siteId, context.siteId),
+          eq(scans.scanMode, context.scanMode),
           eq(scans.status, "completed"),
           ne(scans.id, context.scanId),
           isNotNull(scans.completedAt),
