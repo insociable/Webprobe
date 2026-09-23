@@ -4,7 +4,7 @@ import {
   type OrganizationCreate,
   type SiteCreate,
 } from "@agency-saas/contracts";
-import { memberships, organizations, sites } from "@agency-saas/db";
+import { memberships, organizations, sites, users } from "@agency-saas/db";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "./database";
 import { canManageOrganization } from "./organization-permissions";
@@ -92,6 +92,7 @@ export async function createOrganizationForUser(
 export async function createInitialOrganizationForUser(
   userId: string,
   input: OrganizationCreate,
+  profile?: { displayName?: string },
 ) {
   const data = OrganizationCreateSchema.parse(input);
 
@@ -108,6 +109,13 @@ export async function createInitialOrganizationForUser(
 
     if (existingMembership.length > 0) {
       throw new AlreadyOnboardedError();
+    }
+
+    if (profile?.displayName) {
+      await tx
+        .update(users)
+        .set({ displayName: profile.displayName, updatedAt: new Date() })
+        .where(eq(users.id, userId));
     }
 
     const [organization] = await tx

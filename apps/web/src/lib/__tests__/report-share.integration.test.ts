@@ -17,6 +17,7 @@ import { getPublicReportByToken } from "../public-report-service";
 import {
   createReportShare,
   queueReportEmail,
+  ReportShareEligibilityError,
   ReportShareRateLimitError,
   revokeReportShare,
 } from "../report-share-service";
@@ -172,7 +173,7 @@ describeDatabase("shareable scan reports", () => {
           accentColor: "#123abc",
         },
         site: { name: "Client site" },
-        scan: { pageCount: 1 },
+        scan: { pageCount: 1, scanMode: "verified_monitoring" },
       });
       expect(publicReport?.scan.findings).toHaveLength(1);
       await expect(
@@ -259,6 +260,193 @@ describeDatabase("shareable scan reports", () => {
     } finally {
       if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
       else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      await cleanup(f);
+    }
+  });
+
+  it("keeps an unverified public audit private", async () => {
+    const f = await fixture();
+    const previousSecret = process.env.REPORT_TOKEN_SECRET;
+    process.env.REPORT_TOKEN_SECRET =
+      "report-test-secret-that-is-at-least-thirty-two-characters";
+
+    try {
+      await db
+        .update(sites)
+        .set({ status: "pending_verification", verifiedAt: null })
+        .where(eq(sites.id, f.siteId));
+      await db
+        .update(scans)
+        .set({ scanMode: "public_audit" })
+        .where(eq(scans.id, f.scanId));
+
+      await expect(
+        createReportShare(f.ownerId, f.organizationId, f.siteId, f.scanId),
+      ).rejects.toBeInstanceOf(ReportShareEligibilityError);
+      await expect(
+        queueReportEmail(
+          f.ownerId,
+          f.organizationId,
+          f.siteId,
+          f.scanId,
+          "client@example.com",
+        ),
+      ).rejects.toBeInstanceOf(ReportShareEligibilityError);
+
+      const shares = await db
+        .select({ id: reportShares.id })
+        .from(reportShares)
+        .where(eq(reportShares.scanId, f.scanId));
+      const deliveries = await db
+        .select({ id: reportDeliveries.id })
+        .from(reportDeliveries)
+        .where(eq(reportDeliveries.scanId, f.scanId));
+
+      expect(shares).toHaveLength(0);
+      expect(deliveries).toHaveLength(0);
+    } finally {
+      if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
+      else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      await cleanup(f);
+    }
+  });
+
+  it("compares shared reports only with a previous scan of the same mode", async () => {
+    const f = await fixture();
+    const previousSecret = process.env.REPORT_TOKEN_SECRET;
+    const previousBaseUrl = process.env.REPORT_PUBLIC_BASE_URL;
+    process.env.REPORT_TOKEN_SECRET =
+      "report-test-secret-that-is-at-least-thirty-two-characters";
+    process.env.REPORT_PUBLIC_BASE_URL = "https://reports.example.test";
+
+    try {
+      await db
+        .update(sites)
+        .set({ status: "pending_verification", verifiedAt: null })
+        .where(eq(sites.id, f.siteId));
+      await db
+        .update(scans)
+        .set({
+          scanMode: "public_audit",
+          completedAt: new Date("2026-09-22T10:00:00.000Z"),
+        })
+        .where(eq(scans.id, f.scanId));
+
+      // DNS verification changes site eligibility, not the historical mode.
+      await db
+        .update(sites)
+        .set({
+          status: "active",
+          verifiedAt: new Date("2026-09-22T10:30:00.000Z"),
+        })
+        .where(eq(sites.id, f.siteId));
+
+      const verifiedFirstId = randomUUID();
+      const publicSecondId = randomUUID();
+      const verifiedSecondId = randomUUID();
+      await db.insert(scans).values([
+        {
+          id: verifiedFirstId,
+          organizationId: f.organizationId,
+          siteId: f.siteId,
+          trigger: "manual",
+          scanMode: "verified_monitoring",
+          status: "completed",
+          pageCount: 1,
+          completedAt: new Date("2026-09-22T11:00:00.000Z"),
+        },
+        {
+          id: publicSecondId,
+          organizationId: f.organizationId,
+          siteId: f.siteId,
+          trigger: "manual",
+          scanMode: "public_audit",
+          status: "completed",
+          pageCount: 1,
+          completedAt: new Date("2026-09-22T12:00:00.000Z"),
+        },
+        {
+          id: verifiedSecondId,
+          organizationId: f.organizationId,
+          siteId: f.siteId,
+          trigger: "manual",
+          scanMode: "verified_monitoring",
+          status: "completed",
+          pageCount: 1,
+          completedAt: new Date("2026-09-22T13:00:00.000Z"),
+        },
+      ]);
+      await db.insert(findings).values([
+        {
+          organizationId: f.organizationId,
+          scanId: verifiedFirstId,
+          category: "security-header",
+          severity: "low",
+          code: "security-header.hsts.missing",
+          title: "Strict-Transport-Security absent",
+          pageUrl: "https://example.com/",
+          fingerprint: "d".repeat(64),
+          evidence: {},
+        },
+        {
+          organizationId: f.organizationId,
+          scanId: publicSecondId,
+          category: "security-header",
+          severity: "medium",
+          code: "security-header.csp.missing",
+          title: "Content-Security-Policy absent",
+          pageUrl: "https://example.com/",
+          fingerprint: "c".repeat(64),
+          evidence: {},
+        },
+        {
+          organizationId: f.organizationId,
+          scanId: verifiedSecondId,
+          category: "security-header",
+          severity: "low",
+          code: "security-header.hsts.missing",
+          title: "Strict-Transport-Security absent",
+          pageUrl: "https://example.com/",
+          fingerprint: "d".repeat(64),
+          evidence: {},
+        },
+      ]);
+
+      const reportAt = async (scanId: string) => {
+        const share = await createReportShare(
+          f.ownerId,
+          f.organizationId,
+          f.siteId,
+          scanId,
+          new Date("2026-09-22T14:00:00.000Z"),
+        );
+        return getPublicReportByToken(
+          share.url.split("/").at(-1)!,
+          new Date("2026-09-22T14:01:00.000Z"),
+        );
+      };
+
+      expect((await reportAt(verifiedFirstId))?.comparison).toBeNull();
+      const publicSecondReport = await reportAt(publicSecondId);
+      expect(publicSecondReport?.scan.scanMode).toBe("public_audit");
+      expect(publicSecondReport?.comparison?.counts).toMatchObject({
+        unchanged: 1,
+        new: 0,
+        resolved: 0,
+      });
+      expect(
+        (await reportAt(verifiedSecondId))?.comparison?.counts,
+      ).toMatchObject({
+        unchanged: 1,
+        new: 0,
+        resolved: 0,
+      });
+    } finally {
+      if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
+      else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      if (previousBaseUrl === undefined)
+        delete process.env.REPORT_PUBLIC_BASE_URL;
+      else process.env.REPORT_PUBLIC_BASE_URL = previousBaseUrl;
       await cleanup(f);
     }
   });

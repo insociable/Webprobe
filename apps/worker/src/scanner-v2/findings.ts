@@ -28,6 +28,8 @@ export type ScannerV2PersistentSummary = {
     redirectCount: number;
     malformedUrlCount: number;
     budgetReached: boolean;
+    robotsRestricted: boolean;
+    robotsPolicyUnavailable: boolean;
   };
   network: {
     issueCount: number;
@@ -287,6 +289,8 @@ export function summarizeScannerV2(
       redirectCount: scannerV2.crawl.redirects.length,
       malformedUrlCount: scannerV2.crawl.malformedUrlCount,
       budgetReached: scannerV2.crawl.budgetReached,
+      robotsRestricted: scannerV2.crawl.robotsRestricted,
+      robotsPolicyUnavailable: scannerV2.crawl.robotsPolicyUnavailable,
     },
     network: {
       issueCount: scannerV2.network.issues.length,

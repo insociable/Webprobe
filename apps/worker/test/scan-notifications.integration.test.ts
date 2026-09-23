@@ -135,6 +135,7 @@ async function createFixture(previousFindingSeverity?: "medium" | "high") {
       organizationId,
       siteId,
       trigger: "manual" as const,
+      scanMode: "verified_monitoring" as const,
       scheduleId: null,
       scheduledFor: null,
       targetUrl: "https://example.com/",

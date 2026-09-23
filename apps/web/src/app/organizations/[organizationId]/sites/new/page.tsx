@@ -36,24 +36,16 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
   }
 
   return (
-    <WorkspaceShell
-      trail={[
-        {
-          label: access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: "Nouveau site" },
-      ]}
-    >
+    <WorkspaceShell trail={[{ label: "Nouveau site" }]}>
       <section className="max-w-3xl">
-        <p className="am-kicker">Nouveau site</p>
+        <p className="am-kicker">Audit public</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-          Ajouter un site à superviser
+          Auditer un site public
         </h1>
         <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
-          Le site sera créé en attente de vérification. Aucun scan ne sera
-          autorisé tant que le contrôle DNS n’aura pas confirmé que vous
-          maîtrisez le domaine.
+          Agency Monitor analysera uniquement ce qu’un visiteur public peut
+          observer, sans authentification ni action intrusive. La vérification
+          DNS n’est nécessaire que pour activer ensuite le monitoring continu.
         </p>
       </section>
 
@@ -61,20 +53,20 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
         <div className="grid gap-6 sm:grid-cols-[150px_1fr]">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#627087]">
-              Étape 01 / 02
+              Audit one-shot
             </p>
             <div className="mt-4 h-px w-12 bg-[#6d7cff]" />
             <p className="mt-4 text-xs leading-5 text-[#68758c]">
-              Déclarer le site avant la vérification DNS.
+              Créer le site et lancer immédiatement l’audit public.
             </p>
           </div>
           <div>
             <h2 className="text-2xl font-semibold tracking-[-0.03em]">
-              Identité du site
+              Cible publique
             </h2>
             <p className="mt-3 leading-7 text-[#7f8a9f]">
-              Renseignez le nom visible dans Agency Monitor et l’URL canonique
-              qui servira de point d’entrée aux futurs scans.
+              Renseignez le nom visible dans Agency Monitor et l’URL publique
+              qui servira de point d’entrée à l’audit.
             </p>
             <SiteForm organizationId={organizationId} />
           </div>

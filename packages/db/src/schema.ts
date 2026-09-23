@@ -29,6 +29,11 @@ export const scanStatus = pgEnum("scan_status", [
 
 export const scanTrigger = pgEnum("scan_trigger", ["manual", "scheduled"]);
 
+export const scanMode = pgEnum("scan_mode", [
+  "public_audit",
+  "verified_monitoring",
+]);
+
 export const scanDispatchStatus = pgEnum("scan_dispatch_status", [
   "pending",
   "dispatching",
@@ -324,6 +329,10 @@ export const scans = pgTable(
       .references(() => sites.id, { onDelete: "cascade" }),
     status: scanStatus("status").default("queued").notNull(),
     trigger: scanTrigger("trigger").notNull(),
+    scanMode: scanMode("scan_mode").default("verified_monitoring").notNull(),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     scheduleId: uuid("schedule_id").references(() => scanSchedules.id, {
       onDelete: "set null",
     }),
@@ -342,6 +351,11 @@ export const scans = pgTable(
   (table) => [
     index("scans_org_idx").on(table.organizationId),
     index("scans_site_queued_idx").on(table.siteId, table.queuedAt),
+    index("scans_requester_mode_queued_idx").on(
+      table.requestedByUserId,
+      table.scanMode,
+      table.queuedAt,
+    ),
     uniqueIndex("scans_site_active_unique")
       .on(table.siteId)
       .where(sql`${table.status} in ('queued', 'running')`),
@@ -354,6 +368,10 @@ export const scans = pgTable(
       "scans_scheduled_metadata_consistent",
       sql`(${table.trigger} = 'manual' and ${table.scheduleId} is null and ${table.scheduledFor} is null)
           or (${table.trigger} = 'scheduled' and ${table.scheduledFor} is not null)`,
+    ),
+    check(
+      "scans_mode_trigger_consistent",
+      sql`${table.scanMode} = 'verified_monitoring' or ${table.trigger} = 'manual'`,
     ),
   ],
 );

@@ -142,6 +142,7 @@ export async function claimDueScheduledScans(
           siteId: schedule.siteId,
           status: "queued",
           trigger: "scheduled",
+          scanMode: "verified_monitoring",
           scheduleId: schedule.scheduleId,
           scheduledFor: dueAt,
         })
@@ -190,6 +191,7 @@ export async function cancelInvalidQueuedScheduledScans(
     .where(
       and(
         eq(scans.trigger, "scheduled"),
+        eq(scans.scanMode, "verified_monitoring"),
         eq(scans.status, "queued"),
         sql`(
           ${scans.scheduleId} is null

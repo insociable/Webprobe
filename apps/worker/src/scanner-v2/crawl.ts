@@ -6,7 +6,8 @@ export type CrawlExclusionReason =
   | "credentials"
   | "external-origin"
   | "duplicate"
-  | "page-budget";
+  | "page-budget"
+  | "robots-disallowed";
 
 export type CrawlCandidate = ObservedUrl & {
   navigationUrl: string;
@@ -55,6 +56,8 @@ export type CrawlCoverage = {
   urls: CrawlUrlObservation[];
   redirects: CrawlRedirectObservation[];
   malformedUrlCount: number;
+  robotsRestricted: boolean;
+  robotsPolicyUnavailable: boolean;
 };
 
 type MutableCrawlEntry = CrawlUrlObservation & { sourceUrls: Set<string> };
@@ -104,6 +107,8 @@ export class CrawlCoverageTracker {
   private readonly redirects: CrawlRedirectObservation[] = [];
   private malformedUrlCount = 0;
   private reachedBudget = false;
+  private robotsRestricted = false;
+  private robotsPolicyUnavailable = false;
 
   constructor(private readonly maxPages: number) {}
 
@@ -163,6 +168,29 @@ export class CrawlCoverageTracker {
       finalUrl: null,
       statusCode: null,
     });
+  }
+
+  markRobotsDisallowed(
+    candidate: CrawlCandidate,
+    sourcePageUrl: string | null,
+  ): void {
+    const isNew = this.discover(candidate, sourcePageUrl);
+    const entry = this.entries.get(
+      this.redirectAliases.get(candidate.urlKey) ?? candidate.urlKey,
+    );
+    if (isNew && entry) {
+      entry.state = "not-visited";
+      entry.exclusionReason = "robots-disallowed";
+    }
+    this.robotsRestricted = true;
+  }
+
+  markRobotsRestricted(): void {
+    this.robotsRestricted = true;
+  }
+
+  markRobotsPolicyUnavailable(): void {
+    this.robotsPolicyUnavailable = true;
   }
 
   markRemainingBudgetExceeded(): void {
@@ -270,6 +298,8 @@ export class CrawlCoverageTracker {
       urls,
       redirects: [...this.redirects],
       malformedUrlCount: this.malformedUrlCount,
+      robotsRestricted: this.robotsRestricted,
+      robotsPolicyUnavailable: this.robotsPolicyUnavailable,
     };
   }
 }

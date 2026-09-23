@@ -29,6 +29,7 @@ export async function getOrganizationOverview(
       siteId: scans.siteId,
       status: scans.status,
       trigger: scans.trigger,
+      scanMode: scans.scanMode,
       summary: scans.summary,
       queuedAt: scans.queuedAt,
       startedAt: scans.startedAt,

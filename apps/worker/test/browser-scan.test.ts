@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { DnsResolver } from "@agency-saas/security";
 import type { BrowserContext, Page, Response } from "playwright";
-import type { IsolatedBrowserSession } from "../src/browser-runtime.js";
+import type {
+  BrowserRuntimeOptions,
+  IsolatedBrowserSession,
+} from "../src/browser-runtime.js";
 import { normalizeInternalLink, runBrowserScan } from "../src/browser-scan.js";
 
 const publicResolver: DnsResolver = async () => [
@@ -188,6 +191,351 @@ describe("browser crawl", () => {
         (entry) => entry.url === "https://example.com/",
       )?.duplicateDiscoveryCount,
     ).toBeGreaterThan(0);
+  });
+
+  it("respects robots.txt during public audit crawling", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async (_expression: unknown, argument?: string) => {
+        if (argument?.endsWith("/robots.txt")) {
+          throw new Error("robots.txt must not use page JavaScript");
+        }
+        return null;
+      },
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://example.com/"
+              ? [
+                  { href: "https://example.com/allowed" },
+                  { href: "https://example.com/private" },
+                ]
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 3,
+      checkAccessibility: false,
+      loadRobotsPolicy: async () => ({
+        policy: {
+          rules: [{ directive: "disallow", pattern: "/private" }],
+          sitemaps: [],
+        },
+        unavailable: false,
+      }),
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/allowed",
+    ]);
+    expect(result.scannerV2.crawl).toMatchObject({
+      robotsRestricted: true,
+      robotsPolicyUnavailable: false,
+      urls: expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.com/private",
+          state: "not-visited",
+          exclusionReason: "robots-disallowed",
+        }),
+      ]),
+    });
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+  });
+
+  it("blocks an initially robots-disallowed public audit target before Chromium starts", async () => {
+    let sessionCreated = false;
+    const result = await runBrowserScan("https://example.com/private", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      loadRobotsPolicy: async () => ({
+        policy: {
+          rules: [{ directive: "disallow", pattern: "/private" }],
+          sitemaps: [],
+        },
+        unavailable: false,
+      }),
+      createSession: async () => {
+        sessionCreated = true;
+        throw new Error("Chromium must not start");
+      },
+    });
+
+    expect(sessionCreated).toBe(false);
+    expect(result.pagesVisited).toBe(0);
+    expect(result.scannerV2.crawl).toMatchObject({
+      robotsRestricted: true,
+      robotsPolicyUnavailable: false,
+    });
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+  });
+
+  it("uses the configured browser User-Agent token for robots evaluation", async () => {
+    const previous = process.env.AGENCY_MONITOR_USER_AGENT;
+    process.env.AGENCY_MONITOR_USER_AGENT = "AgencyCrawler/9.9";
+    let observedUserAgent = "";
+
+    try {
+      const result = await runBrowserScan("https://example.com/private", {
+        resolver: publicResolver,
+        scanMode: "public_audit",
+        loadRobotsPolicy: async (_origin, _deadline, userAgent) => {
+          observedUserAgent = userAgent;
+          return {
+            policy: {
+              rules: [{ directive: "disallow", pattern: "/private" }],
+              sitemaps: [],
+            },
+            unavailable: false,
+          };
+        },
+      });
+
+      expect(result.pagesVisited).toBe(0);
+      expect(observedUserAgent).toBe("AgencyCrawler/9.9");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENCY_MONITOR_USER_AGENT;
+      } else {
+        process.env.AGENCY_MONITOR_USER_AGENT = previous;
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: "robots-disallowed",
+      redirectUrl: "https://example.com/private",
+      disallowPrivate: true,
+      robotsRestricted: true,
+    },
+    {
+      name: "third-party",
+      redirectUrl: "https://outside.example/landing",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+    {
+      name: "private-address",
+      redirectUrl: "https://127.0.0.1/private",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+    {
+      name: "https-downgrade",
+      redirectUrl: "http://example.com/private",
+      disallowPrivate: false,
+      robotsRestricted: false,
+    },
+  ])(
+    "blocks $name document redirect before the redirected request is emitted",
+    async ({ redirectUrl, disallowPrivate, robotsRestricted }) => {
+      let currentUrl = "about:blank";
+      const loadedOrigins: string[] = [];
+
+      const result = await runBrowserScan("https://example.com/go", {
+        resolver: publicResolver,
+        scanMode: "public_audit",
+        checkAccessibility: false,
+        loadRobotsPolicy: async (origin) => {
+          loadedOrigins.push(origin);
+          return {
+            policy: {
+              rules: disallowPrivate
+                ? [{ directive: "disallow" as const, pattern: "/private" }]
+                : [],
+              sitemaps: [],
+            },
+            unavailable: false,
+          };
+        },
+        createSession: async (sessionOptions: BrowserRuntimeOptions) => {
+          const policy = sessionOptions.requestPolicy;
+          if (!policy) throw new Error("Expected public audit request policy");
+          const fakePage = {
+            on: () => fakePage,
+            goto: async (url: string) => {
+              const initialAllowed = await policy({
+                url,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: null,
+              });
+              expect(initialAllowed).toBe(true);
+
+              const redirectAllowed = await policy({
+                url: redirectUrl,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: url,
+              });
+              expect(redirectAllowed).toBe(false);
+              throw new Error("blocked by public audit request policy");
+            },
+            url: () => currentUrl,
+          } as unknown as Page;
+
+          return {
+            browser: {} as IsolatedBrowserSession["browser"],
+            context: {
+              newPage: async () => fakePage,
+            } as unknown as BrowserContext,
+            proxy: {} as IsolatedBrowserSession["proxy"],
+            pageCount: () => 1,
+            close: async () => undefined,
+          };
+        },
+      });
+
+      expect(currentUrl).toBe("about:blank");
+      expect(result.pagesVisited).toBe(0);
+      expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+      expect(result.scannerV2.crawl.robotsRestricted).toBe(robotsRestricted);
+      expect(loadedOrigins[0]).toBe("https://example.com");
+      if (!redirectUrl.startsWith("https://www.example.com")) {
+        expect(loadedOrigins).toEqual(["https://example.com"]);
+      }
+    },
+  );
+
+  it("allows a conservative www canonical redirect only after loading its robots policy", async () => {
+    let currentUrl = "about:blank";
+    const loadedOrigins: string[] = [];
+    const seenUserAgents: string[] = [];
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 1,
+      checkAccessibility: false,
+      loadRobotsPolicy: async (origin, _deadline, userAgent) => {
+        loadedOrigins.push(origin);
+        seenUserAgents.push(userAgent);
+        return {
+          policy: { rules: [], sitemaps: [] },
+          unavailable: false,
+        };
+      },
+      createSession: async (sessionOptions: BrowserRuntimeOptions) => {
+        const policy = sessionOptions.requestPolicy;
+        if (!policy) throw new Error("Expected public audit request policy");
+        const fakePage = {
+          on: () => fakePage,
+          addInitScript: async () => undefined,
+          evaluate: async () => null,
+          goto: async (url: string) => {
+            expect(
+              await policy({
+                url,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: null,
+              }),
+            ).toBe(true);
+            const redirected = "https://www.example.com/";
+            expect(
+              await policy({
+                url: redirected,
+                method: "GET",
+                resourceType: "document",
+                isNavigationRequest: true,
+                redirectedFromUrl: url,
+              }),
+            ).toBe(true);
+            currentUrl = redirected;
+            return { status: () => 200 } as unknown as Response;
+          },
+          url: () => currentUrl,
+          waitForTimeout: async () => undefined,
+          locator: () => ({ evaluateAll: async () => [] }),
+        } as unknown as Page;
+
+        return {
+          browser: {} as IsolatedBrowserSession["browser"],
+          context: {
+            newPage: async () => fakePage,
+          } as unknown as BrowserContext,
+          proxy: {} as IsolatedBrowserSession["proxy"],
+          pageCount: () => 1,
+          close: async () => undefined,
+        };
+      },
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://www.example.com/",
+    ]);
+    expect(loadedOrigins).toEqual([
+      "https://example.com",
+      "https://www.example.com",
+    ]);
+    expect(seenUserAgents).toEqual(["AgencyMonitor/1.0", "AgencyMonitor/1.0"]);
+  });
+
+  it("adopts only a conservative validated initial canonical redirect", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async () => null,
+      goto: async (url: string) => {
+        currentUrl =
+          url === "http://example.com/" ? "https://www.example.com/" : url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://www.example.com/"
+              ? [{ href: "https://www.example.com/about" }]
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("http://example.com/", {
+      resolver: publicResolver,
+      maxPages: 2,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://www.example.com/",
+      "https://www.example.com/about",
+    ]);
   });
 
   it("skips axe when accessibility checks are disabled", async () => {
@@ -556,6 +904,60 @@ describe("browser crawl", () => {
     expect(result.observations[0]?.url).toBe("https://outside.example/landing");
     expect(result.scannerV2.performance).toHaveLength(0);
     expect(result.scannerV2.seo.pages).toHaveLength(0);
+  });
+
+  it("caps direct public audit callers at 15 pages and 20 second navigation", async () => {
+    let currentUrl = "about:blank";
+    let requestedNavigationTimeoutMs: number | undefined;
+    const rootLinks = Array.from(
+      { length: 20 },
+      (_, index) => "https://example.com/page-" + (index + 1),
+    );
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async () => null,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://example.com/"
+              ? rootLinks.map((href) => ({ href }))
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 20,
+      navigationTimeoutMs: 60_000,
+      checkAccessibility: false,
+      loadRobotsPolicy: async () => ({
+        policy: { rules: [], sitemaps: [] },
+        unavailable: false,
+      }),
+      createSession: async (options: BrowserRuntimeOptions) => {
+        requestedNavigationTimeoutMs = options.navigationTimeoutMs;
+        return {
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        } as unknown as IsolatedBrowserSession;
+      },
+    });
+
+    expect(requestedNavigationTimeoutMs).toBe(20_000);
+    expect(result.pagesVisited).toBe(15);
+    expect(result.scannerV2.crawl.budgetReached).toBe(true);
   });
 
   it("enforces a global browser scan deadline", async () => {

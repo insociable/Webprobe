@@ -8,13 +8,17 @@ import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { ManualScanButton } from "../../manual-scan-button";
+import { PublicAuditButton } from "../../public-audit-button";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
+import { AlertPreferencePanel } from "../../alert-preference-panel";
+import { ReportBrandingPanel } from "../../report-branding-panel";
 
 type SitePageProps = {
   params: Promise<{
     organizationId: string;
     siteId: string;
   }>;
+  searchParams: Promise<{ audit?: string }>;
 };
 
 const scanStatusLabels = {
@@ -69,8 +73,12 @@ async function loadSiteSchedule(
   }
 }
 
-export default async function SitePage({ params }: SitePageProps) {
+export default async function SitePage({
+  params,
+  searchParams,
+}: SitePageProps) {
   const { organizationId, siteId } = await params;
+  const { audit } = await searchParams;
 
   if (
     !OrganizationReadSchema.shape.id.safeParse(organizationId).success ||
@@ -99,23 +107,25 @@ export default async function SitePage({ params }: SitePageProps) {
   const activeScan = history.scans.some(
     (scan) => scan.status === "queued" || scan.status === "running",
   );
+  const latestScan = history.scans[0] ?? null;
+  const latestScanCompleted = latestScan?.status === "completed";
+  const latestScanRetryable =
+    !latestScan ||
+    latestScan.status === "failed" ||
+    latestScan.status === "cancelled";
   const canManage = history.access.role !== "member";
 
   return (
-    <WorkspaceShell
-      trail={[
-        {
-          label: history.access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: history.site.name },
-      ]}
-    >
+    <WorkspaceShell trail={[{ label: history.site.name }]}>
       <ScanStatusRefresher active={activeScan} />
 
       <section className="grid gap-7 border-b border-[#242d40] pb-9 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
-          <p className="am-kicker">Site surveillé</p>
+          <p className="am-kicker">
+            {history.site.status === "pending_verification"
+              ? "Site à auditer"
+              : "Site surveillé"}
+          </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
             {history.site.name}
           </h1>
@@ -137,12 +147,45 @@ export default async function SitePage({ params }: SitePageProps) {
               ? "Domaine vérifié · supervision disponible"
               : history.site.status === "paused"
                 ? "Supervision en pause"
-                : "Domaine à vérifier"}
+                : "Audit public disponible · monitoring non activé"}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
-          {history.site.status === "pending_verification" && canManage ? (
+          {history.site.status === "pending_verification" &&
+          latestScanRetryable &&
+          !activeScan ? (
+            <PublicAuditButton
+              organizationId={organizationId}
+              siteId={siteId}
+              label={
+                latestScan ? "Relancer l’audit public" : "Lancer l’audit public"
+              }
+            />
+          ) : null}
+
+          {history.site.status === "pending_verification" &&
+          latestScanCompleted &&
+          latestScan ? (
+            <Link
+              href={
+                "/organizations/" +
+                organizationId +
+                "/sites/" +
+                siteId +
+                "/scans/" +
+                latestScan.id
+              }
+              className="am-button-primary"
+            >
+              Voir le rapport
+              <span aria-hidden="true">→</span>
+            </Link>
+          ) : null}
+
+          {history.site.status === "pending_verification" &&
+          canManage &&
+          !activeScan ? (
             <Link
               href={
                 "/organizations/" +
@@ -153,8 +196,19 @@ export default async function SitePage({ params }: SitePageProps) {
               }
               className="am-button-secondary"
             >
-              Vérifier le domaine
+              Activer le monitoring
             </Link>
+          ) : null}
+
+          {history.site.status === "pending_verification" &&
+          latestScanCompleted &&
+          !activeScan ? (
+            <PublicAuditButton
+              organizationId={organizationId}
+              siteId={siteId}
+              appearance="link"
+              label="Relancer l’audit"
+            />
           ) : null}
 
           {history.site.status === "active" && canManage && !activeScan ? (
@@ -162,6 +216,45 @@ export default async function SitePage({ params }: SitePageProps) {
           ) : null}
         </div>
       </section>
+
+      {history.site.status === "pending_verification" ? (
+        <section className="mt-7 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+            Monitoring verrouillé
+          </p>
+          <h2 className="mt-2 text-lg font-semibold">
+            La vérification DNS débloque le suivi continu
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
+            Tant que le domaine n’est pas vérifié, Agency Monitor reste en audit
+            public one-shot. La validation active ensuite le planning, les
+            alertes de monitoring et le partage de rapports. Les audits publics
+            déjà réalisés restent associés au site et distincts du monitoring ;
+            leur conservation suit la politique de rétention configurée.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["Planning", "Alertes", "Partage de rapports"].map((item) => (
+              <span
+                key={item}
+                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aeb9cc]"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {audit === "deferred" ? (
+        <section className="mt-7 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
+          <p className="font-semibold text-amber-100">Site créé.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-100/70">
+            L’audit public n’a pas pu démarrer automatiquement, par exemple à
+            cause d’un quota, d’un cooldown ou d’un scan déjà actif. Vous pouvez
+            le relancer avec le bouton ci-dessus.
+          </p>
+        </section>
+      ) : null}
 
       {activeScan ? (
         <section
@@ -230,9 +323,11 @@ export default async function SitePage({ params }: SitePageProps) {
                   </span>
                   <div>
                     <p className="font-medium text-[#e2e7f1]">
-                      {scan.trigger === "manual"
-                        ? "Scan manuel"
-                        : "Scan planifié"}
+                      {scan.scanMode === "public_audit"
+                        ? "Audit public"
+                        : scan.trigger === "manual"
+                          ? "Monitoring manuel"
+                          : "Monitoring planifié"}
                     </p>
                     <p className="mt-1 text-sm text-[#68758c]">
                       {formatDate(scan.queuedAt)}
@@ -293,6 +388,39 @@ export default async function SitePage({ params }: SitePageProps) {
           }
         />
       </section>
+
+      {canManage ? (
+        <section className="mt-10 border-t border-[#242d40] pt-9">
+          <div className="mb-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Préférences
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Rapports et alertes
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#6f7b91]">
+              Configurez ici la présentation des rapports et les alertes de
+              dégradation utilisées depuis votre portail.
+            </p>
+          </div>
+
+          <ReportBrandingPanel
+            organizationId={organizationId}
+            brandName={history.access.reportBrandName}
+            accentColor={history.access.reportAccentColor}
+          />
+          <AlertPreferencePanel
+            organizationId={organizationId}
+            enabled={history.access.scanAlertEnabled}
+            minimumSeverity={
+              history.access.scanAlertMinimumSeverity === "high" ||
+              history.access.scanAlertMinimumSeverity === "critical"
+                ? history.access.scanAlertMinimumSeverity
+                : "medium"
+            }
+          />
+        </section>
+      ) : null}
     </WorkspaceShell>
   );
 }

@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ProductMark } from "@/components/product-shell";
+import { ProductMark } from "@/components/product-mark";
 import { authClient } from "@/lib/auth-client";
 
 type Step = "email" | "otp";
@@ -104,11 +104,13 @@ export default function SignInPage() {
           </Link>
           <p className="am-kicker">Session agence</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
-            {step === "email" ? "Connexion" : "Vérifiez votre e-mail"}
+            {step === "email"
+              ? "Connexion ou création de compte"
+              : "Vérifiez votre e-mail"}
           </h2>
           <p className="mt-3 leading-7 text-[#8793a8]">
             {step === "email"
-              ? "Saisissez votre adresse. Nous envoyons un code temporaire à usage unique."
+              ? "Saisissez votre adresse. Nous envoyons un code temporaire à usage unique. Lors d’une première connexion, vous choisirez ensuite votre nom affiché."
               : "Entrez le code à 6 chiffres reçu par e-mail."}
           </p>
 

@@ -12,6 +12,7 @@ import { OrganizationAccessError } from "@/lib/organization-site-service";
 import {
   createReportShare,
   queueReportEmail,
+  ReportShareEligibilityError,
   ReportShareRateLimitError,
   revokeReportShare,
 } from "@/lib/report-share-service";
@@ -64,9 +65,11 @@ export async function createReportShareAction(
       error:
         error instanceof OrganizationAccessError
           ? "Vous n’êtes pas autorisé à partager ce rapport."
-          : error instanceof ReportShareRateLimitError
-            ? "Quota de liens de partage atteint pour ce rapport."
-            : "Impossible de créer le lien pour le moment.",
+          : error instanceof ReportShareEligibilityError
+            ? "Cet audit public reste privé tant que le site n’est pas vérifié."
+            : error instanceof ReportShareRateLimitError
+              ? "Quota de liens de partage atteint pour ce rapport."
+              : "Impossible de créer le lien pour le moment.",
       message: null,
     };
   }
@@ -108,9 +111,11 @@ export async function sendReportEmailAction(
       error:
         error instanceof OrganizationAccessError
           ? "Vous n’êtes pas autorisé à envoyer ce rapport."
-          : error instanceof ReportShareRateLimitError
-            ? "Quota d’envoi atteint. Réessayez plus tard ou utilisez un lien de partage existant."
-            : "Impossible de mettre l’e-mail en file pour le moment.",
+          : error instanceof ReportShareEligibilityError
+            ? "Cet audit public reste privé tant que le site n’est pas vérifié."
+            : error instanceof ReportShareRateLimitError
+              ? "Quota d’envoi atteint. Réessayez plus tard ou utilisez un lien de partage existant."
+              : "Impossible de mettre l’e-mail en file pour le moment.",
       message: null,
     };
   }
