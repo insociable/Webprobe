@@ -155,3 +155,139 @@ export function summarizeReportFindings(
     byCategory,
   };
 }
+
+export type ReportSectionKey =
+  | "security"
+  | "seo"
+  | "performance"
+  | "network"
+  | "accessibility"
+  | "other";
+
+export type ReportSectionDefinition = {
+  key: ReportSectionKey;
+  label: string;
+  description: string;
+};
+
+export const reportSectionDefinitions: ReportSectionDefinition[] = [
+  {
+    key: "security",
+    label: "Sécurité",
+    description:
+      "HTTPS, en-têtes navigateur et signaux de protection observables publiquement.",
+  },
+  {
+    key: "seo",
+    label: "SEO",
+    description:
+      "Signaux techniques qui influencent l’indexation et la compréhension du contenu.",
+  },
+  {
+    key: "performance",
+    label: "Performance",
+    description:
+      "Temps de chargement, stabilité visuelle et erreurs JavaScript observées.",
+  },
+  {
+    key: "network",
+    label: "Réseau / disponibilité",
+    description:
+      "Accessibilité HTTP, ressources réseau et liens internes observés pendant le scan.",
+  },
+  {
+    key: "accessibility",
+    label: "Accessibilité",
+    description:
+      "Contrôles automatisés pouvant affecter l’usage au clavier ou avec assistance.",
+  },
+  {
+    key: "other",
+    label: "Autres signaux",
+    description: "Constats qui ne rentrent pas dans les domaines principaux.",
+  },
+];
+
+export function reportSectionKeyForFinding(
+  finding: ReportFindingLike,
+): ReportSectionKey {
+  switch (finding.category) {
+    case "security-header":
+    case "tls":
+      return "security";
+    case "seo":
+      return "seo";
+    case "performance":
+    case "javascript":
+      return "performance";
+    case "network":
+    case "availability":
+    case "broken-link":
+      return "network";
+    case "accessibility":
+      return "accessibility";
+    default:
+      return "other";
+  }
+}
+
+export function summarizeReportSections(
+  findings: readonly ReportFindingLike[],
+) {
+  const summaries = new Map<
+    ReportSectionKey,
+    {
+      definition: ReportSectionDefinition;
+      total: number;
+      highOrCritical: number;
+      highestSeverity: ReportSeverity | null;
+    }
+  >();
+
+  for (const definition of reportSectionDefinitions) {
+    summaries.set(definition.key, {
+      definition,
+      total: 0,
+      highOrCritical: 0,
+      highestSeverity: null,
+    });
+  }
+
+  for (const finding of findings) {
+    const key = reportSectionKeyForFinding(finding);
+    const summary = summaries.get(key);
+    if (!summary) continue;
+    summary.total += 1;
+    if (finding.severity === "high" || finding.severity === "critical") {
+      summary.highOrCritical += 1;
+    }
+    if (
+      summary.highestSeverity === null ||
+      reportSeverityRank[finding.severity] >
+        reportSeverityRank[summary.highestSeverity]
+    ) {
+      summary.highestSeverity = finding.severity;
+    }
+  }
+
+  return reportSectionDefinitions
+    .map((definition) => summaries.get(definition.key)!)
+    .filter((summary) => summary.total > 0);
+}
+
+export function groupFindingsByReportSection<T extends ReportFindingLike>(
+  findings: readonly T[],
+) {
+  const grouped = new Map<ReportSectionKey, T[]>();
+  for (const finding of findings) {
+    const key = reportSectionKeyForFinding(finding);
+    const bucket = grouped.get(key) ?? [];
+    bucket.push(finding);
+    grouped.set(key, bucket);
+  }
+
+  return reportSectionDefinitions.flatMap((definition) => {
+    const items = grouped.get(definition.key) ?? [];
+    return items.length > 0 ? [{ definition, findings: items }] : [];
+  });
+}

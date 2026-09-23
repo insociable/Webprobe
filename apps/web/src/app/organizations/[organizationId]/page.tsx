@@ -329,16 +329,6 @@ export default async function OrganizationPage({
                         </p>
                       )}
                     </div>
-
-                    <Link
-                      href={
-                        "/organizations/" + organizationId + "/sites/" + site.id
-                      }
-                      aria-label={"Ouvrir " + site.name}
-                      className="text-[#6676ff] transition hover:translate-x-1 hover:text-[#9ba5ff]"
-                    >
-                      →
-                    </Link>
                   </div>
                 </article>
               );

@@ -13,6 +13,7 @@ import {
   getFindingBusinessContext,
   getPriorityFindings,
   summarizeReportFindings,
+  summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
@@ -237,6 +238,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
   );
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const reportSummary = summarizeReportFindings(orderedFindings);
+  const sectionSummaries = summarizeReportSections(orderedFindings);
   const priorityFindings = getPriorityFindings(orderedFindings, 3);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
@@ -504,6 +506,58 @@ export default async function ScanPage({ params }: ScanPageProps) {
                 </article>
               );
             })}
+          </div>
+        </section>
+      ) : null}
+
+      {details.scan.status === "completed" && sectionSummaries.length > 0 ? (
+        <section className="border-b border-[#242d40] py-10">
+          <p className="am-kicker">Analyse par domaine</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            Où concentrer l’attention
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
+            Les constats sont regroupés par domaine pour distinguer rapidement
+            sécurité, visibilité, performance et disponibilité.
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {sectionSummaries.map((section) => (
+              <article
+                key={section.definition.key}
+                className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-semibold">{section.definition.label}</h3>
+                  {section.highestSeverity ? (
+                    <span
+                      className={
+                        "rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] " +
+                        severityStyles[section.highestSeverity]
+                      }
+                    >
+                      {severityLabels[section.highestSeverity]}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/45">
+                  {section.definition.description}
+                </p>
+                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
+                  <div>
+                    <dt className="text-white/30">Constats</dt>
+                    <dd className="mt-1 text-lg font-semibold text-white/80">
+                      {section.total}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-white/30">Hauts / critiques</dt>
+                    <dd className="mt-1 text-lg font-semibold text-white/80">
+                      {section.highOrCritical}
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
           </div>
         </section>
       ) : null}

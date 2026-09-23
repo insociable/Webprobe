@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   getFindingBusinessContext,
   getPriorityFindings,
+  groupFindingsByReportSection,
+  reportSectionKeyForFinding,
   summarizeReportFindings,
+  summarizeReportSections,
 } from "../report-presentation";
 
 describe("report presentation", () => {
@@ -51,6 +54,41 @@ describe("report presentation", () => {
     expect(getPriorityFindings(findings, 2).map((item) => item.code)).toEqual([
       "availability.http-5xx",
       "security-header.csp.missing",
+    ]);
+  });
+
+  it("maps findings into stable commercial report sections", () => {
+    expect(reportSectionKeyForFinding(findings[1]!)).toBe("network");
+    expect(reportSectionKeyForFinding(findings[2]!)).toBe("security");
+    expect(reportSectionKeyForFinding(findings[0]!)).toBe("seo");
+
+    expect(
+      summarizeReportSections(findings).map((section) => ({
+        key: section.definition.key,
+        total: section.total,
+        highOrCritical: section.highOrCritical,
+      })),
+    ).toEqual([
+      { key: "security", total: 1, highOrCritical: 1 },
+      { key: "seo", total: 1, highOrCritical: 0 },
+      { key: "network", total: 2, highOrCritical: 1 },
+    ]);
+
+    expect(
+      groupFindingsByReportSection(findings).map((section) => ({
+        key: section.definition.key,
+        codes: section.findings.map((finding) => finding.code),
+      })),
+    ).toEqual([
+      {
+        key: "security",
+        codes: ["security-header.csp.missing"],
+      },
+      { key: "seo", codes: ["seo.title.missing"] },
+      {
+        key: "network",
+        codes: ["availability.http-5xx", "broken-link.http-error"],
+      },
     ]);
   });
 
