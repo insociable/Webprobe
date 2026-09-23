@@ -133,8 +133,8 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
                 "Liens temporaires et envoi de rapports lorsque le domaine a été vérifié.",
               ],
               [
-                "Historique conservé",
-                "Les audits publics passés restent visibles et leurs comparaisons restent séparées du monitoring.",
+                "Historique distinct",
+                "Les audits publics passés restent visibles selon la politique de rétention et leurs comparaisons restent séparées du monitoring.",
               ],
             ].map(([title, detail]) => (
               <article key={title} className="am-panel-soft p-5">

@@ -235,7 +235,8 @@ export default async function SitePage({
             Tant que le domaine n’est pas vérifié, Agency Monitor reste en audit
             public one-shot. La validation active ensuite le planning, les
             alertes de monitoring et le partage de rapports. Les audits publics
-            déjà réalisés restent conservés et distincts du monitoring.
+            déjà réalisés restent associés au site et distincts du monitoring ;
+            leur conservation suit la politique de rétention configurée.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {["Planning", "Alertes", "Partage de rapports"].map((item) => (
