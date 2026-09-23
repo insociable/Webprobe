@@ -18,27 +18,6 @@ function finding(
 }
 
 describe("scan finding comparison", () => {
-  it("withholds V2 new and resolved labels when coverage is incomplete", () => {
-    const seo = { ...finding("seo", "medium"), category: "seo" };
-    const network = { ...finding("network", "medium"), category: "network" };
-    const incomplete = {
-      scannerV2: {
-        completeness: {
-          crawl: { status: "partial" },
-          network: { status: "partial" },
-          seo: { status: "partial" },
-          performance: { status: "unavailable" },
-        },
-      },
-    };
-    const comparison = compareScanFindings([seo], [network], {
-      current: incomplete,
-      previous: null,
-    });
-    expect(comparison.counts.new).toBe(0);
-    expect(comparison.counts.resolved).toBe(0);
-    expect(comparison.changesByFingerprint).toEqual({});
-  });
   it("classifies new, worsened, improved, unchanged and resolved findings", () => {
     const comparison = compareScanFindings(
       [

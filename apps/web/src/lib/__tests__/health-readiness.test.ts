@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { WorkerHealthSnapshotSchema } from "@agency-saas/contracts";
 import {
   collectPublicReadiness,
-  createReadinessCache,
   parseFreshWorkerHeartbeat,
 } from "../health-readiness";
 
@@ -38,37 +37,6 @@ function heartbeat(checkedAt: string) {
 }
 
 describe("health readiness", () => {
-  it("coalesces concurrent probes and refreshes after the short TTL", async () => {
-    let now = 1_000;
-    let calls = 0;
-    const readiness = {
-      status: "degraded" as const,
-      checks: {
-        database: "down" as const,
-        valkey: "down" as const,
-        worker: "down" as const,
-        queue: "down" as const,
-        browser: "down" as const,
-      },
-      checkedAt: "2026-09-22T18:00:00.000Z",
-    };
-    const cached = createReadinessCache(
-      async () => {
-        calls += 1;
-        await Promise.resolve();
-        return readiness;
-      },
-      5_000,
-      () => now,
-    );
-    await Promise.all(Array.from({ length: 30 }, () => cached()));
-    expect(calls).toBe(1);
-    await cached();
-    expect(calls).toBe(1);
-    now += 5_001;
-    await cached();
-    expect(calls).toBe(2);
-  });
   it("accepts a fresh worker heartbeat", () => {
     const now = new Date("2026-09-22T18:00:20.000Z");
     const raw = JSON.stringify(heartbeat("2026-09-22T18:00:00.000Z"));

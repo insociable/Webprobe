@@ -136,7 +136,6 @@ const scannerV2AnalyzerLabels = {
   network: "Réseau",
   performance: "Performance",
   seo: "SEO",
-  accessibility: "Accessibilité",
 } as const;
 
 const scannerV2StatusLabels: Record<ScannerV2AnalyzerStatus, string> = {
@@ -178,10 +177,6 @@ function scannerV2Quality(
       status !== "partial" &&
       status !== "unavailable"
     ) {
-      if (analyzer === "accessibility") {
-        result[analyzer] = "unavailable";
-        continue;
-      }
       return null;
     }
     result[analyzer] = status;
@@ -237,11 +232,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
-  const scanAnalysisIncomplete =
-    !scannerV2QualityState ||
-    Object.values(scannerV2QualityState).some(
-      (status) => status !== "complete",
-    );
   const activeShares =
     details.scan.status === "completed" && details.access.role !== "member"
       ? await listActiveReportShares(
@@ -387,7 +377,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
             exploitables, mais que certaines observations n’ont pas pu être
             collectées. Cela ne transforme pas le scan en échec.
           </p>
-          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {(
               Object.entries(scannerV2QualityState) as Array<
                 [keyof typeof scannerV2AnalyzerLabels, ScannerV2AnalyzerStatus]
@@ -443,12 +433,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
               </div>
             ))}
           </dl>
-          {comparison.limited ? (
-            <p className="mt-4 text-sm text-[#ffc47f]">
-              Comparaison limitée : certaines vérifications étaient
-              indisponibles dans l’un des scans.
-            </p>
-          ) : null}
         </section>
       ) : null}
 
@@ -462,11 +446,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
         {orderedFindings.length === 0 ? (
           <div className="mt-6 border-l-2 border-[#46557a] bg-[#0d121d] p-8">
             <p className="text-white/50">
-              {pending
-                ? "Analyse en cours."
-                : scanAnalysisIncomplete
-                  ? "Aucun finding observé dans la partie analysée ; certaines vérifications sont incomplètes."
-                  : "Aucun finding enregistré pour ce scan."}
+              Aucun finding enregistré pour ce scan.
             </p>
           </div>
         ) : (

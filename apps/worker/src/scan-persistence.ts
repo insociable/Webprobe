@@ -331,7 +331,11 @@ export async function persistScanCompletion(
 
     const currentSummary = scannerV2 ? { scannerV2 } : {};
     const degradations = previousScan
-      ? detectScanDegradations(generatedFindings, previousFindings).filter(
+      ? detectScanDegradations(
+          generatedFindings,
+          previousFindings,
+          previousScan.summary,
+        ).filter(
           (degradation) =>
             degradation.change === "worsened" ||
             canCompareMissingFinding(
