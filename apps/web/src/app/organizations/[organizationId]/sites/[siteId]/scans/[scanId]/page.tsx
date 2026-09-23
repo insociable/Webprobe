@@ -18,6 +18,7 @@ import {
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { scoreReport } from "@/lib/report-score";
 import { buildReportRecommendations } from "@/lib/report-recommendations";
+import { correlateReportSignals } from "@/lib/report-correlations";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
 import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
@@ -25,6 +26,7 @@ import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportCorrelations } from "@/components/report-correlations";
 import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
 import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
@@ -261,6 +263,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
     scorecard,
     5,
   );
+  const correlations = correlateReportSignals({
+    summary: details.scan.summary,
+    findings: orderedFindings,
+  });
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -514,6 +520,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
 
       {details.scan.status === "completed" ? (
         <ReportSecurityHttp summary={details.scan.summary} />
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportCorrelations correlations={correlations} />
       ) : null}
 
       {details.scan.status === "completed" && sectionSummaries.length > 0 ? (

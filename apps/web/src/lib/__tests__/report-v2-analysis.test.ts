@@ -10,6 +10,7 @@ import {
   sanitizeReportUrl,
 } from "../report-technical-details";
 import { getSecurityHttpControls } from "../security-http-controls";
+import { correlateReportSignals } from "../report-correlations";
 
 function completeSummary() {
   return {
@@ -270,5 +271,51 @@ describe("Report V2 HTTP security controls", () => {
     expect(
       controls.find((control) => control.name === "permissions-policy"),
     ).toMatchObject({ status: "fail" });
+  });
+});
+
+describe("Report V2 correlations", () => {
+  it("correlates observed HTTPS with missing HSTS", () => {
+    const summary = completeSummary();
+    const findings = [
+      {
+        category: "security-header",
+        severity: "medium" as const,
+        code: "security-header.hsts.missing",
+      },
+    ];
+
+    const correlations = correlateReportSignals({ summary, findings });
+    expect(correlations).toEqual([
+      expect.objectContaining({
+        id: "https-without-hsts",
+        priority: "medium",
+      }),
+    ]);
+  });
+
+  it("does not invent the HSTS correlation without observed HTTPS", () => {
+    const summary = completeSummary();
+    summary.http.finalUrl = "http://example.test/";
+    summary.http.tls = null;
+
+    const correlations = correlateReportSignals({
+      summary,
+      findings: [
+        {
+          category: "security-header",
+          severity: "medium",
+          code: "security-header.hsts.missing",
+        },
+      ],
+    });
+
+    expect(correlations).toEqual([]);
+  });
+
+  it("does not create a correlation when HSTS is not reported missing", () => {
+    expect(
+      correlateReportSignals({ summary: completeSummary(), findings: [] }),
+    ).toEqual([]);
   });
 });

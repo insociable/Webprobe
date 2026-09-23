@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-mark";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportCorrelations } from "@/components/report-correlations";
 import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
 import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
@@ -17,6 +18,7 @@ import {
 import { getPublicReportByToken } from "@/lib/public-report-service";
 import { scoreReport } from "@/lib/report-score";
 import { buildReportRecommendations } from "@/lib/report-recommendations";
+import { correlateReportSignals } from "@/lib/report-correlations";
 import {
   scannerV2CrawlLimitation,
   scannerV2Quality,
@@ -93,6 +95,10 @@ export default async function PublicReportPage({
     findings,
   });
   const recommendations = buildReportRecommendations(findings, scorecard, 5);
+  const correlations = correlateReportSignals({
+    summary: report.scan.summary,
+    findings,
+  });
   const hasIncompleteAnalysis =
     quality !== null &&
     Object.values(quality).some((status) => status !== "complete");
@@ -222,6 +228,8 @@ export default async function PublicReportPage({
         ) : null}
 
         <ReportSecurityHttp summary={report.scan.summary} />
+
+        <ReportCorrelations correlations={correlations} />
 
         {sectionSummaries.length > 0 ? (
           <section className="border-t border-[#242d40] py-9">
