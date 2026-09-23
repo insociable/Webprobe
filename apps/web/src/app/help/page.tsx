@@ -4,6 +4,11 @@ import { requireCurrentSession } from "@/lib/current-session";
 
 const faq = [
   {
+    question: "Pourquoi n’y a-t-il pas de mot de passe ?",
+    answer:
+      "Agency Monitor utilise une connexion sans mot de passe : un code OTP à usage unique est envoyé à l’adresse e-mail à chaque connexion. La sécurité du compte dépend donc aussi de celle de la messagerie utilisée ; l’activation de la MFA sur cette boîte est recommandée.",
+  },
+  {
     question: "Qu’est-ce qu’un Public Audit ?",
     answer:
       "Un Public Audit est un scan one-shot, passif et borné de ressources accessibles publiquement. Il respecte les limites de crawl et robots.txt et ne réalise pas de pentest actif.",

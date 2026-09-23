@@ -55,28 +55,95 @@ export function VerificationPanel({
     <div className="space-y-6">
       <div className="am-panel p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
-          Enregistrement TXT
+          Étape 1 · Préparer le TXT
         </p>
-        <p className="mt-3 break-all font-mono text-sm text-white/80">
-          {activeRecordName}
+        <h2 className="mt-2 text-xl font-semibold tracking-tight">
+          Créer l’enregistrement chez votre fournisseur DNS
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-white/50">
+          Générez d’abord le challenge ci-dessous. Ensuite, connectez-vous au
+          site du fournisseur qui gère la zone DNS de votre domaine (OVHcloud,
+          Cloudflare, Gandi ou équivalent), ouvrez la rubrique
+          <strong className="font-semibold text-white/70">
+            {" "}
+            Zone DNS / DNS records
+          </strong>{" "}
+          puis ajoutez un nouvel enregistrement de type TXT.
         </p>
 
-        {generationState.token ? (
-          <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-4">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
-              Valeur à copier maintenant
-            </p>
-            <p className="mt-2 break-all font-mono text-sm text-white/90">
-              {generationState.token}
-            </p>
-            <p className="mt-3 text-xs leading-5 text-white/40">
-              Cette valeur brute n’est pas conservée par Agency Monitor.
-            </p>
+        <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="am-panel-soft p-4">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
+              Type
+            </dt>
+            <dd className="mt-2 font-mono text-sm font-semibold">TXT</dd>
           </div>
+          <div className="am-panel-soft p-4">
+            <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
+              Nom / Hôte
+            </dt>
+            <dd className="mt-2 break-all font-mono text-sm text-white/80">
+              {activeRecordName}
+            </dd>
+          </div>
+        </dl>
+
+        {generationState.token ? (
+          <>
+            <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-4">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+                Valeur / Contenu à copier
+              </p>
+              <p className="mt-2 break-all font-mono text-sm text-white/90">
+                {generationState.token}
+              </p>
+              <p className="mt-3 text-xs leading-5 text-white/40">
+                Copiez cette valeur exactement, sans guillemets ajoutés. Cette
+                valeur brute n’est pas conservée par Agency Monitor.
+              </p>
+            </div>
+
+            <ol className="mt-5 space-y-3 text-sm leading-6 text-white/55">
+              <li>
+                <strong className="text-white/70">1.</strong> Dans votre zone
+                DNS, choisissez{" "}
+                <strong className="text-white/70">
+                  Ajouter un enregistrement
+                </strong>
+                .
+              </li>
+              <li>
+                <strong className="text-white/70">2.</strong> Sélectionnez le
+                type <strong className="text-white/70">TXT</strong>.
+              </li>
+              <li>
+                <strong className="text-white/70">3.</strong> Dans
+                <strong className="text-white/70"> Nom / Hôte</strong>, utilisez
+                le nom indiqué ci-dessus. Si votre fournisseur ajoute
+                automatiquement votre domaine et refuse le nom complet, utilisez
+                seulement{" "}
+                <code className="font-mono text-xs">_agency-monitor</code>.
+              </li>
+              <li>
+                <strong className="text-white/70">4.</strong> Dans
+                <strong className="text-white/70"> Valeur / Contenu</strong>,
+                collez le token affiché ci-dessus.
+              </li>
+              <li>
+                <strong className="text-white/70">5.</strong> Laissez le TTL sur
+                <strong className="text-white/70">
+                  {" "}
+                  Auto / valeur par défaut
+                </strong>
+                , enregistrez, puis revenez ici pour lancer la vérification.
+              </li>
+            </ol>
+          </>
         ) : (
           <p className="mt-4 text-sm leading-6 text-white/45">
-            Générez un challenge pour obtenir la valeur TXT. Une régénération
-            invalide immédiatement la valeur précédente.
+            Cliquez sur « Générer le challenge » pour obtenir la valeur TXT à
+            publier. Une régénération invalide immédiatement la valeur
+            précédente.
           </p>
         )}
 
@@ -115,11 +182,15 @@ export function VerificationPanel({
           Vérifier la propagation DNS
         </h2>
         <p className="mt-3 text-sm leading-6 text-white/50">
-          Après avoir créé le TXT chez votre fournisseur DNS, lancez la
-          vérification. Tant que le challenge ne correspond pas, les audits
-          publics restent disponibles mais le monitoring continu demeure
-          désactivé.
+          Après avoir enregistré le TXT chez votre fournisseur DNS, revenez ici
+          et lancez la vérification. La propagation peut être quasi immédiate ou
+          demander un peu de temps selon le fournisseur et les caches DNS.
         </p>
+        <div className="mt-4 border-l-2 border-[#40506d] pl-4 text-xs leading-5 text-white/40">
+          Si le TXT n’est pas encore trouvé, attendez puis réessayez avec le
+          même challenge. Il n’est pas nécessaire de régénérer une nouvelle
+          valeur tant que le challenge n’a pas expiré.
+        </div>
 
         <form action={verifyFormAction} className="mt-5">
           <button
