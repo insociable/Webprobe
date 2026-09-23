@@ -297,7 +297,7 @@ describe("Report V2 correlations", () => {
   it("does not invent the HSTS correlation without observed HTTPS", () => {
     const summary = completeSummary();
     summary.http.finalUrl = "http://example.test/";
-    summary.http.tls = null;
+    summary.http.tls.protocol = "";
 
     const correlations = correlateReportSignals({
       summary,

@@ -615,3 +615,33 @@ select {
     page-break-inside: avoid;
   }
 }
+
+@media print {
+  .report-v2-scorecard {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .report-v2-scorecard > div > div {
+    border-color: #cbd5e1 !important;
+    background: #f8fafc !important;
+  }
+
+  .report-v2-scorecard [class*="text-5xl"] {
+    color: #111827 !important;
+  }
+
+  .report-v2-scorecard [class*="bg-emerald"],
+  .report-v2-scorecard [class*="bg-cyan"],
+  .report-v2-scorecard [class*="bg-amber"],
+  .report-v2-scorecard [class*="bg-orange"],
+  .report-v2-scorecard [class*="bg-rose"] {
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #172033 !important;
+  }
+
+  .report-action-plan {
+    break-before: auto;
+  }
+}

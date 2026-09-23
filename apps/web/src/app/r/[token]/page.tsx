@@ -4,6 +4,7 @@ import { ProductMark } from "@/components/product-mark";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
 import { ReportCorrelations } from "@/components/report-correlations";
+import { ReportCoverageDetails } from "@/components/report-coverage-details";
 import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
 import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
@@ -13,16 +14,11 @@ import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
-  summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getPublicReportByToken } from "@/lib/public-report-service";
 import { scoreReport } from "@/lib/report-score";
 import { buildReportRecommendations } from "@/lib/report-recommendations";
 import { correlateReportSignals } from "@/lib/report-correlations";
-import {
-  scannerV2CrawlLimitation,
-  scannerV2Quality,
-} from "@/lib/scanner-v2-quality";
 
 export const metadata: Metadata = {
   title: "Rapport de surveillance",
@@ -50,19 +46,6 @@ const severityStyles = {
   critical: "border-[#a44355] bg-[#301017] text-[#ff7185]",
 } as const;
 
-const scannerV2AnalyzerLabels = {
-  crawl: "Crawl",
-  network: "Réseau",
-  performance: "Performance",
-  seo: "SEO",
-} as const;
-
-const scannerV2StatusLabels = {
-  complete: "Complet",
-  partial: "Partiel",
-  unavailable: "Indisponible",
-} as const;
-
 function formatDate(value: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "long",
@@ -86,22 +69,16 @@ export default async function PublicReportPage({
     (a, b) => rank[b.severity] - rank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(findings);
-  const distinctFindings = findingGroups.map((group) => group.primary);
-  const sectionSummaries = summarizeReportSections(distinctFindings);
-  const quality = scannerV2Quality(report.scan.summary);
-  const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
   const scorecard = scoreReport({
     summary: report.scan.summary,
     findings,
   });
+  const hasIncompleteAnalysis = scorecard.coverage !== "complete";
   const recommendations = buildReportRecommendations(findings, scorecard, 5);
   const correlations = correlateReportSignals({
     summary: report.scan.summary,
     findings,
   });
-  const hasIncompleteAnalysis =
-    quality !== null &&
-    Object.values(quality).some((status) => status !== "complete");
 
   return (
     <main className="min-h-screen">
@@ -231,99 +208,6 @@ export default async function PublicReportPage({
 
         <ReportCorrelations correlations={correlations} />
 
-        {sectionSummaries.length > 0 ? (
-          <section className="border-t border-[#242d40] py-9">
-            <p className="am-kicker">Analyse par domaine</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-              Où concentrer l’attention
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
-              Les constats sont regroupés pour séparer les enjeux de sécurité,
-              visibilité, performance et disponibilité.
-            </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {sectionSummaries.map((section) => (
-                <article
-                  key={section.definition.key}
-                  className="border border-[#242d40] bg-[#0d111a] p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold">
-                      {section.definition.label}
-                    </h3>
-                    {section.highestSeverity ? (
-                      <span
-                        className={
-                          "rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] " +
-                          severityStyles[section.highestSeverity]
-                        }
-                      >
-                        {severityLabels[section.highestSeverity]}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-[#7f8a9f]">
-                    {section.definition.description}
-                  </p>
-                  <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
-                    <div>
-                      <dt className="text-[#647188]">Problèmes distincts</dt>
-                      <dd className="mt-1 text-lg font-semibold">
-                        {section.total}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#647188]">Hauts / critiques</dt>
-                      <dd className="mt-1 text-lg font-semibold">
-                        {section.highOrCritical}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {quality ? (
-          <section className="border-t border-[#242d40] py-9">
-            <p className="am-kicker">Qualité de l’analyse</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-              Couverture Scanner V2
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
-              Un état partiel ou indisponible décrit la qualité de collecte. Il
-              ne transforme pas le scan en échec.
-            </p>
-            {crawlLimitation ? (
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[#d4b27b]">
-                {crawlLimitation === "robots-restricted"
-                  ? "Le fichier robots.txt limite volontairement la couverture du crawl."
-                  : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
-              </p>
-            ) : null}
-            <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Object.entries(quality).map(([analyzer, status]) => (
-                <div
-                  key={analyzer}
-                  className="border border-[#242d40] bg-[#0d111a] p-4"
-                >
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
-                    {
-                      scannerV2AnalyzerLabels[
-                        analyzer as keyof typeof scannerV2AnalyzerLabels
-                      ]
-                    }
-                  </dt>
-                  <dd className="mt-2 text-sm font-semibold text-[#d5dbe7]">
-                    {scannerV2StatusLabels[status]}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ) : null}
-
         {counts ? (
           <section className="border-t border-[#242d40] py-9">
             <p className="am-kicker">Évolution</p>
@@ -372,6 +256,8 @@ export default async function PublicReportPage({
         {findingGroups.length > 0 ? (
           <ReportActionPlan groups={recommendations.groups} />
         ) : null}
+
+        <ReportCoverageDetails summary={report.scan.summary} />
 
         <ReportTechnicalDetails summary={report.scan.summary} />
 

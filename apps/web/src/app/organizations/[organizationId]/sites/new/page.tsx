@@ -37,40 +37,25 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
 
   return (
     <WorkspaceShell trail={[{ label: "Nouveau site" }]}>
-      <section className="max-w-3xl">
-        <p className="am-kicker">Audit public</p>
+      <section className="max-w-2xl">
+        <p className="am-kicker">Public Audit</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-          Auditer un site public
+          Auditez un site
         </h1>
-        <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
-          Agency Monitor analysera uniquement ce qu’un visiteur public peut
-          observer, sans authentification ni action intrusive. La vérification
-          DNS n’est nécessaire que pour activer ensuite le monitoring continu.
+        <p className="mt-4 max-w-xl leading-7 text-[#8793a8]">
+          Lancez une analyse bornée des éléments publiquement accessibles. Aucun
+          pentest actif et aucune vérification DNS ne sont nécessaires.
         </p>
-      </section>
 
-      <section className="am-panel mt-10 max-w-3xl p-6 sm:p-8">
-        <div className="grid gap-6 sm:grid-cols-[150px_1fr]">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#627087]">
-              Audit one-shot
-            </p>
-            <div className="mt-4 h-px w-12 bg-[#6d7cff]" />
-            <p className="mt-4 text-xs leading-5 text-[#68758c]">
-              Créer le site et lancer immédiatement l’audit public.
-            </p>
-          </div>
-          <div>
-            <h2 className="text-2xl font-semibold tracking-[-0.03em]">
-              Cible publique
-            </h2>
-            <p className="mt-3 leading-7 text-[#7f8a9f]">
-              Renseignez le nom visible dans Agency Monitor et l’URL publique
-              qui servira de point d’entrée à l’audit.
-            </p>
-            <SiteForm organizationId={organizationId} />
-          </div>
+        <div className="am-panel mt-9 p-6 sm:p-8">
+          <SiteForm organizationId={organizationId} />
         </div>
+
+        <p className="mt-5 max-w-xl text-xs leading-5 text-[#59647a]">
+          Agency Monitor respecte robots.txt, les budgets réseau et les limites
+          du Public Audit. Certaines parties du site peuvent donc ne pas être
+          analysées.
+        </p>
       </section>
     </WorkspaceShell>
   );

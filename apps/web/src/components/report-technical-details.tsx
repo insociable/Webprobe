@@ -5,7 +5,7 @@ export function ReportTechnicalDetails({ summary }: { summary: unknown }) {
   if (!details) return null;
 
   return (
-    <section className="border-b border-[#242d40] py-10">
+    <section className="no-print border-b border-[#242d40] py-10">
       <details className="rounded-lg border border-[#242d40] bg-[#0a0f18]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
           <div>
