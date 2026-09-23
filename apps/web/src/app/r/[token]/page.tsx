@@ -3,17 +3,20 @@ import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-mark";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
+import { ReportSecurityHttp } from "@/components/report-security-http";
+import { ReportTechnicalDetails } from "@/components/report-technical-details";
 import { ReportScorecard } from "@/components/report-scorecard";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
-  getPriorityFindings,
   summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getPublicReportByToken } from "@/lib/public-report-service";
 import { scoreReport } from "@/lib/report-score";
+import { buildReportRecommendations } from "@/lib/report-recommendations";
 import {
   scannerV2CrawlLimitation,
   scannerV2Quality,
@@ -83,13 +86,13 @@ export default async function PublicReportPage({
   const findingGroups = groupFindingsForDisplay(findings);
   const distinctFindings = findingGroups.map((group) => group.primary);
   const sectionSummaries = summarizeReportSections(distinctFindings);
-  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const quality = scannerV2Quality(report.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
   const scorecard = scoreReport({
     summary: report.scan.summary,
     findings,
   });
+  const recommendations = buildReportRecommendations(findings, scorecard, 5);
   const hasIncompleteAnalysis =
     quality !== null &&
     Object.values(quality).some((status) => status !== "complete");
@@ -157,7 +160,9 @@ export default async function PublicReportPage({
           pageCount={report.scan.pageCount}
         />
 
-        {priorityFindings.length > 0 ? (
+        <ReportRecommendationCounts counts={recommendations.counts} />
+
+        {recommendations.priorities.length > 0 ? (
           <section className="border-t border-[#242d40] py-9">
             <p className="am-kicker">Priorités</p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
@@ -168,11 +173,12 @@ export default async function PublicReportPage({
               avec une lecture orientée impact et intervention.
             </p>
             <div className="mt-6 grid gap-4 lg:grid-cols-3">
-              {priorityFindings.map((finding, index) => {
+              {recommendations.priorities.map((group, index) => {
+                const finding = group.primary;
                 const businessContext = getFindingBusinessContext(finding);
                 return (
                   <article
-                    key={`${finding.fingerprint}:priority`}
+                    key={group.key}
                     className="border border-[#242d40] bg-[#0d111a] p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -214,6 +220,8 @@ export default async function PublicReportPage({
             </div>
           </section>
         ) : null}
+
+        <ReportSecurityHttp summary={report.scan.summary} />
 
         {sectionSummaries.length > 0 ? (
           <section className="border-t border-[#242d40] py-9">
@@ -354,8 +362,10 @@ export default async function PublicReportPage({
         ) : null}
 
         {findingGroups.length > 0 ? (
-          <ReportActionPlan groups={findingGroups} />
+          <ReportActionPlan groups={recommendations.groups} />
         ) : null}
+
+        <ReportTechnicalDetails summary={report.scan.summary} />
 
         <section className="border-t border-[#242d40] py-9">
           <div className="flex items-end justify-between gap-4">

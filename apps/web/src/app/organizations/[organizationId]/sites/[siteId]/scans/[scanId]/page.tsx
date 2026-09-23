@@ -12,12 +12,12 @@ import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
-  getPriorityFindings,
   summarizeReportFindings,
   summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { scoreReport } from "@/lib/report-score";
+import { buildReportRecommendations } from "@/lib/report-recommendations";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
 import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
@@ -25,6 +25,9 @@ import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
+import { ReportSecurityHttp } from "@/components/report-security-http";
+import { ReportTechnicalDetails } from "@/components/report-technical-details";
 import { ReportScorecard } from "@/components/report-scorecard";
 import { ReportSharePanel } from "./report-share-panel";
 
@@ -246,7 +249,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const distinctFindings = findingGroups.map((group) => group.primary);
   const reportSummary = summarizeReportFindings(distinctFindings);
   const sectionSummaries = summarizeReportSections(distinctFindings);
-  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
@@ -254,6 +256,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
     summary: details.scan.summary,
     findings: orderedFindings,
   });
+  const recommendations = buildReportRecommendations(
+    orderedFindings,
+    scorecard,
+    5,
+  );
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -444,18 +451,24 @@ export default async function ScanPage({ params }: ScanPageProps) {
         />
       ) : null}
 
-      {details.scan.status === "completed" && priorityFindings.length > 0 ? (
+      {details.scan.status === "completed" ? (
+        <ReportRecommendationCounts counts={recommendations.counts} />
+      ) : null}
+
+      {details.scan.status === "completed" &&
+      recommendations.priorities.length > 0 ? (
         <section className="border-b border-[#242d40] py-10">
           <p className="am-kicker">Priorités</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
             À traiter en premier
           </h2>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {priorityFindings.map((finding, index) => {
+            {recommendations.priorities.map((group, index) => {
+              const finding = group.primary;
               const businessContext = getFindingBusinessContext(finding);
               return (
                 <article
-                  key={`${finding.fingerprint}:priority`}
+                  key={group.key}
                   className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -497,6 +510,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
             })}
           </div>
         </section>
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportSecurityHttp summary={details.scan.summary} />
       ) : null}
 
       {details.scan.status === "completed" && sectionSummaries.length > 0 ? (
@@ -700,7 +717,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
       ) : null}
 
       {details.scan.status === "completed" && findingGroups.length > 0 ? (
-        <ReportActionPlan groups={findingGroups} />
+        <ReportActionPlan groups={recommendations.groups} />
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportTechnicalDetails summary={details.scan.summary} />
       ) : null}
 
       <section className="py-10">

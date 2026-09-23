@@ -20,6 +20,17 @@ const findingCategoriesByScoreCategory: Record<
   network: ["network", "availability", "broken-link"],
 };
 
+export function reportScoreCategoryForFindingCategory(
+  findingCategory: string,
+): ReportScoreCategoryKey | null {
+  for (const [scoreCategory, findingCategories] of Object.entries(
+    findingCategoriesByScoreCategory,
+  ) as Array<[ReportScoreCategoryKey, readonly string[]]>) {
+    if (findingCategories.includes(findingCategory)) return scoreCategory;
+  }
+  return null;
+}
+
 function findingsForCategory(
   findings: readonly ReportScoreFinding[],
   category: ReportScoreCategoryKey,
