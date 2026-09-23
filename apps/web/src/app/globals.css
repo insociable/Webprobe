@@ -524,8 +524,16 @@ select {
     margin-top: 2.5mm !important;
   }
 
-  :is(.am-content, .report-print-scope) [class*="bg-black"] {
+  :is(.am-content, .report-print-scope) [class*="bg-black"],
+  :is(.am-content, .report-print-scope) [class*="bg-[#0"],
+  :is(.am-content, .report-print-scope) [class*="bg-[#1"],
+  :is(.am-content, .report-print-scope) [class*="bg-[#2"],
+  :is(.am-content, .report-print-scope) [class*="bg-[#3"] {
     background: #f8fafc !important;
+  }
+
+  :is(.am-content, .report-print-scope) code {
+    color: #526076 !important;
   }
 
   :is(.am-content, .report-print-scope) [class*="border-[#"],
