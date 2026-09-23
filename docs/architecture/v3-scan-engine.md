@@ -16,3 +16,5 @@ The foundation lives in `apps/worker/src/scan-engine/`:
 Migration `0014_opposite_triton.sql` adds the mode, an authorization record, and `scan_check_runs`. Existing scan rows retain their mode and default. A guarded manual rollback is in `docs/operations/v3-migration-rollback.sql`; it refuses to remove V3 data. A rollback also requires coordinating Drizzle's migration history with the deployed application version.
 
 Before enabling Deep Audit, connect the guarded transport to every V3 network path, add live DNS proof revalidation and revocation workflows, persist check runs and coverage, and test the full path with isolated PostgreSQL/Valkey and local HTTP fixtures. The V2 browser runtime and its public-audit protections remain unchanged in this increment.
+
+The guarded HTTP probe reserves HTTP, DNS, and TLS operations. It does not stream response bodies, so byte accounting remains for the future bounded body transport.

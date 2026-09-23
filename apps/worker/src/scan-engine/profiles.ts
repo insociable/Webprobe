@@ -60,6 +60,12 @@ const profiles: Record<ScanMode, ScanProfile> = {
   },
 };
 
+for (const profile of Object.values(profiles)) {
+  Object.freeze(profile.budget);
+  Object.freeze(profile.allowedChecks);
+  Object.freeze(profile);
+}
+
 export function resolveScanProfile(mode: ScanMode): ScanProfile {
   const profile = profiles[mode];
   if (!profile) throw new Error("Unknown scan mode");

@@ -25,6 +25,9 @@ describe("server-resolved scan profiles", () => {
       true,
     );
     expect(resolveScanProfile("verified_deep_audit").allowedChecks).toEqual([]);
+    expect(
+      Object.isFrozen(resolveScanProfile("verified_deep_audit").budget),
+    ).toBe(true);
   });
 
   it("never lets a queued V2 profile raise server limits", () => {
