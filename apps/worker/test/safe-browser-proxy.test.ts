@@ -1,5 +1,5 @@
 import net from "node:net";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DnsResolver } from "@agency-saas/security";
 import {
   resolveSafeConnectTarget,
@@ -36,6 +36,120 @@ function rawProxyRequest(port: number, payload: string): Promise<string> {
 }
 
 describe("safe browser egress proxy", () => {
+  it("closes established CONNECT tunnels at the stream lifetime limit", async () => {
+    const upstream = net.createServer(() => undefined);
+    await new Promise<void>((resolve) =>
+      upstream.listen(0, "127.0.0.1", resolve),
+    );
+    const address = upstream.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    const originalConnect = net.connect.bind(net);
+    const spy = vi
+      .spyOn(net, "connect")
+      .mockImplementation(((options: net.NetConnectOpts) =>
+        originalConnect(
+          options.host === "93.184.216.34"
+            ? { host: "127.0.0.1", port: address.port }
+            : options,
+        )) as typeof net.connect);
+    let proxy: Awaited<ReturnType<typeof startSafeBrowserProxy>> | undefined;
+    try {
+      proxy = await startSafeBrowserProxy({
+        resolver: publicResolver,
+        maxTunnelLifetimeMs: 50,
+      });
+      const port = proxy.port;
+      const result = await new Promise<string>((resolve, reject) => {
+        const socket = originalConnect({ host: "127.0.0.1", port });
+        let received = "";
+        const timeout = setTimeout(
+          () => reject(new Error("Tunnel remained open")),
+          1_000,
+        );
+        socket.setEncoding("utf8");
+        socket.once("connect", () =>
+          socket.write(
+            "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+          ),
+        );
+        socket.on("data", (chunk) => {
+          received += chunk;
+        });
+        socket.once("error", () => undefined);
+        socket.once("close", () => {
+          clearTimeout(timeout);
+          resolve(received);
+        });
+      });
+      expect(result).toContain("200 Connection Established");
+    } finally {
+      if (proxy) await proxy.close();
+      spy.mockRestore();
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
+  it("closes CONNECT when the per-tunnel or aggregate byte budget is spent", async () => {
+    const upstream = net.createServer(() => undefined);
+    await new Promise<void>((resolve) =>
+      upstream.listen(0, "127.0.0.1", resolve),
+    );
+    const address = upstream.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    const originalConnect = net.connect.bind(net);
+    const spy = vi
+      .spyOn(net, "connect")
+      .mockImplementation(((options: net.NetConnectOpts) =>
+        originalConnect(
+          options.host === "93.184.216.34"
+            ? { host: "127.0.0.1", port: address.port }
+            : options,
+        )) as typeof net.connect);
+    try {
+      for (const limits of [
+        { maxTunnelBytes: 16, maxTotalTransferredBytes: 100 },
+        { maxTunnelBytes: 100, maxTotalTransferredBytes: 16 },
+      ]) {
+        const proxy = await startSafeBrowserProxy({
+          resolver: publicResolver,
+          ...limits,
+        });
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const socket = originalConnect({
+              host: "127.0.0.1",
+              port: proxy.port,
+            });
+            const timeout = setTimeout(
+              () => reject(new Error("Byte budget not enforced")),
+              1_000,
+            );
+            socket.once("connect", () =>
+              socket.write(
+                "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+              ),
+            );
+            socket.on("data", (chunk: Buffer) => {
+              if (chunk.toString().includes("200 Connection Established")) {
+                socket.write(Buffer.alloc(32));
+              }
+            });
+            socket.once("error", () => undefined);
+            socket.once("close", () => {
+              clearTimeout(timeout);
+              resolve();
+            });
+          });
+        } finally {
+          await proxy.close();
+        }
+      }
+    } finally {
+      spy.mockRestore();
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
   it("pins an allowed HTTP target to a validated public address", async () => {
     const target = await resolveSafeProxyTarget(
       "http://example.com/path?q=1",

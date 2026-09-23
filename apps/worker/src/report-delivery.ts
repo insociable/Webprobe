@@ -5,7 +5,11 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import { decryptReportShareToken } from "@agency-saas/security";
+import {
+  decryptReportShareToken,
+  getReportPublicBaseUrl,
+  getReportTokenSecret,
+} from "@agency-saas/security";
 import { and, asc, eq, isNotNull, lte, or } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
@@ -35,27 +39,6 @@ export type ReportDispatchResult = {
   cancelled: number;
 };
 
-function tokenSecret(): string {
-  const value =
-    process.env.REPORT_TOKEN_SECRET?.trim() ||
-    process.env.BETTER_AUTH_SECRET?.trim();
-  if (!value) {
-    throw new Error("REPORT_TOKEN_SECRET or BETTER_AUTH_SECRET is required");
-  }
-  return value;
-}
-
-function reportBaseUrl(): string {
-  const value =
-    process.env.REPORT_PUBLIC_BASE_URL?.trim() ||
-    process.env.BETTER_AUTH_URL?.trim() ||
-    "http://localhost:3000";
-  const url = new URL(value);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Report public base URL must use HTTP(S)");
-  }
-  return url.origin;
-}
 function retryDelayMs(attemptCount: number): number {
   const exponent = Math.max(0, Math.min(attemptCount - 1, 6));
   return Math.min(60 * 60_000, 60_000 * 2 ** exponent);
@@ -100,9 +83,10 @@ export async function sendBrandedReportEmail(
 ): Promise<void> {
   const token = decryptReportShareToken(
     delivery.tokenCiphertext,
-    tokenSecret(),
+    getReportTokenSecret(),
   );
-  const reportUrl = reportBaseUrl() + "/r/" + encodeURIComponent(token);
+  const reportUrl =
+    getReportPublicBaseUrl() + "/r/" + encodeURIComponent(token);
   const fromAddress = process.env.SMTP_FROM ?? "no-reply@agency-monitor.local";
   const brandName = delivery.brandName.trim() || "Agency Monitor";
 

@@ -2,6 +2,7 @@ import type {
   ScanAlertMinimumSeverity,
   Severity,
 } from "@agency-saas/contracts";
+import { canCompareNewFinding } from "@agency-saas/contracts";
 import type { GeneratedFinding } from "./findings.js";
 
 export type PreviousFindingSnapshot = {
@@ -32,6 +33,7 @@ const minimumAlertRank = severityRank.medium;
 export function detectScanDegradations(
   current: GeneratedFinding[],
   previous: PreviousFindingSnapshot[],
+  previousSummary?: unknown,
 ): ScanDegradation[] {
   const previousByFingerprint = new Map(
     previous.map((finding) => [finding.fingerprint, finding.severity]),
@@ -46,6 +48,12 @@ export function detectScanDegradations(
     const previousSeverity = previousByFingerprint.get(finding.fingerprint);
 
     if (!previousSeverity) {
+      if (
+        previousSummary !== undefined &&
+        !canCompareNewFinding(previousSummary, finding.category, finding.code)
+      ) {
+        continue;
+      }
       degradations.push({
         change: "new",
         fingerprint: finding.fingerprint,

@@ -9,6 +9,148 @@ const publicResolver: DnsResolver = async () => [
 ];
 
 describe("browser crawl", () => {
+  it("marks crawl partial when the per-page anchor sample is truncated", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => unknown) =>
+          callback(
+            Array.from({ length: 101 }, (_item, index) => ({
+              href:
+                index === 100
+                  ? "https://example.com/hidden"
+                  : "https://example.com/",
+            })),
+          ),
+      }),
+    } as unknown as Page;
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      maxPages: 2,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          context: { newPage: async () => fakePage },
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+    expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness.crawl).toMatchObject({
+      status: "partial",
+      linkExtractionTruncationCount: 1,
+    });
+  });
+  it("does not adopt an external redirect as the crawl origin", async () => {
+    let currentUrl = "about:blank";
+    let extracted = false;
+    let screenshots = 0;
+    const fakePage = {
+      on: () => fakePage,
+      goto: async () => {
+        currentUrl = "https://redirected.example/landing?secret=hidden";
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      screenshot: async () => {
+        screenshots += 1;
+        return Buffer.from("jpeg");
+      },
+      locator: () => ({
+        evaluateAll: async () => {
+          extracted = true;
+          return ["https://redirected.example/next"];
+        },
+      }),
+    } as unknown as Page;
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      captureScreenshot: true,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          context: { newPage: async () => fakePage },
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+    expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+    expect(result.scannerV2.seo.pages).toEqual([]);
+    expect(result.screenshot).toBeNull();
+    expect(extracted).toBe(false);
+    expect(screenshots).toBe(0);
+    expect(JSON.stringify(result)).not.toContain("secret=hidden");
+  });
+
+  it("settles when optional network size metadata never resolves", async () => {
+    let currentUrl = "about:blank";
+    let responseHandler: ((value: unknown) => void) | undefined;
+    let closed = false;
+    const fakePage = {
+      on: (event: string, handler: (value: unknown) => void) => {
+        if (event === "response") responseHandler = handler;
+        return fakePage;
+      },
+      goto: async (url: string) => {
+        currentUrl = url;
+        responseHandler?.({
+          request: () => ({
+            resourceType: () => "script",
+            sizes: () => new Promise(() => undefined),
+          }),
+          allHeaders: async () => ({}),
+          url: () => "https://example.com/app.js",
+          status: () => 200,
+        });
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      addInitScript: async () => undefined,
+      evaluate: async (expression: string) =>
+        expression.includes("__agencyMonitorLabPerformanceV2")
+          ? {
+              timing: {
+                requestStart: 1,
+                responseStart: 2,
+                domContentLoadedEventEnd: 3,
+                firstContentfulPaint: 2,
+                largestContentfulPaint: 3,
+                cumulativeLayoutShift: 0,
+                totalBlockingTime: 0,
+              },
+              userAgent: "Test",
+            }
+          : null,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async () => ({ hrefs: [], truncated: false }),
+      }),
+    } as unknown as Page;
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      checkAccessibility: false,
+      networkCaptureTimeoutMs: 10,
+      createSession: async () =>
+        ({
+          context: { newPage: async () => fakePage },
+          close: async () => {
+            closed = true;
+          },
+        }) as unknown as IsolatedBrowserSession,
+    });
+    expect(closed).toBe(true);
+    expect(result.scannerV2.completeness.network).toMatchObject({
+      status: "partial",
+      captureFailureCount: 1,
+    });
+    expect(result.scannerV2.completeness.performance.status).toBe("partial");
+  });
   it("normalizes only same-origin HTTP(S) links", () => {
     expect(
       normalizeInternalLink(
@@ -85,7 +227,12 @@ describe("browser crawl", () => {
       url: () => currentUrl,
       waitForTimeout: async () => undefined,
       locator: () => ({
-        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+        evaluateAll: async (
+          callback: (anchors: unknown[]) => {
+            hrefs: string[];
+            truncated: boolean;
+          },
+        ) =>
           callback(
             (linksByUrl.get(currentUrl) ?? []).map((href) => ({ href })),
           ),
@@ -169,6 +316,7 @@ describe("browser crawl", () => {
     expect(result.observations.map((item) => item.url)).not.toContain(
       "https://outside.example/",
     );
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
     expect(result.scannerV2.crawl.urls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -201,7 +349,7 @@ describe("browser crawl", () => {
       url: () => currentUrl,
       waitForTimeout: async () => undefined,
       locator: () => ({
-        evaluateAll: async () => [],
+        evaluateAll: async () => ({ hrefs: [], truncated: false }),
       }),
     } as unknown as Page;
     let currentUrl = "about:blank";
@@ -227,6 +375,9 @@ describe("browser crawl", () => {
 
     expect(analyzed).toBe(false);
     expect(result.pagesVisited).toBe(1);
+    expect(result.scannerV2.completeness.accessibility?.status).toBe(
+      "unavailable",
+    );
   });
 
   it("captures one bounded primary screenshot when enabled", async () => {
@@ -245,7 +396,7 @@ describe("browser crawl", () => {
         return Buffer.from("fake-jpeg");
       },
       locator: () => ({
-        evaluateAll: async () => [],
+        evaluateAll: async () => ({ hrefs: [], truncated: false }),
       }),
     } as unknown as Page;
 
@@ -282,7 +433,7 @@ describe("browser crawl", () => {
         throw new Error("capture failed");
       },
       locator: () => ({
-        evaluateAll: async () => [],
+        evaluateAll: async () => ({ hrefs: [], truncated: false }),
       }),
     } as unknown as Page;
 
@@ -374,7 +525,9 @@ describe("browser crawl", () => {
       url: () => currentUrl,
       viewportSize: () => ({ width: 1440, height: 900 }),
       waitForTimeout: async () => undefined,
-      locator: () => ({ evaluateAll: async () => [] }),
+      locator: () => ({
+        evaluateAll: async () => ({ hrefs: [], truncated: false }),
+      }),
     } as unknown as Page;
 
     const result = await runBrowserScan("https://example.com/", {

@@ -87,6 +87,32 @@ async function cleanupFixture(organizationId: string, userIds: string[]) {
 }
 
 describeDatabase("manual scan creation", () => {
+  it("bounds repeated completed manual scans per site", async () => {
+    const fixture = await createFixture();
+    try {
+      await db.insert(scans).values(
+        Array.from({ length: 3 }, () => ({
+          organizationId: fixture.organizationId,
+          siteId: fixture.activeSiteId,
+          trigger: "manual" as const,
+          status: "completed" as const,
+          queuedAt: new Date(),
+        })),
+      );
+      await expect(
+        createManualScanForSite(
+          fixture.ownerId,
+          fixture.organizationId,
+          fixture.activeSiteId,
+        ),
+      ).rejects.toMatchObject({ code: "scan-rate-limited" });
+    } finally {
+      await cleanupFixture(fixture.organizationId, [
+        fixture.ownerId,
+        fixture.memberId,
+      ]);
+    }
+  });
   it("commits the queued scan and durable dispatch intent atomically", async () => {
     const fixture = await createFixture();
 
