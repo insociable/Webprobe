@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-shell";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
+import {
+  getFindingBusinessContext,
+  getPriorityFindings,
+  summarizeReportFindings,
+} from "@/lib/report-presentation";
 import { getPublicReportByToken } from "@/lib/public-report-service";
 import {
   scannerV2CrawlLimitation,
@@ -71,11 +76,18 @@ export default async function PublicReportPage({
     (a, b) => rank[b.severity] - rank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(findings);
+  const reportSummary = summarizeReportFindings(findings);
+  const priorityFindings = getPriorityFindings(findings, 3);
   const quality = scannerV2Quality(report.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
   const hasIncompleteAnalysis =
     quality !== null &&
     Object.values(quality).some((status) => status !== "complete");
+  const analysisCoverage = quality
+    ? Object.values(quality).every((status) => status === "complete")
+      ? "Complète"
+      : "Partielle"
+    : "Non mesurée";
 
   return (
     <main className="min-h-screen">
@@ -114,6 +126,25 @@ export default async function PublicReportPage({
           </div>
         </section>
 
+        {report.scan.scanMode === "public_audit" ? (
+          <section className="border-b border-[#242d40] py-8">
+            <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+                Portée de l’audit
+              </p>
+              <h2 className="mt-2 text-xl font-semibold">
+                Audit public passif et borné
+              </h2>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-[#8f9aaf]">
+                Ce rapport repose uniquement sur des observations publiques et
+                des contrôles bornés. Il ne s’agit pas d’un pentest actif, d’une
+                certification de sécurité ou d’une preuve d’absence de
+                vulnérabilité.
+              </p>
+            </div>
+          </section>
+        ) : null}
+
         <section className="py-8">
           <div className="am-metric-grid">
             <div className="am-metric-cell">
@@ -125,13 +156,73 @@ export default async function PublicReportPage({
               <p className="am-metric-value">{findingGroups.length}</p>
             </div>
             <div className="am-metric-cell">
-              <p className="am-metric-label">Lien valable jusqu’au</p>
+              <p className="am-metric-label">Hauts / critiques</p>
+              <p className="am-metric-value">{reportSummary.highOrCritical}</p>
+            </div>
+            <div className="am-metric-cell">
+              <p className="am-metric-label">Couverture</p>
               <p className="mt-2 text-sm font-medium text-[#d5dbe7]">
-                {formatDate(report.expiresAt)}
+                {analysisCoverage}
               </p>
             </div>
           </div>
         </section>
+
+        {priorityFindings.length > 0 ? (
+          <section className="border-t border-[#242d40] py-9">
+            <p className="am-kicker">Priorités</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+              À traiter en premier
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
+              Sélection des points les plus graves observés pendant ce scan,
+              avec une lecture orientée impact et intervention.
+            </p>
+            <div className="mt-6 grid gap-4 lg:grid-cols-3">
+              {priorityFindings.map((finding, index) => {
+                const businessContext = getFindingBusinessContext(finding);
+                return (
+                  <article
+                    key={`${finding.fingerprint}:priority`}
+                    className="border border-[#242d40] bg-[#0d111a] p-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="font-mono text-xs text-[#56627a]">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <span
+                        className={
+                          "h-fit rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
+                          severityStyles[finding.severity]
+                        }
+                      >
+                        {severityLabels[finding.severity]}
+                      </span>
+                    </div>
+                    <h3 className="mt-4 font-semibold">{finding.title}</h3>
+                    <p className="mt-3 text-sm leading-6 text-[#8f9aaf]">
+                      {businessContext.impact}
+                    </p>
+                    <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
+                      <div>
+                        <dt className="text-[#647188]">Intervention</dt>
+                        <dd className="mt-1 text-[#b8c1d0]">
+                          {businessContext.intervention}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[#647188]">Effort estimé</dt>
+                        <dd className="mt-1 text-[#b8c1d0]">
+                          {businessContext.effort}
+                        </dd>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {quality ? (
           <section className="border-t border-[#242d40] py-9">
@@ -242,6 +333,7 @@ export default async function PublicReportPage({
                 const finding = group.primary;
                 const grouped = group.findings.length > 1;
                 const remediation = getFindingRemediation(finding.code);
+                const businessContext = getFindingBusinessContext(finding);
                 return (
                   <article
                     key={group.key}
@@ -285,6 +377,31 @@ export default async function PublicReportPage({
                       </span>
                     </div>
 
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
+                      <div className="bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-[#647188]">
+                          Impact concret
+                        </dt>
+                        <dd className="mt-1 text-sm leading-6 text-[#aeb7c8]">
+                          {businessContext.impact}
+                        </dd>
+                      </div>
+                      <div className="bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-[#647188]">Intervention</dt>
+                        <dd className="mt-1 text-sm text-[#aeb7c8]">
+                          {businessContext.intervention}
+                        </dd>
+                      </div>
+                      <div className="bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-[#647188]">
+                          Effort estimé
+                        </dt>
+                        <dd className="mt-1 text-sm text-[#aeb7c8]">
+                          {businessContext.effort}
+                        </dd>
+                      </div>
+                    </dl>
+
                     {remediation ? (
                       <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
                         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
@@ -316,7 +433,8 @@ export default async function PublicReportPage({
         </section>
 
         <footer className="border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176]">
-          Rapport généré par Agency Monitor · lien de partage sécurisé
+          Rapport généré par Agency Monitor · lien valable jusqu’au{" "}
+          {formatDate(report.expiresAt)} · lecture seule
         </footer>
       </div>
     </main>

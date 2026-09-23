@@ -173,7 +173,7 @@ describeDatabase("shareable scan reports", () => {
           accentColor: "#123abc",
         },
         site: { name: "Client site" },
-        scan: { pageCount: 1 },
+        scan: { pageCount: 1, scanMode: "verified_monitoring" },
       });
       expect(publicReport?.scan.findings).toHaveLength(1);
       await expect(
@@ -427,9 +427,9 @@ describeDatabase("shareable scan reports", () => {
       };
 
       expect((await reportAt(verifiedFirstId))?.comparison).toBeNull();
-      expect(
-        (await reportAt(publicSecondId))?.comparison?.counts,
-      ).toMatchObject({
+      const publicSecondReport = await reportAt(publicSecondId);
+      expect(publicSecondReport?.scan.scanMode).toBe("public_audit");
+      expect(publicSecondReport?.comparison?.counts).toMatchObject({
         unchanged: 1,
         new: 0,
         resolved: 0,

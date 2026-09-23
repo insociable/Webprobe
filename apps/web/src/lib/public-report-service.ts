@@ -126,6 +126,7 @@ export async function getPublicReportByToken(token: string, now = new Date()) {
     scan: {
       completedAt: row.completedAt,
       pageCount: row.pageCount,
+      scanMode: row.scanMode,
       summary: row.summary,
       findings: currentFindings,
     },
