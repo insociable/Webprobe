@@ -39,25 +39,11 @@ export function OrganizationForm({
         </span>
       </label>
 
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-white/70">
-          Nom de l’agence
-        </span>
-        <input
-          required
-          minLength={2}
-          maxLength={120}
-          name="name"
-          placeholder="Agence Nord"
-          className="am-field"
-        />
-      </label>
-
       <button
         disabled={pending}
         className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {pending ? "Création…" : "Créer mon espace agence"}
+        {pending ? "Enregistrement…" : "Continuer"}
       </button>
 
       {state.error ? (

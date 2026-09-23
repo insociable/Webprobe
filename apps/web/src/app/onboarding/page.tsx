@@ -25,12 +25,12 @@ export default async function OnboardingPage() {
       <section className="max-w-3xl">
         <p className="am-kicker">Première mise en route</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-          Créez votre espace agence.
+          Finalisez votre profil.
         </h1>
         <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
           Le compte <span className="text-[#c5cedd]">{session.user.email}</span>{" "}
-          est vérifié. Choisissez votre nom affiché puis créez l’espace qui
-          regroupera vos sites, vos scans et vos rapports.
+          est vérifié. Choisissez simplement le nom affiché dans votre portail.
+          Vous pourrez ensuite ajouter votre premier site.
         </p>
       </section>
 
@@ -44,12 +44,12 @@ export default async function OnboardingPage() {
           </div>
           <div>
             <h2 className="text-2xl font-semibold tracking-[-0.03em]">
-              Votre identité et votre espace
+              Votre identité
             </h2>
             <p className="mt-3 leading-7 text-[#7f8a9f]">
-              Votre nom affiché et l’organisation sont enregistrés ensemble.
-              Vous pourrez ensuite ajouter votre premier site et lancer
-              immédiatement un audit public, sans vérification DNS.
+              Ce nom sera utilisé dans l’interface. Vous pourrez ensuite ajouter
+              votre premier site et lancer immédiatement un audit public, sans
+              vérification DNS.
             </p>
             <OrganizationForm initialDisplayName={initialDisplayName} />
           </div>

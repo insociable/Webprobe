@@ -273,7 +273,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
 
   return (
     <WorkspaceShell
-      currentOrganizationId={organizationId}
       trail={[
         {
           label: details.site.name,

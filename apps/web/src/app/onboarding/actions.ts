@@ -1,6 +1,5 @@
 "use server";
 
-import { OrganizationCreateSchema } from "@agency-saas/contracts";
 import { redirect } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
 import { parseDisplayName } from "@/lib/user-profile";
@@ -23,27 +22,23 @@ export async function createInitialOrganizationAction(
     return { error: "Le nom affiché doit contenir entre 2 et 80 caractères." };
   }
 
-  const parsed = OrganizationCreateSchema.safeParse({
-    name: formData.get("name"),
-  });
-
-  if (!parsed.success) {
-    return {
-      error: parsed.error.issues[0]?.message ?? "Nom d’agence invalide.",
-    };
-  }
+  const internalOrganization = { name: "Portail principal" };
 
   try {
-    await createInitialOrganizationForUser(session.user.id, parsed.data, {
-      displayName,
-    });
+    await createInitialOrganizationForUser(
+      session.user.id,
+      internalOrganization,
+      {
+        displayName,
+      },
+    );
   } catch (error) {
     if (error instanceof AlreadyOnboardedError) {
       redirect("/dashboard");
     }
 
-    console.error("Initial organization creation failed");
-    return { error: "Impossible de créer l’agence pour le moment." };
+    console.error("Initial portal creation failed");
+    return { error: "Impossible de finaliser le compte pour le moment." };
   }
 
   redirect("/dashboard");

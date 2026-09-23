@@ -68,12 +68,11 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
   );
 
   if (state.site.status === "active" && state.site.verifiedAt) {
-    redirect("/organizations/" + organizationId);
+    redirect("/organizations/" + organizationId + "/sites/" + siteId);
   }
 
   return (
     <WorkspaceShell
-      currentOrganizationId={organizationId}
       trail={[{ label: state.site.name }, { label: "Vérification DNS" }]}
     >
       <section className="max-w-4xl border-b border-[#242d40] pb-9">

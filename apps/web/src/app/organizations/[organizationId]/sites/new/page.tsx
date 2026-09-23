@@ -37,7 +37,6 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
 
   return (
     <WorkspaceShell
-      currentOrganizationId={organizationId}
       trail={[{ label: "Nouveau site" }]}
     >
       <section className="max-w-3xl">

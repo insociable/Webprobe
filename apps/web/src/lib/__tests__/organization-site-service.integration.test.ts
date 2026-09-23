@@ -16,7 +16,6 @@ describeDatabase("organization/site tenant isolation", () => {
       getOrganizationAccess,
       getSiteForOrganization,
       listSitesForOrganization,
-      updateOrganizationName,
       OrganizationAccessError,
     } = await import("../organization-site-service");
 
@@ -74,30 +73,6 @@ describeDatabase("organization/site tenant isolation", () => {
       await expect(
         getOrganizationAccess(userIds[0]!, organizationIds[1]!),
       ).resolves.toBeNull();
-
-      await expect(
-        updateOrganizationName(
-          userIds[0]!,
-          organizationIds[0]!,
-          "Agency A renamed",
-        ),
-      ).resolves.toMatchObject({ name: "Agency A renamed" });
-
-      await expect(
-        updateOrganizationName(
-          userIds[2]!,
-          organizationIds[0]!,
-          "Forbidden rename",
-        ),
-      ).rejects.toBeInstanceOf(OrganizationAccessError);
-
-      await expect(
-        updateOrganizationName(
-          userIds[0]!,
-          organizationIds[1]!,
-          "Cross tenant rename",
-        ),
-      ).rejects.toBeInstanceOf(OrganizationAccessError);
 
       const site = await createSiteForOrganization(
         userIds[0]!,

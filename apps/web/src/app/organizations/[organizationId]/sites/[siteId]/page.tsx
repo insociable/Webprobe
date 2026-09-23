@@ -10,6 +10,8 @@ import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { ManualScanButton } from "../../manual-scan-button";
 import { PublicAuditButton } from "../../public-audit-button";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
+import { AlertPreferencePanel } from "../../alert-preference-panel";
+import { ReportBrandingPanel } from "../../report-branding-panel";
 
 type SitePageProps = {
   params: Promise<{
@@ -114,10 +116,7 @@ export default async function SitePage({
   const canManage = history.access.role !== "member";
 
   return (
-    <WorkspaceShell
-      currentOrganizationId={organizationId}
-      trail={[{ label: history.site.name }]}
-    >
+    <WorkspaceShell trail={[{ label: history.site.name }]}>
       <ScanStatusRefresher active={activeScan} />
 
       <section className="grid gap-7 border-b border-[#242d40] pb-9 lg:grid-cols-[1fr_auto] lg:items-end">
@@ -389,6 +388,39 @@ export default async function SitePage({
           }
         />
       </section>
+
+      {canManage ? (
+        <section className="mt-10 border-t border-[#242d40] pt-9">
+          <div className="mb-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Préférences
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Rapports et alertes
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#6f7b91]">
+              Configurez ici la présentation des rapports et les alertes de
+              dégradation utilisées depuis votre portail.
+            </p>
+          </div>
+
+          <ReportBrandingPanel
+            organizationId={organizationId}
+            brandName={history.access.reportBrandName}
+            accentColor={history.access.reportAccentColor}
+          />
+          <AlertPreferencePanel
+            organizationId={organizationId}
+            enabled={history.access.scanAlertEnabled}
+            minimumSeverity={
+              history.access.scanAlertMinimumSeverity === "high" ||
+              history.access.scanAlertMinimumSeverity === "critical"
+                ? history.access.scanAlertMinimumSeverity
+                : "medium"
+            }
+          />
+        </section>
+      ) : null}
     </WorkspaceShell>
   );
 }
