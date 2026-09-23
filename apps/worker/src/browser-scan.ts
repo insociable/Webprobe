@@ -46,6 +46,7 @@ import {
 import { extractSeoDocumentFacts } from "./scanner-v2/seo-runtime.js";
 import {
   isRobotsPathAllowed,
+  MAX_ROBOTS_BYTES,
   parseRobotsTxt,
   type RobotsPolicy,
 } from "./scanner-v2/robots.js";
@@ -174,7 +175,7 @@ async function loadPublicRobotsPolicy(
       resolver,
       timeoutMs,
       maxRedirects: 3,
-      maxBytes: 65_536,
+      maxBytes: MAX_ROBOTS_BYTES,
       userAgent,
       allowRedirect: isSafePublicAuditRedirect,
     }),
@@ -192,10 +193,14 @@ async function loadPublicRobotsPolicy(
     return { policy: null, unavailable: true };
   }
 
-  return {
-    policy: parseRobotsTxt(result.text, userAgent),
-    unavailable: false,
-  };
+  const policy = parseRobotsTxt(result.text, userAgent, {
+    // fetchBoundedTextResource only resolves after EOF and rejects > maxBytes.
+    completeAtByteLimit: true,
+  });
+  if (policy.unavailableReason) {
+    return { policy: null, unavailable: true };
+  }
+  return { policy, unavailable: false };
 }
 
 function remainingScanTime(deadline: number): number {
@@ -465,10 +470,18 @@ export async function runBrowserScan(
 ): Promise<BrowserScanResult> {
   const resolver = options.resolver ?? defaultDnsResolver;
   const scanMode = options.scanMode ?? "verified_monitoring";
-  const maxPages = boundedCrawlPages(options.maxPages);
-  const navigationTimeoutMs = boundedNavigationTimeout(
+  const requestedMaxPages = boundedCrawlPages(options.maxPages);
+  const requestedNavigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
   );
+  const maxPages =
+    scanMode === "public_audit"
+      ? Math.min(requestedMaxPages, 15)
+      : requestedMaxPages;
+  const navigationTimeoutMs =
+    scanMode === "public_audit"
+      ? Math.min(requestedNavigationTimeoutMs, 20_000)
+      : requestedNavigationTimeoutMs;
   const scanTimeoutMs = boundedScanTimeout(options.scanTimeoutMs);
   const networkCaptureTimeoutMs = boundedNetworkCaptureTimeout(
     options.networkCaptureTimeoutMs,

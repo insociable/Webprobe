@@ -906,6 +906,60 @@ describe("browser crawl", () => {
     expect(result.scannerV2.seo.pages).toHaveLength(0);
   });
 
+  it("caps direct public audit callers at 15 pages and 20 second navigation", async () => {
+    let currentUrl = "about:blank";
+    let requestedNavigationTimeoutMs: number | undefined;
+    const rootLinks = Array.from(
+      { length: 20 },
+      (_, index) => "https://example.com/page-" + (index + 1),
+    );
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async () => null,
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://example.com/"
+              ? rootLinks.map((href) => ({ href }))
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 20,
+      navigationTimeoutMs: 60_000,
+      checkAccessibility: false,
+      loadRobotsPolicy: async () => ({
+        policy: { rules: [], sitemaps: [] },
+        unavailable: false,
+      }),
+      createSession: async (options: BrowserRuntimeOptions) => {
+        requestedNavigationTimeoutMs = options.navigationTimeoutMs;
+        return {
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        } as unknown as IsolatedBrowserSession;
+      },
+    });
+
+    expect(requestedNavigationTimeoutMs).toBe(20_000);
+    expect(result.pagesVisited).toBe(15);
+    expect(result.scannerV2.crawl.budgetReached).toBe(true);
+  });
+
   it("enforces a global browser scan deadline", async () => {
     let currentUrl = "about:blank";
     let closed = false;
