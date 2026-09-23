@@ -1,6 +1,7 @@
 import { reportCoverageForCategory } from "./coverage";
 import { gradeForScore } from "./grade";
 import { scoreReportCategory } from "./score-category";
+import { securityHttpConfigurationPenalty } from "./security-http-penalty";
 import {
   reportScoreCategoryDefinitions,
   type ReportScoreCategoryKey,
@@ -66,6 +67,10 @@ export function scoreReport(input: {
       definition,
       findings: findingsForCategory(input.findings, definition.key),
       coverage: reportCoverageForCategory(input.summary, definition.key),
+      additionalPenalty:
+        definition.key === "security-http"
+          ? securityHttpConfigurationPenalty(input.summary)
+          : 0,
     }),
   );
 

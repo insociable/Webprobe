@@ -121,13 +121,16 @@ export function scoreReportCategory(input: {
   definition: ReportScoreCategoryDefinition;
   findings: readonly ReportScoreFinding[];
   coverage: ReportScoreCoverage;
+  additionalPenalty?: number;
 }): ReportCategoryScore {
   const coverage = effectiveCoverage(input.coverage, input.findings.length);
   const groups = groupedByCode(input.findings);
-  const penalty = [...groups.values()].reduce(
+  const findingPenalty = [...groups.values()].reduce(
     (total, group) => total + penaltyForGroup(group),
     0,
   );
+  const additionalPenalty = Math.max(0, input.additionalPenalty ?? 0);
+  const penalty = findingPenalty + additionalPenalty;
 
   if (coverage.status === "unavailable") {
     return {

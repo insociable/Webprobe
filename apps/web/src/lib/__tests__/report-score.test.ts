@@ -31,7 +31,12 @@ function completeSummary() {
         { name: "referrer-policy", expected: true, present: true },
         { name: "permissions-policy", expected: true, present: true },
         { name: "x-frame-options", expected: true, present: true },
-      ],
+      ] as Array<{
+        name: string;
+        expected: boolean;
+        present: boolean;
+        value?: string | null;
+      }>,
     },
     scannerV2: {
       completeness: {
@@ -156,6 +161,31 @@ describe("Report V2 scoring", () => {
     expect(medium.score).toBe(88);
     expect(high.score).toBe(76);
     expect(critical.score).toBe(60);
+  });
+
+  it("penalizes an observed permissive CSP without inventing a missing-header finding", () => {
+    const summary = completeSummary();
+    summary.http.securityHeaders[0] = {
+      name: "content-security-policy",
+      expected: true,
+      present: true,
+      value:
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    };
+
+    const result = scoreReport({ summary, findings: [] });
+    const security = result.categories.find(
+      (category) => category.key === "security-http",
+    );
+
+    expect(security).toMatchObject({
+      score: 92,
+      rawScore: 92,
+      grade: "A",
+      penalty: 8,
+      findingCount: 0,
+    });
+    expect(result.score).toBe(98);
   });
 
   it("gives a missing CSP a visible but non-catastrophic penalty", () => {
