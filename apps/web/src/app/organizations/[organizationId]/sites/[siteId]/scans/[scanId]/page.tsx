@@ -15,7 +15,12 @@ import {
   summarizeReportFindings,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
-import { scoreReport } from "@/lib/report-score";
+import {
+  reportScoreCategoryForFindingCategory,
+  scoreReport,
+  type ReportScoreCategoryKey,
+} from "@/lib/report-score";
+import { reportActionAnchorId } from "@/lib/report-navigation";
 import { buildReportRecommendations } from "@/lib/report-recommendations";
 import { correlateReportSignals } from "@/lib/report-correlations";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
@@ -203,6 +208,16 @@ export default async function ScanPage({ params }: ScanPageProps) {
     scorecard,
     5,
   );
+  const categoryActionTargets: Partial<Record<ReportScoreCategoryKey, string>> =
+    {};
+  for (const group of recommendations.groups) {
+    const categoryKey = reportScoreCategoryForFindingCategory(
+      group.primary.category,
+    );
+    if (categoryKey && !categoryActionTargets[categoryKey]) {
+      categoryActionTargets[categoryKey] = reportActionAnchorId(group.key);
+    }
+  }
   const correlations = correlateReportSignals({
     summary: details.scan.summary,
     findings: orderedFindings,
@@ -414,6 +429,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           distinctProblems={reportSummary.total}
           occurrences={orderedFindings.length}
           pageCount={details.scan.pageCount}
+          categoryTargets={categoryActionTargets}
         />
       ) : null}
 
@@ -433,9 +449,15 @@ export default async function ScanPage({ params }: ScanPageProps) {
               const finding = group.primary;
               const businessContext = getFindingBusinessContext(finding);
               return (
-                <article
+                <a
                   key={group.key}
-                  className="report-priority-card rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+                  href={"#" + reportActionAnchorId(group.key)}
+                  aria-label={
+                    "Priorité " +
+                    String(index + 1).padStart(2, "0") +
+                    " : voir la remédiation"
+                  }
+                  className="report-priority-card rounded-lg border border-[#242d40] bg-[#0d111a] p-5 transition hover:-translate-y-0.5 hover:border-[#46557a] hover:bg-[#111827] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-[#8793ff]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="font-mono text-xs text-[#56627a]">
@@ -471,7 +493,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
                       </dd>
                     </div>
                   </dl>
-                </article>
+                  <span className="mt-4 inline-flex text-xs font-semibold text-[#8793ff]">
+                    Voir la remédiation ↓
+                  </span>
+                </a>
               );
             })}
           </div>

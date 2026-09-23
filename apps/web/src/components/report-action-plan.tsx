@@ -4,6 +4,7 @@ import {
   getFindingDisplayTitle,
   type ReportFindingLike,
 } from "@/lib/report-presentation";
+import { reportActionAnchorId } from "@/lib/report-navigation";
 import type {
   ReportRecommendationGroup,
   ReportRecommendationLevel,
@@ -63,7 +64,10 @@ function ActionRow({
   const remediation = getFindingRemediation(finding.code);
 
   return (
-    <article className="report-action-row grid gap-4 border-b border-[#242d40] bg-[#0d111a] p-5 last:border-b-0 lg:grid-cols-[42px_minmax(0,2fr)_minmax(0,1fr)_140px]">
+    <article
+      id={reportActionAnchorId(group.key)}
+      className="report-action-row scroll-mt-24 grid gap-4 border-b border-[#242d40] bg-[#0d111a] p-5 last:border-b-0 lg:grid-cols-[42px_minmax(0,2fr)_minmax(0,1fr)_140px]"
+    >
       <span className="font-mono text-xs text-[#56627a]">
         {String(index + 1).padStart(2, "0")}
       </span>

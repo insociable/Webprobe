@@ -1,4 +1,4 @@
-import { findings, scans, sites } from "@agency-saas/db";
+import { findings, scans, scanSchedules, sites } from "@agency-saas/db";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./database";
 import { requireOrganizationAccess } from "./organization-site-service";
@@ -23,6 +23,17 @@ export async function getOrganizationOverview(
   if (organizationSites.length === 0) {
     return { access, sites: [] };
   }
+  const scheduleRows = await db
+    .select({
+      siteId: scanSchedules.siteId,
+      enabled: scanSchedules.enabled,
+    })
+    .from(scanSchedules)
+    .where(eq(scanSchedules.organizationId, organizationId));
+  const scheduleEnabledBySite = new Map(
+    scheduleRows.map((schedule) => [schedule.siteId, schedule.enabled]),
+  );
+
   const latestScans = await db
     .selectDistinctOn([scans.siteId], {
       id: scans.id,
@@ -74,7 +85,12 @@ export async function getOrganizationOverview(
     sites: organizationSites.map((site) => {
       const latestScan = latestBySite.get(site.id);
       if (!latestScan) {
-        return { ...site, latestScan: null };
+        return {
+          ...site,
+          monitoringScheduleEnabled:
+            scheduleEnabledBySite.get(site.id) ?? false,
+          latestScan: null,
+        };
       }
 
       const severity = severityByScan.get(latestScan.id) ?? {
@@ -84,6 +100,7 @@ export async function getOrganizationOverview(
 
       return {
         ...site,
+        monitoringScheduleEnabled: scheduleEnabledBySite.get(site.id) ?? false,
         latestScan: {
           ...latestScan,
           findingCount: summaryFindingCount(latestScan.summary),

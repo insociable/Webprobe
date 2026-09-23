@@ -1,104 +1,46 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/product-shell";
-import { requireCurrentSession } from "@/lib/current-session";
-import { getUserMemberships } from "@/lib/membership-context";
-import { getOrganizationOverview } from "@/lib/organization-overview";
-
-const scanStatusLabels = {
-  queued: "En file",
-  running: "En cours",
-  completed: "Terminé",
-  failed: "Échec",
-  cancelled: "Annulé",
-} as const;
-
-function formatDate(value: Date | null): string {
-  if (!value) return "—";
-  return new Intl.DateTimeFormat("fr-FR", {
-    dateStyle: "short",
-    timeStyle: "short",
-    timeZone: "Europe/Paris",
-  }).format(value);
-}
+import { getWorkspaceOverview } from "@/lib/workspace-overview";
 
 export default async function DashboardPage() {
-  const session = await requireCurrentSession();
-  const userMemberships = await getUserMemberships(session.user.id);
-
-  if (userMemberships.length === 0) {
-    redirect("/onboarding");
-  }
-
-  const overviews = await Promise.all(
-    userMemberships.map((membership) =>
-      getOrganizationOverview(session.user.id, membership.organizationId),
-    ),
-  );
-  const workspaces = userMemberships.map((membership, index) => ({
-    membership,
-    overview: overviews[index]!,
-  }));
-  const allSites = workspaces.flatMap(({ membership, overview }) =>
-    overview.sites.map((site) => ({
-      ...site,
-      organizationId: membership.organizationId,
-      role: membership.role,
-    })),
-  );
-  const manageableMemberships = userMemberships.filter(
-    (membership) => membership.role !== "member",
-  );
-  const directCreateHref = manageableMemberships[0]
-    ? "/organizations/" + manageableMemberships[0].organizationId + "/sites/new"
-    : null;
-  const scansInProgress = allSites.filter(
-    (site) =>
-      site.latestScan?.status === "queued" ||
-      site.latestScan?.status === "running",
-  ).length;
-  const majorFindings = allSites.reduce(
-    (total, site) =>
-      total +
-      (site.latestScan?.highCount ?? 0) +
-      (site.latestScan?.criticalCount ?? 0),
-    0,
-  );
-  const emailFallbackName = session.user.email.split("@")[0] ?? "";
-  const hasCustomDisplayName =
-    session.user.name !== "Utilisateur" &&
-    session.user.name.trim().toLowerCase() !==
-      emailFallbackName.trim().toLowerCase();
+  const { user, sites, createSiteHref, scansInProgress, majorFindings } =
+    await getWorkspaceOverview();
+  const emailFallbackName = user.email.split("@")[0] ?? "";
+  const displayName =
+    user.name.trim() && user.name !== "Utilisateur"
+      ? user.name
+      : emailFallbackName || "vous";
 
   return (
-    <WorkspaceShell>
+    <WorkspaceShell trail={[{ label: "Tableau de bord" }]}>
       <section className="grid gap-8 border-b border-[#242d40] pb-9 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
           <p className="am-kicker">Vue générale</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-            {hasCustomDisplayName
-              ? "Bonjour " + session.user.name
-              : "Votre portail"}
+            Bonjour {displayName}
           </h1>
           <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
-            Retrouvez vos sites directement ici. Un nouveau site peut être
-            audité immédiatement ; la vérification DNS ne sert qu’à activer le
-            monitoring continu.
+            Votre activité de monitoring et les points à suivre, en un regard.
           </p>
         </div>
-        {directCreateHref ? (
-          <Link href={directCreateHref} className="am-button-primary">
-            Ajouter un site
+        {createSiteHref ? (
+          <Link href={createSiteHref} className="am-button-primary">
+            {sites.length === 0
+              ? "Ajouter mon premier site"
+              : "Ajouter un site"}
             <span aria-hidden="true">+</span>
           </Link>
         ) : null}
       </section>
 
-      <section className="border-b border-[#242d40] py-7">
+      <section
+        className="border-b border-[#242d40] py-7"
+        aria-label="Synthèse du compte"
+      >
         <div className="am-metric-grid">
           <div className="am-metric-cell">
             <p className="am-metric-label">Sites</p>
-            <p className="am-metric-value">{allSites.length}</p>
+            <p className="am-metric-value">{sites.length}</p>
           </div>
           <div className="am-metric-cell">
             <p className="am-metric-label">Scans en cours</p>
@@ -111,113 +53,71 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section id="sites" className="py-9">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
-              Accès direct
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
-              Vos sites
-            </h2>
+      <section className="grid gap-8 py-9 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.85fr)] lg:items-center">
+        <div>
+          <p className="am-kicker">Agency Monitor</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.035em]">
+            Comprendre votre site. Suivre son évolution.
+          </h2>
+          <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
+            Lancez un audit ponctuel d’un site public pour repérer les problèmes
+            de sécurité Web et HTTP, de performance, de SEO, d’accessibilité et
+            de réseau. Le rapport rassemble les constats et un plan de
+            remédiation concret.
+          </p>
+          <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
+            Après vérification du domaine par DNS, activez le monitoring
+            récurrent, comparez les scans dans le temps et recevez des alertes.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <Link href="/sites" className="am-button-secondary">
+              Voir mes sites →
+            </Link>
+            <Link href="/guide" className="am-button-secondary">
+              Consulter le guide
+            </Link>
           </div>
-          <span className="font-mono text-xs text-[#657188]">
-            {String(allSites.length).padStart(2, "0")}
-          </span>
         </div>
 
-        {allSites.length === 0 ? (
-          <div className="mt-7 border-l-2 border-[#6d7cff] bg-[#0d121d] p-6">
-            <p className="text-sm text-[#7f8a9f]">Aucun site enregistré.</p>
-            {directCreateHref ? (
-              <Link
-                href={directCreateHref}
-                className="mt-4 inline-flex text-sm font-semibold text-[#8793ff] hover:text-[#aeb6ff]"
-              >
-                Ajouter le premier site →
-              </Link>
-            ) : null}
+        <div
+          className="am-panel p-5 sm:p-6"
+          aria-label="Aperçu illustratif d’un rapport"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-[#242d40] pb-4">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8793a8]">
+                Aperçu illustratif
+              </p>
+              <p className="mt-2 font-semibold">Rapport de site</p>
+            </div>
+            <span className="rounded-md border border-[#303a50] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#9aa6ba]">
+              Audit
+            </span>
           </div>
-        ) : (
-          <div className="mt-7 divide-y divide-[#242d40] border-b border-[#242d40]">
-            {allSites.map((site) => {
-              const scanActive =
-                site.latestScan?.status === "queued" ||
-                site.latestScan?.status === "running";
-              const statusLabel =
-                site.status === "active"
-                  ? "Monitoring activé"
-                  : site.status === "paused"
-                    ? "En pause"
-                    : "Audit public disponible";
-
-              return (
-                <Link
-                  key={site.id}
-                  href={
-                    "/organizations/" +
-                    site.organizationId +
-                    "/sites/" +
-                    site.id
-                  }
-                  className="group grid gap-4 py-5 transition hover:bg-[#0d121d] sm:grid-cols-[1fr_190px_150px_auto] sm:items-center sm:px-4"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="font-semibold text-[#e9edf6] group-hover:text-white">
-                        {site.name}
-                      </h3>
-                      <span className="rounded-md border border-[#303a50] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#9aa6ba]">
-                        {statusLabel}
-                      </span>
-                    </div>
-                    <p className="mt-2 break-all text-sm text-[#6f7b91]">
-                      {site.canonicalUrl}
-                    </p>
-                    {site.status === "pending_verification" ? (
-                      <p className="mt-2 text-xs text-[#657188]">
-                        Le DNS n’est requis que pour le monitoring continu et le
-                        partage public.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#5f6b81]">
-                      Dernier scan
-                    </p>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-[#cdd5e4]">
-                      {scanActive ? (
-                        <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
-                      ) : null}
-                      {site.latestScan
-                        ? scanStatusLabels[site.latestScan.status]
-                        : "Aucun"}
-                    </p>
-                    {site.latestScan ? (
-                      <p className="mt-1 text-xs text-[#657188]">
-                        {formatDate(site.latestScan.queuedAt)}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#5f6b81]">
-                      Findings
-                    </p>
-                    <p className="mt-2 text-sm text-[#cdd5e4]">
-                      {site.latestScan?.findingCount ?? "—"}
-                    </p>
-                  </div>
-
-                  <span className="text-[#6d7cff] transition group-hover:translate-x-1 group-hover:text-[#aab2ff]">
-                    →
-                  </span>
-                </Link>
-              );
-            })}
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              { label: "Sécurité", tone: "bg-[#6d7cff]", width: "w-3/4" },
+              { label: "Performance", tone: "bg-[#39c7ff]", width: "w-2/3" },
+              { label: "SEO", tone: "bg-[#51d3a5]", width: "w-4/5" },
+              { label: "Accessibilité", tone: "bg-[#ffb45f]", width: "w-3/5" },
+            ].map((category) => (
+              <div key={category.label} className="am-panel-soft p-4">
+                <p className="text-xs text-[#aab5c9]">{category.label}</p>
+                <div className="mt-4 h-1.5 rounded-full bg-[#242d40]">
+                  <div
+                    className={`h-full rounded-full ${category.tone} ${category.width}`}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+          <div className="am-panel-soft mt-3 flex items-center gap-3 p-4">
+            <span className="size-2 shrink-0 rounded-full bg-[#6d7cff]" />
+            <p className="text-xs text-[#aab5c9]">
+              Constats → actions → suivi des prochains scans
+            </p>
+          </div>
+        </div>
       </section>
     </WorkspaceShell>
   );

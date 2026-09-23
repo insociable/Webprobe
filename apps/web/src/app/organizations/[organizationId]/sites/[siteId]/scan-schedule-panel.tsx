@@ -104,13 +104,34 @@ export function ScanSchedulePanel({
         le moteur de scan redémarre temporairement.
       </p>
 
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span
+          className={
+            "size-2 rounded-full " +
+            (!siteActive
+              ? "bg-[#6d7cff]"
+              : values.enabled
+                ? "bg-[#51d3a5]"
+                : "bg-[#ffb45f]")
+          }
+        />
+        <span className="text-sm font-semibold text-white/70">
+          {!siteActive
+            ? "Vérification requise"
+            : values.enabled
+              ? "Monitoring actif"
+              : "Monitoring inactif"}
+        </span>
+      </div>
+
       <form action={formAction} className="mt-6 space-y-5">
         <label className="flex items-center gap-3 text-sm text-white/70">
           <input
             name="enabled"
             type="checkbox"
             defaultChecked={values.enabled}
-            className="h-4 w-4 accent-[#6d7cff]"
+            disabled={!siteActive}
+            className="h-4 w-4 accent-[#6d7cff] disabled:cursor-not-allowed disabled:opacity-50"
           />
           Activer le scan automatique
         </label>
@@ -126,7 +147,8 @@ export function ScanSchedulePanel({
             <select
               name="dayOfWeek"
               defaultValue={values.dayOfWeek}
-              className="am-field mt-2"
+              disabled={!siteActive}
+              className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {dayLabels.map((label, index) => (
                 <option key={label} value={index + 1}>
@@ -143,7 +165,8 @@ export function ScanSchedulePanel({
               type="time"
               required
               defaultValue={timeValue(values.minuteOfDay)}
-              className="am-field mt-2"
+              disabled={!siteActive}
+              className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
         </div>
@@ -155,7 +178,8 @@ export function ScanSchedulePanel({
             required
             maxLength={100}
             defaultValue={values.timeZone}
-            className="am-field mt-2"
+            disabled={!siteActive}
+            className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
 
@@ -167,10 +191,14 @@ export function ScanSchedulePanel({
         ) : null}
 
         <button
-          disabled={pending}
+          disabled={pending || !siteActive}
           className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {pending ? "Enregistrement…" : "Enregistrer la planification"}
+          {pending
+            ? "Enregistrement…"
+            : siteActive
+              ? "Enregistrer la planification"
+              : "Vérification requise"}
         </button>
       </form>
 

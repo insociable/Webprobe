@@ -110,9 +110,21 @@ export default function SignInPage() {
           </h2>
           <p className="mt-3 leading-7 text-[#8793a8]">
             {step === "email"
-              ? "Saisissez votre adresse. Nous envoyons un code temporaire à usage unique. Lors d’une première connexion, vous choisirez ensuite votre nom affiché."
+              ? "Saisissez votre adresse e-mail. Agency Monitor utilise une connexion sans mot de passe : un code temporaire à usage unique vous est envoyé à chaque connexion."
               : "Entrez le code à 6 chiffres reçu par e-mail."}
           </p>
+
+          {step === "email" ? (
+            <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] px-4 py-3 text-sm leading-6 text-[#aab5c9]">
+              <strong className="font-semibold text-white">
+                Aucun mot de passe à créer ou à mémoriser.
+              </strong>{" "}
+              L’accès au compte dépend de votre boîte e-mail et du code OTP
+              reçu. Pour renforcer cet accès, activez la MFA sur la messagerie
+              utilisée. Lors d’une première connexion, vous choisirez ensuite
+              votre nom affiché.
+            </div>
+          ) : null}
 
           {step === "email" ? (
             <form className="mt-8 space-y-5" onSubmit={sendOtp}>
