@@ -112,6 +112,35 @@ async function cleanup(input: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describeDatabase("shareable scan reports", () => {
+  it("enforces the recipient quota atomically for concurrent email requests", async () => {
+    const f = await fixture();
+    const previousSecret = process.env.REPORT_TOKEN_SECRET;
+    process.env.REPORT_TOKEN_SECRET =
+      "report-test-secret-that-is-at-least-thirty-two-characters";
+    try {
+      const attempts = await Promise.allSettled(
+        Array.from({ length: 4 }, () =>
+          queueReportEmail(
+            f.ownerId,
+            f.organizationId,
+            f.siteId,
+            f.scanId,
+            "client@example.com",
+          ),
+        ),
+      );
+      expect(
+        attempts.filter((item) => item.status === "fulfilled"),
+      ).toHaveLength(3);
+      expect(
+        attempts.filter((item) => item.status === "rejected"),
+      ).toHaveLength(1);
+    } finally {
+      if (previousSecret === undefined) delete process.env.REPORT_TOKEN_SECRET;
+      else process.env.REPORT_TOKEN_SECRET = previousSecret;
+      await cleanup(f);
+    }
+  });
   it("resolves a valid token, then rejects expiry and revocation", async () => {
     const f = await fixture();
     const previousSecret = process.env.REPORT_TOKEN_SECRET;

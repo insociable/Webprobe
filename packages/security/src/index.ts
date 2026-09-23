@@ -130,6 +130,52 @@ export async function assertPublicHttpUrl(
 
 const reportShareTokenPattern = /^[A-Za-z0-9_-]{43}$/;
 
+export function getReportTokenSecret(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const dedicated = env.REPORT_TOKEN_SECRET?.trim();
+  const fallback = env.BETTER_AUTH_SECRET?.trim();
+  if (env.NODE_ENV === "production" && (!dedicated || dedicated === fallback)) {
+    throw new Error("Production requires a distinct REPORT_TOKEN_SECRET");
+  }
+  const secret = dedicated || fallback;
+  if (!secret || secret.length < 32) {
+    throw new Error("Report token secret must contain at least 32 characters");
+  }
+  return secret;
+}
+
+export function getReportPublicBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const configured = env.REPORT_PUBLIC_BASE_URL?.trim();
+  if (env.NODE_ENV === "production" && !configured) {
+    throw new Error("Production requires REPORT_PUBLIC_BASE_URL");
+  }
+  const value =
+    configured || env.BETTER_AUTH_URL?.trim() || "http://localhost:3000";
+  const url = new URL(value);
+  if (
+    env.NODE_ENV === "production"
+      ? url.protocol !== "https:"
+      : url.protocol !== "http:" && url.protocol !== "https:"
+  ) {
+    throw new Error("Report public base URL must use HTTPS in production");
+  }
+  if (
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash
+  ) {
+    throw new Error(
+      "Report public base URL must be an origin without credentials",
+    );
+  }
+  return url.origin;
+}
+
 function reportTokenKey(secret: string): Buffer {
   if (secret.length < 32) {
     throw new Error("Report token secret must contain at least 32 characters");

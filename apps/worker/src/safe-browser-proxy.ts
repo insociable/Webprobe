@@ -37,8 +37,11 @@ export type SafeBrowserProxyOptions = {
   connectTimeoutMs?: number;
   maxConnections?: number;
   maxHttpResponseBytes?: number;
+  maxHttpResponseMs?: number;
   maxTunnelDurationMs?: number;
+  maxTunnelLifetimeMs?: number;
   maxTunnelBytes?: number;
+  maxTotalTransferredBytes?: number;
 };
 
 export type SafeBrowserProxy = {
@@ -147,9 +150,13 @@ async function handleHttpRequest(
   options: Required<
     Pick<
       SafeBrowserProxyOptions,
-      "resolver" | "connectTimeoutMs" | "maxHttpResponseBytes"
+      | "resolver"
+      | "connectTimeoutMs"
+      | "maxHttpResponseBytes"
+      | "maxHttpResponseMs"
     >
   >,
+  consumeBytes: (bytes: number) => boolean,
 ): Promise<void> {
   const method = request.method ?? "GET";
   if (!allowedHttpMethods.has(method)) {
@@ -185,6 +192,16 @@ async function handleHttpRequest(
   headers.connection = "close";
 
   await new Promise<void>((resolve) => {
+    let finished = false;
+    let connectTimer: NodeJS.Timeout | undefined;
+    let responseTimer: NodeJS.Timeout | undefined;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (connectTimer) clearTimeout(connectTimer);
+      if (responseTimer) clearTimeout(responseTimer);
+      resolve();
+    };
     const upstream = http.request(
       {
         host: target.address,
@@ -201,18 +218,21 @@ async function handleHttpRequest(
         let bytes = 0;
         upstreamResponse.on("data", (chunk: Buffer) => {
           bytes += chunk.length;
-          if (bytes > options.maxHttpResponseBytes) {
+          if (
+            bytes > options.maxHttpResponseBytes ||
+            !consumeBytes(chunk.length)
+          ) {
             upstreamResponse.destroy();
             response.destroy();
           }
         });
-        upstreamResponse.once("end", resolve);
-        upstreamResponse.once("error", resolve);
+        upstreamResponse.once("end", finish);
+        upstreamResponse.once("error", finish);
         upstreamResponse.pipe(response);
       },
     );
 
-    const timeout = setTimeout(() => {
+    connectTimer = setTimeout(() => {
       const error = new Error(
         "Proxy upstream timeout",
       ) as NodeJS.ErrnoException;
@@ -221,16 +241,29 @@ async function handleHttpRequest(
     }, options.connectTimeoutMs);
 
     upstream.once("socket", (socket) => {
-      socket.once("connect", () => clearTimeout(timeout));
+      socket.once("connect", () => {
+        if (connectTimer) clearTimeout(connectTimer);
+      });
     });
+    responseTimer = setTimeout(() => {
+      upstream.destroy();
+      if (!response.destroyed) response.destroy();
+      finish();
+    }, options.maxHttpResponseMs);
     upstream.once("error", (error: NodeJS.ErrnoException) => {
-      clearTimeout(timeout);
       const status = error.code === "ETIMEDOUT" ? 504 : 502;
       endHttpError(response, status, "Upstream connection failed");
-      resolve();
+      finish();
     });
 
-    request.once("aborted", () => upstream.destroy());
+    request.once("aborted", () => {
+      upstream.destroy();
+      finish();
+    });
+    response.once("close", () => {
+      upstream.destroy();
+      finish();
+    });
     request.resume();
     upstream.end();
   });
@@ -247,6 +280,7 @@ async function handleConnect(
     >
   >,
   upstreamSockets: Set<Socket>,
+  consumeBytes: (bytes: number) => boolean,
 ): Promise<void> {
   const authority = request.url ?? "";
   let target: SafeProxyTarget;
@@ -282,7 +316,7 @@ async function handleConnect(
   };
   const accountTunnelBytes = (chunk: Buffer) => {
     tunneledBytes += chunk.length;
-    if (tunneledBytes > options.maxTunnelBytes) {
+    if (tunneledBytes > options.maxTunnelBytes || !consumeBytes(chunk.length)) {
       closeTunnel();
     }
   };
@@ -297,7 +331,7 @@ async function handleConnect(
     clientSocket.write(
       "HTTP/1.1 200 Connection Established\r\nProxy-Agent: AgencyMonitor\r\n\r\n",
     );
-    if (head.length > options.maxTunnelBytes) {
+    if (head.length > options.maxTunnelBytes || !consumeBytes(head.length)) {
       closeTunnel();
       return;
     }
@@ -338,14 +372,28 @@ export async function startSafeBrowserProxy(
     connectTimeoutMs: options.connectTimeoutMs ?? 10_000,
     maxConnections: options.maxConnections ?? 64,
     maxHttpResponseBytes: options.maxHttpResponseBytes ?? 10 * 1024 * 1024,
-    maxTunnelDurationMs: options.maxTunnelDurationMs ?? 45_000,
+    maxHttpResponseMs: options.maxHttpResponseMs ?? 30_000,
+    maxTunnelDurationMs:
+      options.maxTunnelLifetimeMs ?? options.maxTunnelDurationMs ?? 45_000,
     maxTunnelBytes: options.maxTunnelBytes ?? 50 * 1024 * 1024,
+    maxTotalTransferredBytes:
+      options.maxTotalTransferredBytes ?? 100 * 1024 * 1024,
+  };
+  let transferredBytes = 0;
+  const consumeBytes = (bytes: number) => {
+    transferredBytes += bytes;
+    return transferredBytes <= resolvedOptions.maxTotalTransferredBytes;
   };
   const clientSockets = new Set<Socket>();
   const upstreamSockets = new Set<Socket>();
 
   const server = http.createServer((request, response) => {
-    void handleHttpRequest(request, response, resolvedOptions).catch(() => {
+    void handleHttpRequest(
+      request,
+      response,
+      resolvedOptions,
+      consumeBytes,
+    ).catch(() => {
       endHttpError(response, 502, "Proxy request failed");
     });
   });
@@ -366,6 +414,7 @@ export async function startSafeBrowserProxy(
       head,
       resolvedOptions,
       upstreamSockets,
+      consumeBytes,
     ).catch(() => endConnectError(socket, 502, "Bad Gateway"));
   });
   server.on("clientError", (_error, socket) => {

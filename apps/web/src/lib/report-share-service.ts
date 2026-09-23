@@ -4,6 +4,8 @@ import {
   decryptReportShareToken,
   encryptReportShareToken,
   generateReportShareToken,
+  getReportPublicBaseUrl,
+  getReportTokenSecret,
   hashReportShareToken,
 } from "@agency-saas/security";
 import { and, desc, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
@@ -17,9 +19,10 @@ import {
 const shareLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const activeShareLimitPerScan = 20;
 const reportEmailSiteHourlyLimit = 30;
-const reportEmailOrganizationHourlyLimit = 100;
+const reportEmailOrganizationDailyLimit = 30;
 const reportEmailSenderHourlyLimit = 30;
-const reportEmailRecipientHourlyLimit = 5;
+const reportEmailRecipientDailyLimit = 3;
+const reportEmailPendingOrganizationLimit = 20;
 
 export class ReportShareRateLimitError extends Error {
   constructor(
@@ -39,38 +42,11 @@ export class ReportShareEligibilityError extends Error {
 }
 
 function tokenSecret(): string {
-  const reportSecret = process.env.REPORT_TOKEN_SECRET?.trim();
-  const authSecret = process.env.BETTER_AUTH_SECRET?.trim();
-
-  if (process.env.NODE_ENV === "production") {
-    if (!reportSecret) {
-      throw new Error("REPORT_TOKEN_SECRET is required in production");
-    }
-    if (authSecret && reportSecret === authSecret) {
-      throw new Error(
-        "REPORT_TOKEN_SECRET must be distinct from BETTER_AUTH_SECRET in production",
-      );
-    }
-    return reportSecret;
-  }
-
-  const value = reportSecret || authSecret;
-  if (!value) {
-    throw new Error("REPORT_TOKEN_SECRET or BETTER_AUTH_SECRET is required");
-  }
-  return value;
+  return getReportTokenSecret();
 }
 
 export function reportPublicBaseUrl(): string {
-  const value =
-    process.env.REPORT_PUBLIC_BASE_URL?.trim() ||
-    process.env.BETTER_AUTH_URL?.trim() ||
-    "http://localhost:3000";
-  const url = new URL(value);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Report public base URL must use HTTP(S)");
-  }
-  return url.origin;
+  return getReportPublicBaseUrl();
 }
 
 export function reportShareUrl(token: string): string {
@@ -252,13 +228,14 @@ export async function queueReportEmail(
     );
 
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const [organizationUsage] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(reportDeliveries)
       .where(
         and(
           eq(reportDeliveries.organizationId, organizationId),
-          gte(reportDeliveries.createdAt, oneHourAgo),
+          gte(reportDeliveries.createdAt, oneDayAgo),
         ),
       );
     const [siteUsage] = await tx
@@ -278,7 +255,7 @@ export async function queueReportEmail(
         and(
           eq(reportDeliveries.organizationId, organizationId),
           eq(reportDeliveries.recipientEmail, recipientEmail),
-          gte(reportDeliveries.createdAt, oneHourAgo),
+          gte(reportDeliveries.createdAt, oneDayAgo),
         ),
       );
     const [senderUsage] = await tx
@@ -295,15 +272,25 @@ export async function queueReportEmail(
           gte(reportDeliveries.createdAt, oneHourAgo),
         ),
       );
+    const [pendingUsage] = await tx
+      .select({ count: sql<number>`count(*)::int` })
+      .from(reportDeliveries)
+      .where(
+        and(
+          eq(reportDeliveries.organizationId, organizationId),
+          inArray(reportDeliveries.status, ["pending", "sending"]),
+        ),
+      );
 
     if (
-      (organizationUsage?.count ?? 0) >= reportEmailOrganizationHourlyLimit ||
+      (organizationUsage?.count ?? 0) >= reportEmailOrganizationDailyLimit ||
       (siteUsage?.count ?? 0) >= reportEmailSiteHourlyLimit ||
       (senderUsage?.count ?? 0) >= reportEmailSenderHourlyLimit ||
-      (recipientUsage?.count ?? 0) >= reportEmailRecipientHourlyLimit
+      (recipientUsage?.count ?? 0) >= reportEmailRecipientDailyLimit ||
+      (pendingUsage?.count ?? 0) >= reportEmailPendingOrganizationLimit
     ) {
       throw new ReportShareRateLimitError(
-        "Report email hourly quota exceeded",
+        "Report email quota exceeded",
         "email-rate-limited",
       );
     }
