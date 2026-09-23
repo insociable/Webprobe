@@ -2,10 +2,28 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
+const siteTitle = "WebProbe — audit, monitoring et analyse technique de sites web";
+const siteDescription =
+  "Analysez la sécurité, les performances, le SEO et la configuration technique de vos sites web avec des rapports clairs et des recommandations actionnables.";
+
 export const metadata: Metadata = {
-  title: "Agency Monitor — surveillance de sites clients",
-  description:
-    "Détectez les régressions, documentez la maintenance et partagez des rapports de marque.",
+  metadataBase: new URL("https://webprobe.fr"),
+  title: siteTitle,
+  description: siteDescription,
+  applicationName: "WebProbe",
+  openGraph: {
+    title: siteTitle,
+    description: siteDescription,
+    url: "https://webprobe.fr/",
+    siteName: "WebProbe",
+    type: "website",
+    locale: "fr_FR",
+  },
+  twitter: {
+    card: "summary",
+    title: siteTitle,
+    description: siteDescription,
+  },
 };
 
 const themeBootstrap = [

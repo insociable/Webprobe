@@ -52,7 +52,7 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
         </div>
 
         <p className="mt-5 max-w-xl text-xs leading-5 text-[#59647a]">
-          Agency Monitor respecte robots.txt, les budgets réseau et les limites
+          WebProbe respecte robots.txt, les budgets réseau et les limites
           du Public Audit. Certaines parties du site peuvent donc ne pas être
           analysées.
         </p>

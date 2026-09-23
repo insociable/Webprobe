@@ -88,7 +88,7 @@ export async function sendBrandedReportEmail(
   const reportUrl =
     getReportPublicBaseUrl() + "/r/" + encodeURIComponent(token);
   const fromAddress = process.env.SMTP_FROM ?? "no-reply@agency-monitor.local";
-  const brandName = delivery.brandName.trim() || "Agency Monitor";
+  const brandName = delivery.brandName.trim() || "WebProbe";
 
   await getSmtpTransporter().sendMail({
     from: { name: brandName, address: fromAddress },

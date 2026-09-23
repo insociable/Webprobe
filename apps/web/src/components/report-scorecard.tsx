@@ -142,7 +142,7 @@ export function ReportScorecard({
     <section className="report-v2-scorecard border-b border-[#242d40] py-10">
       <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="rounded-lg border border-[#2a3550] bg-[#0d121d] p-6">
-          <p className="am-kicker">Agency Monitor Report</p>
+          <p className="am-kicker">WebProbe Report</p>
           <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
             Score du site
           </p>

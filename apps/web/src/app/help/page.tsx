@@ -6,7 +6,7 @@ const faq = [
   {
     question: "Pourquoi n’y a-t-il pas de mot de passe ?",
     answer:
-      "Agency Monitor utilise une connexion sans mot de passe : un code OTP à usage unique est envoyé à l’adresse e-mail à chaque connexion. La sécurité du compte dépend donc aussi de celle de la messagerie utilisée ; l’activation de la MFA sur cette boîte est recommandée.",
+      "WebProbe utilise une connexion sans mot de passe : un code OTP à usage unique est envoyé à l’adresse e-mail à chaque connexion. La sécurité du compte dépend donc aussi de celle de la messagerie utilisée ; l’activation de la MFA sur cette boîte est recommandée.",
   },
   {
     question: "Qu’est-ce qu’un Public Audit ?",
@@ -64,7 +64,7 @@ export default async function HelpPage() {
       <section className="border-b border-[#242d40] pb-9">
         <p className="am-kicker">Aide</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
-          Comprendre Agency Monitor
+          Comprendre WebProbe
         </h1>
         <p className="mt-4 max-w-3xl leading-7 text-[#8793a8]">
           Les réponses ci-dessous décrivent le fonctionnement actuel du produit,

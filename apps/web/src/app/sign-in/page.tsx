@@ -110,7 +110,7 @@ export default function SignInPage() {
           </h2>
           <p className="mt-3 leading-7 text-[#8793a8]">
             {step === "email"
-              ? "Saisissez votre adresse e-mail. Agency Monitor utilise une connexion sans mot de passe : un code temporaire à usage unique vous est envoyé à chaque connexion."
+              ? "Saisissez votre adresse e-mail. WebProbe utilise une connexion sans mot de passe : un code temporaire à usage unique vous est envoyé à chaque connexion."
               : "Entrez le code à 6 chiffres reçu par e-mail."}
           </p>
 

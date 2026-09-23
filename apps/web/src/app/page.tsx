@@ -1,5 +1,20 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductMark } from "@/components/product-mark";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  robots: { index: true, follow: true },
+};
+
+const webApplicationJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  name: "WebProbe",
+  url: "https://webprobe.fr/",
+  description:
+    "Analyse technique de sites web couvrant la sécurité, les performances, le SEO, la disponibilité, la configuration et le suivi dans le temps.",
+};
 
 const signals = [
   { label: "Sites suivis", value: "20 max.", detail: "périmètre pilote" },
@@ -9,16 +24,21 @@ const signals = [
 
 const checks = [
   ["Disponibilité", "HTTP, ressources, redirections et liens cassés"],
-  ["Surface web", "TLS, CSP, HSTS et en-têtes de sécurité"],
+  ["Sécurité web", "TLS, CSP, HSTS, cookies et en-têtes de sécurité"],
+  ["Performance", "Signaux de chargement, ressources et métriques observées"],
+  ["SEO", "Title, description, canonical, robots et structure essentielle"],
   ["Navigateur", "Erreurs JavaScript et rendu réellement observé"],
-  ["Accessibilité", "Contrôles axe-core et défauts priorisés"],
-  ["Historique", "Comparaison avec le scan précédent et rétablissements"],
-  ["Rapport client", "Preuves, remédiations et partage à votre marque"],
+  ["Historique", "Comparaison avec les scans précédents et rétablissements"],
+  ["Rapports & remédiations", "Preuves, priorités et recommandations actionnables"],
 ];
 
 export default function Home() {
   return (
     <main className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webApplicationJsonLd) }}
+      />
       <nav className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center justify-between border-b border-[#242d40] py-5">
         <ProductMark />
         <div className="flex items-center gap-3">
@@ -34,20 +54,21 @@ export default function Home() {
 
       <section className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-12 py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
         <div>
-          <p className="am-kicker">Surveillance multi-site pour agences</p>
+          <p className="am-kicker">Audit et monitoring web</p>
           <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[0.96] tracking-[-0.055em] text-[#f7f9ff] sm:text-6xl lg:text-[4.9rem]">
             Voyez ce qui change.
             <span className="block text-[#7f8cff]">
-              Agissez avant le client.
+              Corrigez ce qui compte.
             </span>
           </h1>
           <p className="mt-7 max-w-2xl text-lg leading-8 text-[#97a2b7]">
-            Agency Monitor transforme chaque scan en signal exploitable : état
-            du site, dérives, preuves, remédiations et rapport partageable.
+            WebProbe analyse vos sites web et transforme chaque scan en
+            informations actionnables : sécurité, performance, SEO,
+            disponibilité, configuration technique, historique et remédiations.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/sign-in" className="am-button-primary">
-              Accéder au pilote
+              Tester WebProbe
               <span aria-hidden="true">→</span>
             </Link>
             <a href="/api/health" className="am-button-secondary">
@@ -155,8 +176,8 @@ export default function Home() {
       </section>
 
       <footer className="mx-auto flex w-[min(1240px,calc(100%-32px))] flex-col gap-2 border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176] sm:flex-row sm:items-center sm:justify-between">
-        <p>Agency Monitor — pilote technique</p>
-        <p>HTTP · TLS · JS · A11Y · Historique · Rapports</p>
+        <p>WebProbe — audit et monitoring technique</p>
+        <p>Sécurité · Performance · SEO · Disponibilité · Historique · Rapports</p>
       </footer>
     </main>
   );

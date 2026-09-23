@@ -7,10 +7,10 @@ export function ProductMark({ withName = true }: { withName?: boolean }) {
       {withName ? (
         <span>
           <span className="block text-sm font-semibold tracking-[-0.01em] text-white">
-            Agency Monitor
+            WebProbe
           </span>
           <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-[#6f7b91]">
-            Site observatory
+            Audit & monitoring
           </span>
         </span>
       ) : null}

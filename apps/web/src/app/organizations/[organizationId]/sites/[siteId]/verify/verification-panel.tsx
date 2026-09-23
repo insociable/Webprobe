@@ -99,7 +99,7 @@ export function VerificationPanel({
               </p>
               <p className="mt-3 text-xs leading-5 text-white/40">
                 Copiez cette valeur exactement, sans guillemets ajoutés. Cette
-                valeur brute n’est pas conservée par Agency Monitor.
+                valeur brute n’est pas conservée par WebProbe.
               </p>
             </div>
 

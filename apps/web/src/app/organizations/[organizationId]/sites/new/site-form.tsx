@@ -35,7 +35,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
         <div className="border-t border-[#242d40] p-4">
           <label className="block">
             <span className="mb-2 block text-xs text-white/45">
-              Nom affiché dans Agency Monitor
+              Nom affiché dans WebProbe
             </span>
             <input
               minLength={2}

@@ -34,7 +34,7 @@ export function ReportBrandingPanel({
       </h2>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-white/45">
         Le nom et la couleur ci-dessous apparaissent sur les rapports partagés
-        et dans les e-mails envoyés depuis Agency Monitor.
+        et dans les e-mails envoyés depuis WebProbe.
       </p>
 
       <form

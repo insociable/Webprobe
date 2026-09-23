@@ -32,16 +32,16 @@ export async function sendScanNotificationEmail(
       from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
       to: delivery.recipientEmail,
       messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
-      subject: `[Agency Monitor] Dégradation détectée — ${delivery.siteName}`,
+      subject: `[WebProbe] Dégradation détectée — ${delivery.siteName}`,
       text: [
-        `Agency Monitor a détecté ${delivery.payload.degradations.length} dégradation(s) sur ${delivery.siteName}.`,
+        `WebProbe a détecté ${delivery.payload.degradations.length} dégradation(s) sur ${delivery.siteName}.`,
         "",
         `Site : ${delivery.siteUrl}`,
         `Scan : ${scanDate(delivery)}`,
         "",
         ...lines,
         "",
-        "Consultez Agency Monitor pour le détail complet du scan.",
+        "Consultez WebProbe pour le détail complet du scan.",
       ].join("\n"),
     });
     return;
@@ -56,16 +56,16 @@ export async function sendScanNotificationEmail(
     from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
     to: delivery.recipientEmail,
     messageId: `<agency-monitor-${delivery.kind}-${delivery.scanId}-${delivery.recipientUserId}@agency-monitor.local>`,
-    subject: `[Agency Monitor] Rétablissement détecté — ${delivery.siteName}`,
+    subject: `[WebProbe] Rétablissement détecté — ${delivery.siteName}`,
     text: [
-      `Agency Monitor a détecté le rétablissement de ${delivery.payload.resolved.length} incident(s) sur ${delivery.siteName}.`,
+      `WebProbe a détecté le rétablissement de ${delivery.payload.resolved.length} incident(s) sur ${delivery.siteName}.`,
       "",
       `Site : ${delivery.siteUrl}`,
       `Scan : ${scanDate(delivery)}`,
       "",
       ...lines,
       "",
-      "Consultez Agency Monitor pour le détail complet du scan.",
+      "Consultez WebProbe pour le détail complet du scan.",
     ].join("\n"),
   });
 }

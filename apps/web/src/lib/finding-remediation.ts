@@ -124,14 +124,14 @@ const exactRemediations: Record<string, FindingRemediation> = {
   },
   "availability.network-error": {
     title: "Rétablir l’accessibilité réseau du site",
-    summary: "Agency Monitor n’a pas pu joindre correctement la cible.",
+    summary: "WebProbe n’a pas pu joindre correctement la cible.",
     steps: [
       "Contrôlez DNS, pare-feu, CDN, reverse proxy et disponibilité de l’hébergement.",
       "Vérifiez que le site est joignable depuis Internet et pas uniquement depuis un réseau privé.",
       "Examinez les journaux réseau et applicatifs au moment de l’échec.",
     ],
     verification:
-      "Relancez le scan depuis Agency Monitor après correction de la connectivité.",
+      "Relancez le scan depuis WebProbe après correction de la connectivité.",
   },
   "availability.redirect-error": {
     title: "Corriger la chaîne de redirection",
@@ -453,7 +453,7 @@ function scannerV2Remediation(code: string): FindingRemediation | null {
     return {
       title: "Optimiser la métrique de performance signalée",
       summary:
-        "La mesure de laboratoire dépasse le seuil retenu par Agency Monitor pour cette métrique.",
+        "La mesure de laboratoire dépasse le seuil retenu par WebProbe pour cette métrique.",
       steps: [
         "Comparez la valeur observée et le seuil affichés dans les preuves.",
         "Traitez d’abord les ressources ou traitements dominants : serveur, JavaScript, images, CSS, polices ou nombre de requêtes.",

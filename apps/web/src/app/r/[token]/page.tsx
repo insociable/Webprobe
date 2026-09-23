@@ -401,7 +401,7 @@ export default async function PublicReportPage({
         </section>
 
         <footer className="border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176]">
-          Rapport généré par Agency Monitor · lien valable jusqu’au{" "}
+          Rapport généré par WebProbe · lien valable jusqu’au{" "}
           {formatDate(report.expiresAt)} · lecture seule
         </footer>
       </div>

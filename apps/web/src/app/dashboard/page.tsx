@@ -55,7 +55,7 @@ export default async function DashboardPage() {
 
       <section className="grid gap-8 py-9 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.85fr)] lg:items-center">
         <div>
-          <p className="am-kicker">Agency Monitor</p>
+          <p className="am-kicker">WebProbe</p>
           <h2 className="mt-3 text-3xl font-semibold tracking-[-0.035em]">
             Comprendre votre site. Suivre son évolution.
           </h2>

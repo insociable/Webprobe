@@ -257,7 +257,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
 
       <div className="print-only am-print-brand" aria-hidden="true">
         <div>
-          <strong>Agency Monitor</strong>
+          <strong>WebProbe</strong>
           <span>Rapport d’audit technique</span>
         </div>
         <div className="am-print-brand-meta">
@@ -413,7 +413,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               Audit public passif et borné
             </h2>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-white/50">
-              Agency Monitor observe uniquement des ressources accessibles
+              WebProbe observe uniquement des ressources accessibles
               publiquement, respecte les limites de crawl et robots.txt et
               n’effectue pas de pentest actif. Ce rapport décrit les signaux
               effectivement observés ; il ne constitue pas une certification de

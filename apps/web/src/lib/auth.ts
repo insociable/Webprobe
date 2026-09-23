@@ -22,7 +22,7 @@ const authSchema = {
 };
 
 export const auth = betterAuth({
-  appName: "Agency Monitor",
+  appName: "WebProbe",
   baseURL: requiredEnv("BETTER_AUTH_URL"),
   secret: requiredEnv("BETTER_AUTH_SECRET"),
   database: drizzleAdapter(db, {

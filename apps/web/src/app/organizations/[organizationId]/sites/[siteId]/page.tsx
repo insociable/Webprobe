@@ -244,7 +244,7 @@ export default async function SitePage({
             La vérification DNS débloque le suivi continu
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
-            Tant que le domaine n’est pas vérifié, Agency Monitor reste en audit
+            Tant que le domaine n’est pas vérifié, WebProbe reste en audit
             public one-shot. La validation active ensuite le planning, les
             alertes de monitoring et le partage de rapports. Les audits publics
             déjà réalisés restent associés au site et distincts du monitoring ;

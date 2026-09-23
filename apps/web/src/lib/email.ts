@@ -29,8 +29,8 @@ export async function sendAuthOtpEmail(input: {
 }): Promise<void> {
   const subject =
     input.type === "sign-in"
-      ? "Votre code de connexion Agency Monitor"
-      : "Votre code de vérification Agency Monitor";
+      ? "Votre code de connexion WebProbe"
+      : "Votre code de vérification WebProbe";
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM ?? "no-reply@agency-monitor.local",
