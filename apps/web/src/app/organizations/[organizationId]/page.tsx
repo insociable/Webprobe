@@ -8,6 +8,7 @@ import { getOrganizationOverview } from "@/lib/organization-overview";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { AlertPreferencePanel } from "./alert-preference-panel";
 import { ManualScanButton } from "./manual-scan-button";
+import { PublicAuditButton } from "./public-audit-button";
 import { ReportBrandingPanel } from "./report-branding-panel";
 
 type OrganizationPageProps = {
@@ -89,7 +90,7 @@ export default async function OrganizationPage({
             href={"/organizations/" + organizationId + "/sites/new"}
             className="am-button-primary"
           >
-            Ajouter un site
+            Auditer un site
             <span aria-hidden="true">+</span>
           </Link>
         ) : null}
@@ -177,6 +178,14 @@ export default async function OrganizationPage({
 
                       <div className="mt-5 flex flex-wrap gap-3">
                         {site.status === "pending_verification" &&
+                        !scanActive ? (
+                          <PublicAuditButton
+                            organizationId={organizationId}
+                            siteId={site.id}
+                          />
+                        ) : null}
+
+                        {site.status === "pending_verification" &&
                         overview.access.role !== "member" ? (
                           <Link
                             href={
@@ -188,7 +197,7 @@ export default async function OrganizationPage({
                             }
                             className="am-button-secondary"
                           >
-                            Vérifier le domaine
+                            Activer le monitoring
                           </Link>
                         ) : null}
 

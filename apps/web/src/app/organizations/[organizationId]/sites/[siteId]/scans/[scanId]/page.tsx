@@ -232,8 +232,14 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
+  const isUnverifiedPublicAudit =
+    details.scan.scanMode === "public_audit" &&
+    (details.site.status !== "active" || !details.site.verifiedAt);
+  const canShareReport = !isUnverifiedPublicAudit;
   const activeShares =
-    details.scan.status === "completed" && details.access.role !== "member"
+    details.scan.status === "completed" &&
+    details.access.role !== "member" &&
+    canShareReport
       ? await listActiveReportShares(
           session.user.id,
           organizationId,
@@ -249,7 +255,12 @@ export default async function ScanPage({ params }: ScanPageProps) {
           label: details.site.name,
           href: "/organizations/" + organizationId + "/sites/" + siteId,
         },
-        { label: "Rapport de scan" },
+        {
+          label:
+            details.scan.scanMode === "public_audit"
+              ? "Audit public"
+              : "Monitoring vérifié",
+        },
       ]}
     >
       <ScanStatusRefresher active={pending} />
@@ -257,13 +268,25 @@ export default async function ScanPage({ params }: ScanPageProps) {
       <section className="border-b border-[#242d40] pb-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="am-kicker">Résultat du scan</p>
+            <p className="am-kicker">
+              {details.scan.scanMode === "public_audit"
+                ? "Audit public"
+                : "Monitoring vérifié"}
+            </p>
             <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
               {details.site.name}
             </h1>
             <p className="mt-3 break-all text-white/45">
               {details.site.canonicalUrl}
             </p>
+            {isUnverifiedPublicAudit && details.access.role !== "member" ? (
+              <Link
+                href={`/organizations/${organizationId}/sites/${siteId}/verify`}
+                className="am-button-secondary mt-5 inline-flex"
+              >
+                Activer le monitoring
+              </Link>
+            ) : null}
           </div>
           <span className="inline-flex items-center gap-2 rounded-md border border-[#33405a] bg-[#101622] px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[#aeb8ca]">
             {pending ? (
@@ -273,7 +296,17 @@ export default async function ScanPage({ params }: ScanPageProps) {
           </span>
         </div>
 
-        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="am-panel-soft p-4">
+            <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
+              Mode
+            </dt>
+            <dd className="mt-2 text-sm">
+              {details.scan.scanMode === "public_audit"
+                ? "Audit public"
+                : "Monitoring vérifié"}
+            </dd>
+          </div>
           <div className="am-panel-soft p-4">
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Déclenchement
@@ -333,7 +366,8 @@ export default async function ScanPage({ params }: ScanPageProps) {
       </section>
 
       {details.scan.status === "completed" &&
-      details.access.role !== "member" ? (
+      details.access.role !== "member" &&
+      canShareReport ? (
         <ReportSharePanel
           organizationId={organizationId}
           siteId={siteId}
@@ -344,6 +378,20 @@ export default async function ScanPage({ params }: ScanPageProps) {
             createdAt: share.createdAt.toISOString(),
           }))}
         />
+      ) : details.scan.status === "completed" &&
+        details.access.role !== "member" &&
+        isUnverifiedPublicAudit ? (
+        <section className="border-b border-[#242d40] py-10">
+          <p className="text-sm text-white/45">Confidentialité</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            Rapport privé tant que le site n’est pas vérifié
+          </h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-white/45">
+            Cet audit reste visible uniquement dans votre organisation. La
+            création d’un lien public ou l’envoi par e-mail sera disponible
+            après activation du monitoring par vérification DNS.
+          </p>
+        </section>
       ) : null}
 
       {details.screenshotAvailable ? (

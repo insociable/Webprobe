@@ -11,6 +11,7 @@ import {
   OrganizationAccessError,
 } from "@/lib/organization-site-service";
 import { hasPostgresErrorCode } from "@/lib/postgres-error";
+import { createPublicAuditForSite } from "@/lib/public-audit";
 
 export type CreateSiteActionState = {
   error: string | null;
@@ -37,8 +38,9 @@ export async function createSiteAction(
     };
   }
 
+  let site: Awaited<ReturnType<typeof createSiteForOrganization>>;
   try {
-    await createSiteForOrganization(
+    site = await createSiteForOrganization(
       session.user.id,
       organizationId,
       parsed.data,
@@ -56,5 +58,21 @@ export async function createSiteAction(
     return { error: "Impossible d’ajouter le site pour le moment." };
   }
 
-  redirect(`/organizations/${organizationId}`);
+  let scan: Awaited<ReturnType<typeof createPublicAuditForSite>>;
+  try {
+    scan = await createPublicAuditForSite(
+      session.user.id,
+      organizationId,
+      site.id,
+    );
+  } catch (error) {
+    console.error("Initial public audit launch failed", error);
+    redirect(
+      `/organizations/${organizationId}/sites/${site.id}?audit=deferred`,
+    );
+  }
+
+  redirect(
+    `/organizations/${organizationId}/sites/${site.id}/scans/${scan.id}`,
+  );
 }

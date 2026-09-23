@@ -8,6 +8,7 @@ import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { ManualScanButton } from "../../manual-scan-button";
+import { PublicAuditButton } from "../../public-audit-button";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
 
 type SitePageProps = {
@@ -15,6 +16,7 @@ type SitePageProps = {
     organizationId: string;
     siteId: string;
   }>;
+  searchParams: Promise<{ audit?: string }>;
 };
 
 const scanStatusLabels = {
@@ -69,8 +71,12 @@ async function loadSiteSchedule(
   }
 }
 
-export default async function SitePage({ params }: SitePageProps) {
+export default async function SitePage({
+  params,
+  searchParams,
+}: SitePageProps) {
   const { organizationId, siteId } = await params;
+  const { audit } = await searchParams;
 
   if (
     !OrganizationReadSchema.shape.id.safeParse(organizationId).success ||
@@ -115,7 +121,11 @@ export default async function SitePage({ params }: SitePageProps) {
 
       <section className="grid gap-7 border-b border-[#242d40] pb-9 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
-          <p className="am-kicker">Site surveillé</p>
+          <p className="am-kicker">
+            {history.site.status === "pending_verification"
+              ? "Site à auditer"
+              : "Site surveillé"}
+          </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
             {history.site.name}
           </h1>
@@ -137,11 +147,18 @@ export default async function SitePage({ params }: SitePageProps) {
               ? "Domaine vérifié · supervision disponible"
               : history.site.status === "paused"
                 ? "Supervision en pause"
-                : "Domaine à vérifier"}
+                : "Audit public disponible · monitoring non activé"}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
+          {history.site.status === "pending_verification" && !activeScan ? (
+            <PublicAuditButton
+              organizationId={organizationId}
+              siteId={siteId}
+            />
+          ) : null}
+
           {history.site.status === "pending_verification" && canManage ? (
             <Link
               href={
@@ -153,7 +170,7 @@ export default async function SitePage({ params }: SitePageProps) {
               }
               className="am-button-secondary"
             >
-              Vérifier le domaine
+              Activer le monitoring
             </Link>
           ) : null}
 
@@ -162,6 +179,17 @@ export default async function SitePage({ params }: SitePageProps) {
           ) : null}
         </div>
       </section>
+
+      {audit === "deferred" ? (
+        <section className="mt-7 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
+          <p className="font-semibold text-amber-100">Site créé.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-100/70">
+            L’audit public n’a pas pu démarrer automatiquement, par exemple à
+            cause d’un quota, d’un cooldown ou d’un scan déjà actif. Vous pouvez
+            le relancer avec le bouton ci-dessus.
+          </p>
+        </section>
+      ) : null}
 
       {activeScan ? (
         <section
@@ -230,9 +258,11 @@ export default async function SitePage({ params }: SitePageProps) {
                   </span>
                   <div>
                     <p className="font-medium text-[#e2e7f1]">
-                      {scan.trigger === "manual"
-                        ? "Scan manuel"
-                        : "Scan planifié"}
+                      {scan.scanMode === "public_audit"
+                        ? "Audit public"
+                        : scan.trigger === "manual"
+                          ? "Monitoring manuel"
+                          : "Monitoring planifié"}
                     </p>
                     <p className="mt-1 text-sm text-[#68758c]">
                       {formatDate(scan.queuedAt)}

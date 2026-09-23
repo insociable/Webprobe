@@ -83,7 +83,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
       ]}
     >
       <section className="max-w-4xl border-b border-[#242d40] pb-9">
-        <p className="am-kicker">Vérification du domaine</p>
+        <p className="am-kicker">Activer le monitoring</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
           {state.site.name}
         </h1>
@@ -91,9 +91,10 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           {state.site.canonicalUrl}
         </p>
         <p className="mt-5 max-w-2xl leading-7 text-[#8793a8]">
-          Ajoutez le TXT demandé dans la zone DNS. Agency Monitor reste
-          volontairement fail-closed : aucun scan n’est possible tant que le
-          challenge attendu n’est pas retrouvé.
+          Ajoutez le TXT demandé dans la zone DNS pour prouver le contrôle du
+          domaine. Les audits publics restent possibles sans cette étape, mais
+          le monitoring planifié, les alertes et les automatisations restent
+          désactivés tant que le challenge n’est pas validé.
         </p>
       </section>
 
@@ -102,7 +103,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           {[
             ["01", "Générer", "Obtenir le secret TXT"],
             ["02", "Publier", "Ajouter le TXT au DNS"],
-            ["03", "Vérifier", "Activer la supervision"],
+            ["03", "Vérifier", "Activer le monitoring"],
           ].map(([number, title, detail]) => (
             <div key={number} className="am-panel-soft p-4">
               <p className="font-mono text-[10px] text-[#6d7cff]">{number}</p>

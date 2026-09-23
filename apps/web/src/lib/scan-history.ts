@@ -24,6 +24,7 @@ export async function getSiteScanHistory(
       id: scans.id,
       status: scans.status,
       trigger: scans.trigger,
+      scanMode: scans.scanMode,
       pageCount: scans.pageCount,
       summary: scans.summary,
       queuedAt: scans.queuedAt,
@@ -112,6 +113,7 @@ export async function getScanDetailsForSite(
         and(
           eq(scans.organizationId, organizationId),
           eq(scans.siteId, siteId),
+          eq(scans.scanMode, scan.scanMode),
           eq(scans.status, "completed"),
           isNotNull(scans.completedAt),
           lt(scans.completedAt, scan.completedAt),
