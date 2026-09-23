@@ -119,18 +119,27 @@ describe("robots.txt policy", () => {
     const target = new URL("https://example.com/private");
 
     expect(Buffer.byteLength(below, "utf8")).toBe(MAX_ROBOTS_BYTES - 1);
-    expect(isRobotsPathAllowed(parseRobotsTxt(below), target)).toBe(false);
-    expect(parseRobotsTxt(exact).unavailableReason).toBe(
+    const belowPolicy = parseRobotsTxt(below);
+    expect(belowPolicy.unavailableReason).toBeUndefined();
+    expect(isRobotsPathAllowed(belowPolicy, target)).toBe(false);
+    expect(
+      isRobotsPathAllowed(belowPolicy, new URL("https://example.com/public")),
+    ).toBe(true);
+    const unconfirmedExactPolicy = parseRobotsTxt(exact);
+    expect(unconfirmedExactPolicy.unavailableReason).toBe(
       "document-size-unconfirmed",
     );
     expect(
       isRobotsPathAllowed(
-        parseRobotsTxt(exact, "AgencyMonitor", {
-          completeAtByteLimit: true,
-        }),
-        target,
+        unconfirmedExactPolicy,
+        new URL("https://example.com/public"),
       ),
     ).toBe(false);
+    const certifiedExactPolicy = parseRobotsTxt(exact, "AgencyMonitor", {
+      completeAtByteLimit: true,
+    });
+    expect(certifiedExactPolicy.unavailableReason).toBeUndefined();
+    expect(isRobotsPathAllowed(certifiedExactPolicy, target)).toBe(false);
     expect(parseRobotsTxt(above).unavailableReason).toBe("document-too-large");
 
     const lateDisallow = `User-agent: *\n${"#".repeat(MAX_ROBOTS_BYTES)}\nDisallow: /private`;
