@@ -41,7 +41,12 @@ import {
   type SeoSignal,
 } from "./scanner-v2/seo.js";
 import { extractSeoDocumentFacts } from "./scanner-v2/seo-runtime.js";
-import { observeUrl } from "./scanner-v2/url.js";
+import {
+  isRobotsPathAllowed,
+  parseRobotsTxt,
+  type RobotsPolicy,
+} from "./scanner-v2/robots.js";
+import { isAllowedCanonicalOriginShift, observeUrl } from "./scanner-v2/url.js";
 
 export type BrowserScreenshot = {
   data: Buffer;
@@ -121,6 +126,68 @@ function boundedScanTimeout(value?: number): number {
 
 function boundedNetworkCaptureTimeout(value?: number): number {
   return Math.max(100, Math.min(value ?? 2_500, 5_000));
+}
+
+type RobotsLoadResult = {
+  policy: RobotsPolicy | null;
+  unavailable: boolean;
+};
+
+async function loadPublicRobotsPolicy(
+  page: Page,
+  origin: string,
+  deadline: number,
+): Promise<RobotsLoadResult> {
+  const robotsUrl = new URL("/robots.txt", origin).toString();
+  const result = await withinTimeout(
+    page.evaluate(async (url) => {
+      try {
+        const response = await fetch(url, {
+          method: "GET",
+          credentials: "omit",
+          cache: "no-store",
+          redirect: "follow",
+        });
+        const text =
+          response.status >= 200 && response.status < 300
+            ? (await response.text()).slice(0, 65_536)
+            : "";
+        return {
+          status: response.status,
+          finalUrl: response.url,
+          text,
+        };
+      } catch {
+        return null;
+      }
+    }, robotsUrl),
+    Math.min(5_000, remainingScanTime(deadline)),
+    "robots.txt collection timed out",
+  ).catch(() => null);
+
+  if (!result) {
+    return { policy: null, unavailable: true };
+  }
+
+  try {
+    if (new URL(result.finalUrl).origin !== origin) {
+      return { policy: null, unavailable: true };
+    }
+  } catch {
+    return { policy: null, unavailable: true };
+  }
+
+  if (result.status === 404 || result.status === 410) {
+    return { policy: { rules: [], sitemaps: [] }, unavailable: false };
+  }
+  if (result.status < 200 || result.status >= 300) {
+    return { policy: null, unavailable: true };
+  }
+
+  return {
+    policy: parseRobotsTxt(result.text, "AgencyMonitor"),
+    unavailable: false,
+  };
 }
 
 function remainingScanTime(deadline: number): number {
@@ -404,8 +471,11 @@ export async function runBrowserScan(
     const observations: BrowserPageObservation[] = [];
     const crawlCoverage = new CrawlCoverageTracker(maxPages);
     crawlCoverage.discover(initialCandidate, null);
-    const crawlOrigin = initialTarget.url.origin;
+    let crawlOrigin = initialTarget.url.origin;
     const networkCollector = new NetworkObservationCollector(crawlOrigin);
+    let robotsPolicy: RobotsPolicy | null = null;
+    let robotsPolicyLoaded = scanMode !== "public_audit";
+    let stopPublicCrawl = false;
     const pendingNetworkCaptures = new Set<Promise<void>>();
     const labSnapshots: Array<{
       url: string;
@@ -506,8 +576,41 @@ export async function runBrowserScan(
       const statusCode = response?.status() ?? null;
 
       activePageUrl = finalUrl;
+      if (
+        !target.sourcePageUrl &&
+        validatedFinal.url.origin !== crawlOrigin &&
+        isAllowedCanonicalOriginShift(
+          initialTarget.url.toString(),
+          validatedFinal.url.toString(),
+        )
+      ) {
+        crawlOrigin = validatedFinal.url.origin;
+        networkCollector.setFirstPartyOrigin(crawlOrigin);
+      }
       const sameOrigin = validatedFinal.url.origin === crawlOrigin;
       const healthyDocument = statusCode === null || statusCode < 400;
+
+      if (
+        scanMode === "public_audit" &&
+        !robotsPolicyLoaded &&
+        sameOrigin &&
+        healthyDocument
+      ) {
+        robotsPolicyLoaded = true;
+        const robots = await loadPublicRobotsPolicy(
+          page,
+          crawlOrigin,
+          scanDeadline,
+        );
+        robotsPolicy = robots.policy;
+        if (robots.unavailable || !robots.policy) {
+          crawlCoverage.markRobotsPolicyUnavailable();
+          stopPublicCrawl = true;
+        } else if (!isRobotsPathAllowed(robots.policy, validatedFinal.url)) {
+          crawlCoverage.markRobotsRestricted();
+          stopPublicCrawl = true;
+        }
+      }
 
       if (sameOrigin && healthyDocument) {
         await page.waitForTimeout(100);
@@ -607,6 +710,20 @@ export async function runBrowserScan(
         }
         const candidate = candidateResult.candidate;
         if (
+          scanMode === "public_audit" &&
+          (stopPublicCrawl ||
+            !robotsPolicy ||
+            !isRobotsPathAllowed(
+              robotsPolicy,
+              new URL(candidate.navigationUrl),
+            ))
+        ) {
+          if (robotsPolicy && !stopPublicCrawl) {
+            crawlCoverage.markRobotsDisallowed(candidate, reportUrl);
+          }
+          continue;
+        }
+        if (
           seen.has(candidate.navigationUrl) ||
           pending.some(
             (pendingTarget) =>
@@ -617,7 +734,7 @@ export async function runBrowserScan(
           continue;
         }
 
-        if (seen.size + pending.length >= maxPages) {
+        if (observations.length + pending.length >= maxPages) {
           crawlCoverage.markBudgetExceeded(candidate, reportUrl);
           continue;
         }
@@ -697,7 +814,10 @@ export async function runBrowserScan(
             status:
               analyzedSameOriginPageCount === 0
                 ? "unavailable"
-                : linkExtractionFailureCount > 0 || crawl.budgetReached
+                : linkExtractionFailureCount > 0 ||
+                    crawl.budgetReached ||
+                    crawl.robotsRestricted ||
+                    crawl.robotsPolicyUnavailable
                   ? "partial"
                   : "complete",
             linkExtractionFailureCount,

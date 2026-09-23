@@ -12,6 +12,7 @@ import { groupFindingsForDisplay } from "@/lib/finding-display";
 import { getScanDetailsForSite } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
+import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { ReportSharePanel } from "./report-share-panel";
 
@@ -232,6 +233,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
+  const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -425,6 +427,13 @@ export default async function ScanPage({ params }: ScanPageProps) {
             exploitables, mais que certaines observations n’ont pas pu être
             collectées. Cela ne transforme pas le scan en échec.
           </p>
+          {crawlLimitation ? (
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-200/70">
+              {crawlLimitation === "robots-restricted"
+                ? "Le fichier robots.txt limite volontairement les pages que l’audit public peut parcourir."
+                : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
+            </p>
+          ) : null}
           <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {(
               Object.entries(scannerV2QualityState) as Array<

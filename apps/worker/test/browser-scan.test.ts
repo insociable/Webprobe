@@ -190,6 +190,118 @@ describe("browser crawl", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("respects robots.txt during public audit crawling", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async (_expression: unknown, argument?: string) => {
+        if (argument?.endsWith("/robots.txt")) {
+          return {
+            status: 200,
+            finalUrl: "https://example.com/robots.txt",
+            text: ["User-agent: AgencyMonitor", "Disallow: /private"].join(
+              "\n",
+            ),
+          };
+        }
+        return null;
+      },
+      goto: async (url: string) => {
+        currentUrl = url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://example.com/"
+              ? [
+                  { href: "https://example.com/allowed" },
+                  { href: "https://example.com/private" },
+                ]
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("https://example.com/", {
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxPages: 3,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://example.com/",
+      "https://example.com/allowed",
+    ]);
+    expect(result.scannerV2.crawl).toMatchObject({
+      robotsRestricted: true,
+      robotsPolicyUnavailable: false,
+      urls: expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.com/private",
+          state: "not-visited",
+          exclusionReason: "robots-disallowed",
+        }),
+      ]),
+    });
+    expect(result.scannerV2.completeness.crawl.status).toBe("partial");
+  });
+
+  it("adopts only a conservative validated initial canonical redirect", async () => {
+    let currentUrl = "about:blank";
+    const fakePage = {
+      on: () => fakePage,
+      addInitScript: async () => undefined,
+      evaluate: async () => null,
+      goto: async (url: string) => {
+        currentUrl =
+          url === "http://example.com/" ? "https://www.example.com/" : url;
+        return { status: () => 200 } as unknown as Response;
+      },
+      url: () => currentUrl,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        evaluateAll: async (callback: (anchors: unknown[]) => string[]) =>
+          callback(
+            currentUrl === "https://www.example.com/"
+              ? [{ href: "https://www.example.com/about" }]
+              : [],
+          ),
+      }),
+    } as unknown as Page;
+
+    const result = await runBrowserScan("http://example.com/", {
+      resolver: publicResolver,
+      maxPages: 2,
+      checkAccessibility: false,
+      createSession: async () =>
+        ({
+          browser: {},
+          context: { newPage: async () => fakePage },
+          proxy: {},
+          pageCount: () => 1,
+          close: async () => undefined,
+        }) as unknown as IsolatedBrowserSession,
+    });
+
+    expect(result.observations.map((item) => item.url)).toEqual([
+      "https://www.example.com/",
+      "https://www.example.com/about",
+    ]);
+  });
+
   it("skips axe when accessibility checks are disabled", async () => {
     let analyzed = false;
     const fakePage = {

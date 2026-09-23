@@ -4,7 +4,10 @@ import { ProductMark } from "@/components/product-shell";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import { getPublicReportByToken } from "@/lib/public-report-service";
-import { scannerV2Quality } from "@/lib/scanner-v2-quality";
+import {
+  scannerV2CrawlLimitation,
+  scannerV2Quality,
+} from "@/lib/scanner-v2-quality";
 
 export const metadata: Metadata = {
   title: "Rapport de surveillance",
@@ -69,6 +72,7 @@ export default async function PublicReportPage({
   );
   const findingGroups = groupFindingsForDisplay(findings);
   const quality = scannerV2Quality(report.scan.summary);
+  const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
   const hasIncompleteAnalysis =
     quality !== null &&
     Object.values(quality).some((status) => status !== "complete");
@@ -139,6 +143,13 @@ export default async function PublicReportPage({
               Un état partiel ou indisponible décrit la qualité de collecte. Il
               ne transforme pas le scan en échec.
             </p>
+            {crawlLimitation ? (
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-[#d4b27b]">
+                {crawlLimitation === "robots-restricted"
+                  ? "Le fichier robots.txt limite volontairement la couverture du crawl."
+                  : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
+              </p>
+            ) : null}
             <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {Object.entries(quality).map(([analyzer, status]) => (
                 <div
