@@ -1,5 +1,6 @@
 import type {
   ReportCategoryScore,
+  ReportScoreCategoryKey,
   ReportScoreCoverage,
   ReportScorecard,
 } from "@/lib/report-score";
@@ -26,25 +27,47 @@ function coverageDetail(coverage: ReportScoreCoverage): string {
     coverage.observedCount !== undefined &&
     coverage.eligibleCount !== undefined
   ) {
-    return `${label} · ${coverage.observedCount}/${coverage.eligibleCount} pages`;
+    return (
+      label +
+      " · " +
+      coverage.observedCount +
+      "/" +
+      coverage.eligibleCount +
+      " pages"
+    );
   }
 
   return label;
 }
 
-function CategoryRow({ category }: { category: ReportCategoryScore }) {
-  return (
-    <div className="grid gap-3 border-b border-[#242d40] py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_54px_86px] sm:items-center">
+function CategoryRow({
+  category,
+  targetId,
+}: {
+  category: ReportCategoryScore;
+  targetId?: string;
+}) {
+  const content = (
+    <>
       <div>
         <p className="font-medium text-[#dfe5f2]">{category.label}</p>
         <p className="mt-1 text-xs text-[#69758b]">
           {coverageDetail(category.coverage)}
         </p>
+        {targetId ? (
+          <p className="mt-1 text-xs font-medium text-[#8793ff]">
+            Voir les actions ↓
+          </p>
+        ) : null}
       </div>
 
       <div className="text-xs text-[#7f8a9f]">
         {category.distinctFindingCount > 0
-          ? `${category.distinctFindingCount} problème${category.distinctFindingCount > 1 ? "s" : ""} distinct${category.distinctFindingCount > 1 ? "s" : ""}`
+          ? category.distinctFindingCount +
+            " problème" +
+            (category.distinctFindingCount > 1 ? "s" : "") +
+            " distinct" +
+            (category.distinctFindingCount > 1 ? "s" : "")
           : category.score === null
             ? "Contrôle non effectué"
             : "Aucun problème détecté"}
@@ -77,7 +100,27 @@ function CategoryRow({ category }: { category: ReportCategoryScore }) {
           <span className="text-sm font-medium text-[#657188]">Non évalué</span>
         )}
       </div>
-    </div>
+    </>
+  );
+
+  const className =
+    "grid gap-3 border-b border-[#242d40] py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_150px_54px_86px] sm:items-center";
+
+  if (!targetId) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <a
+      href={"#" + targetId}
+      className={
+        className +
+        " -mx-3 rounded-md px-3 transition hover:bg-[#111827] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8793ff]"
+      }
+      aria-label={"Voir les remédiations pour " + category.label}
+    >
+      {content}
+    </a>
   );
 }
 
@@ -86,11 +129,13 @@ export function ReportScorecard({
   distinctProblems,
   occurrences,
   pageCount,
+  categoryTargets = {},
 }: {
   scorecard: ReportScorecard;
   distinctProblems: number;
   occurrences: number;
   pageCount: number;
+  categoryTargets?: Partial<Record<ReportScoreCategoryKey, string>>;
 }) {
   return (
     <section className="report-v2-scorecard border-b border-[#242d40] py-10">
@@ -189,7 +234,11 @@ export function ReportScorecard({
           </div>
 
           {scorecard.categories.map((category) => (
-            <CategoryRow key={category.key} category={category} />
+            <CategoryRow
+              key={category.key}
+              category={category}
+              targetId={categoryTargets[category.key]}
+            />
           ))}
         </div>
       </div>

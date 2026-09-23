@@ -5,6 +5,7 @@ import {
   memberships,
   organizations,
   scans,
+  scanSchedules,
   sites,
   users,
 } from "@agency-saas/db";
@@ -81,6 +82,15 @@ describeDatabase("organization overview", () => {
           verifiedAt: new Date(),
         },
       ]);
+
+      await db.insert(scanSchedules).values({
+        organizationId: organizationIds[0],
+        siteId: siteIds[0],
+        enabled: true,
+        dayOfWeek: 1,
+        minuteOfDay: 9 * 60,
+        timeZone: "Europe/Paris",
+      });
 
       await db.insert(scans).values([
         {
@@ -195,6 +205,8 @@ describeDatabase("organization overview", () => {
         criticalCount: 0,
         highCount: 0,
       });
+      expect(siteA1?.monitoringScheduleEnabled).toBe(true);
+      expect(siteA2?.monitoringScheduleEnabled).toBe(false);
 
       await expect(
         getOrganizationOverview(userIds[0]!, organizationIds[1]!),

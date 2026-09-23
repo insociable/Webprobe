@@ -4,6 +4,7 @@ import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getUserMemberships } from "@/lib/membership-context";
 import { getOrganizationOverview } from "@/lib/organization-overview";
+import { getMonitoringState } from "@/lib/monitoring-state";
 
 const scanStatusLabels = {
   queued: "En file",
@@ -144,12 +145,11 @@ export default async function DashboardPage() {
               const scanActive =
                 site.latestScan?.status === "queued" ||
                 site.latestScan?.status === "running";
-              const statusLabel =
-                site.status === "active"
-                  ? "Monitoring activé"
-                  : site.status === "paused"
-                    ? "En pause"
-                    : "Audit public disponible";
+              const monitoringState = getMonitoringState({
+                status: site.status,
+                verifiedAt: site.verifiedAt,
+                scheduleEnabled: site.monitoringScheduleEnabled,
+              });
 
               return (
                 <Link
@@ -168,18 +168,15 @@ export default async function DashboardPage() {
                         {site.name}
                       </h3>
                       <span className="rounded-md border border-[#303a50] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#9aa6ba]">
-                        {statusLabel}
+                        {monitoringState.label}
                       </span>
                     </div>
                     <p className="mt-2 break-all text-sm text-[#6f7b91]">
                       {site.canonicalUrl}
                     </p>
-                    {site.status === "pending_verification" ? (
-                      <p className="mt-2 text-xs text-[#657188]">
-                        Le DNS n’est requis que pour le monitoring continu et le
-                        partage public.
-                      </p>
-                    ) : null}
+                    <p className="mt-2 text-xs text-[#657188]">
+                      {monitoringState.detail}
+                    </p>
                   </div>
 
                   <div>

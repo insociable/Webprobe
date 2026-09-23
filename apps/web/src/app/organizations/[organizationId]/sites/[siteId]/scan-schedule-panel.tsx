@@ -104,6 +104,26 @@ export function ScanSchedulePanel({
         le moteur de scan redémarre temporairement.
       </p>
 
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span
+          className={
+            "size-2 rounded-full " +
+            (!siteActive
+              ? "bg-[#6d7cff]"
+              : values.enabled
+                ? "bg-[#51d3a5]"
+                : "bg-[#ffb45f]")
+          }
+        />
+        <span className="text-sm font-semibold text-white/70">
+          {!siteActive
+            ? "Vérification requise"
+            : values.enabled
+              ? "Monitoring actif"
+              : "Monitoring inactif"}
+        </span>
+      </div>
+
       <form action={formAction} className="mt-6 space-y-5">
         <label className="flex items-center gap-3 text-sm text-white/70">
           <input
