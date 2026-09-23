@@ -85,7 +85,7 @@ export const auth = betterAuth({
       create: {
         before: async (user) => {
           const email = user.email.trim().toLowerCase();
-          const fallbackName = email.split("@")[0] || "Utilisateur";
+          const fallbackName = "Utilisateur";
           const name = user.name?.trim() || fallbackName;
 
           return {

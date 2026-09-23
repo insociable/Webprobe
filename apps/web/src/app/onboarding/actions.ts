@@ -3,6 +3,7 @@
 import { OrganizationCreateSchema } from "@agency-saas/contracts";
 import { redirect } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
+import { parseDisplayName } from "@/lib/user-profile";
 import {
   AlreadyOnboardedError,
   createInitialOrganizationForUser,
@@ -17,6 +18,11 @@ export async function createInitialOrganizationAction(
   formData: FormData,
 ): Promise<OnboardingActionState> {
   const session = await requireCurrentSession();
+  const displayName = parseDisplayName(formData.get("displayName"));
+  if (!displayName) {
+    return { error: "Le nom affiché doit contenir entre 2 et 80 caractères." };
+  }
+
   const parsed = OrganizationCreateSchema.safeParse({
     name: formData.get("name"),
   });
@@ -28,7 +34,9 @@ export async function createInitialOrganizationAction(
   }
 
   try {
-    await createInitialOrganizationForUser(session.user.id, parsed.data);
+    await createInitialOrganizationForUser(session.user.id, parsed.data, {
+      displayName,
+    });
   } catch (error) {
     if (error instanceof AlreadyOnboardedError) {
       redirect("/dashboard");

@@ -12,6 +12,14 @@ export default async function OnboardingPage() {
     redirect("/dashboard");
   }
 
+  const emailFallbackName = session.user.email.split("@")[0] ?? "";
+  const initialDisplayName =
+    session.user.name.trim().toLowerCase() ===
+      emailFallbackName.trim().toLowerCase() ||
+    session.user.name === "Utilisateur"
+      ? ""
+      : session.user.name;
+
   return (
     <WorkspaceShell trail={[{ label: "Configuration initiale" }]}>
       <section className="max-w-3xl">
@@ -21,8 +29,8 @@ export default async function OnboardingPage() {
         </h1>
         <p className="mt-4 max-w-2xl leading-7 text-[#8793a8]">
           Le compte <span className="text-[#c5cedd]">{session.user.email}</span>{" "}
-          est vérifié. Il reste à créer l’organisation qui regroupera vos sites,
-          vos scans et vos rapports.
+          est vérifié. Choisissez votre nom affiché puis créez l’espace qui
+          regroupera vos sites, vos scans et vos rapports.
         </p>
       </section>
 
@@ -36,13 +44,14 @@ export default async function OnboardingPage() {
           </div>
           <div>
             <h2 className="text-2xl font-semibold tracking-[-0.03em]">
-              Votre première organisation
+              Votre identité et votre espace
             </h2>
             <p className="mt-3 leading-7 text-[#7f8a9f]">
-              L’organisation et votre rôle propriétaire sont créés ensemble.
-              Vous pourrez ensuite ajouter le premier site à superviser.
+              Votre nom affiché et l’organisation sont enregistrés ensemble.
+              Vous pourrez ensuite ajouter votre premier site et lancer
+              immédiatement un audit public, sans vérification DNS.
             </p>
-            <OrganizationForm />
+            <OrganizationForm initialDisplayName={initialDisplayName} />
           </div>
         </div>
       </section>

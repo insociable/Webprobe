@@ -130,8 +130,16 @@ describeDatabase("organization/site tenant isolation", () => {
       });
 
       const results = await Promise.allSettled([
-        createInitialOrganizationForUser(userId, { name: "Agency First" }),
-        createInitialOrganizationForUser(userId, { name: "Agency Second" }),
+        createInitialOrganizationForUser(
+          userId,
+          { name: "Agency First" },
+          { displayName: "Configured User" },
+        ),
+        createInitialOrganizationForUser(
+          userId,
+          { name: "Agency Second" },
+          { displayName: "Configured User" },
+        ),
       ]);
 
       const fulfilled = results.filter(
@@ -161,6 +169,12 @@ describeDatabase("organization/site tenant isolation", () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0]?.organizationId).toBe(successfulResult.value.id);
+
+      const [profile] = await db
+        .select({ displayName: users.displayName })
+        .from(users)
+        .where(eq(users.id, userId));
+      expect(profile?.displayName).toBe("Configured User");
     } finally {
       await db.delete(users).where(eq(users.id, userId));
       if (createdOrganizationIds.length > 0) {

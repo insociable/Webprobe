@@ -8,7 +8,11 @@ import {
 
 const initialState: OnboardingActionState = { error: null };
 
-export function OrganizationForm() {
+export function OrganizationForm({
+  initialDisplayName = "",
+}: {
+  initialDisplayName?: string;
+}) {
   const [state, formAction, pending] = useActionState(
     createInitialOrganizationAction,
     initialState,
@@ -18,10 +22,28 @@ export function OrganizationForm() {
     <form action={formAction} className="mt-8 space-y-5">
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-white/70">
-          Nom de l’agence
+          Nom affiché
         </span>
         <input
           autoFocus
+          required
+          minLength={2}
+          maxLength={80}
+          name="displayName"
+          defaultValue={initialDisplayName}
+          placeholder="Alex Martin"
+          className="am-field"
+        />
+        <span className="mt-2 block text-xs leading-5 text-white/35">
+          Utilisé dans l’interface. Vous pourrez le modifier ensuite.
+        </span>
+      </label>
+
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-white/70">
+          Nom de l’agence
+        </span>
+        <input
           required
           minLength={2}
           maxLength={120}
