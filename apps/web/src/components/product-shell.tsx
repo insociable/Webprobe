@@ -17,7 +17,7 @@ type WorkspaceShellProps = {
 const navigation = [
   { href: "/dashboard", label: "Tableau de bord", tone: "bg-[#6d7cff]" },
   {
-    href: "/dashboard#sites",
+    href: "/sites",
     label: "Sites / Monitoring",
     tone: "bg-[#51d3a5]",
   },

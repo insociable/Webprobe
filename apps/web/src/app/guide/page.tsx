@@ -6,7 +6,7 @@ const steps = [
   {
     number: "01",
     title: "Ajouter un site",
-    text: "Depuis le tableau de bord, enregistrez l’URL à observer. La création du site ne donne aucun droit supplémentaire sur la cible.",
+    text: "Depuis Sites / Monitoring, enregistrez l’URL à observer. La création du site ne donne aucun droit supplémentaire sur la cible.",
   },
   {
     number: "02",
@@ -70,7 +70,7 @@ export default async function GuidePage() {
         </ol>
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/dashboard#sites" className="am-button-primary">
+          <Link href="/sites" className="am-button-primary">
             Ouvrir mes sites →
           </Link>
           <Link href="/help" className="am-button-secondary">
