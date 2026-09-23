@@ -3,16 +3,17 @@ import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-mark";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportScorecard } from "@/components/report-scorecard";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
   getPriorityFindings,
-  summarizeReportFindings,
   summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getPublicReportByToken } from "@/lib/public-report-service";
+import { scoreReport } from "@/lib/report-score";
 import {
   scannerV2CrawlLimitation,
   scannerV2Quality,
@@ -81,19 +82,17 @@ export default async function PublicReportPage({
   );
   const findingGroups = groupFindingsForDisplay(findings);
   const distinctFindings = findingGroups.map((group) => group.primary);
-  const reportSummary = summarizeReportFindings(distinctFindings);
   const sectionSummaries = summarizeReportSections(distinctFindings);
   const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const quality = scannerV2Quality(report.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
+  const scorecard = scoreReport({
+    summary: report.scan.summary,
+    findings,
+  });
   const hasIncompleteAnalysis =
     quality !== null &&
     Object.values(quality).some((status) => status !== "complete");
-  const analysisCoverage = quality
-    ? Object.values(quality).every((status) => status === "complete")
-      ? "Complète"
-      : "Partielle"
-    : "Non mesurée";
 
   return (
     <main className="min-h-screen">
@@ -151,32 +150,12 @@ export default async function PublicReportPage({
           </section>
         ) : null}
 
-        <section className="py-8">
-          <div className="am-metric-grid">
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Pages observées</p>
-              <p className="am-metric-value">{report.scan.pageCount}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Problèmes distincts</p>
-              <p className="am-metric-value">{findingGroups.length}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Occurrences</p>
-              <p className="am-metric-value">{findings.length}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Hauts / critiques</p>
-              <p className="am-metric-value">{reportSummary.highOrCritical}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Couverture</p>
-              <p className="mt-2 text-sm font-medium text-[#d5dbe7]">
-                {analysisCoverage}
-              </p>
-            </div>
-          </div>
-        </section>
+        <ReportScorecard
+          scorecard={scorecard}
+          distinctProblems={findingGroups.length}
+          occurrences={findings.length}
+          pageCount={report.scan.pageCount}
+        />
 
         {priorityFindings.length > 0 ? (
           <section className="border-t border-[#242d40] py-9">

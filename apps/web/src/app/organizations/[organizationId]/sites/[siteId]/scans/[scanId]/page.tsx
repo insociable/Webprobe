@@ -17,6 +17,7 @@ import {
   summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
+import { scoreReport } from "@/lib/report-score";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
 import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
@@ -24,6 +25,7 @@ import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportScorecard } from "@/components/report-scorecard";
 import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
@@ -248,13 +250,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
-  const analysisCoverage = scannerV2QualityState
-    ? Object.values(scannerV2QualityState).every(
-        (status) => status === "complete",
-      )
-      ? "Complète"
-      : "Partielle"
-    : "Non mesurée";
+  const scorecard = scoreReport({
+    summary: details.scan.summary,
+    findings: orderedFindings,
+  });
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -437,56 +436,12 @@ export default async function ScanPage({ params }: ScanPageProps) {
       ) : null}
 
       {details.scan.status === "completed" ? (
-        <section className="border-b border-[#242d40] py-10">
-          <p className="am-kicker">Résumé exécutif</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-            Les points à retenir
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
-            Vue synthétique destinée à prioriser les actions sans masquer les
-            limites de collecte du scan.
-          </p>
-          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Problèmes distincts
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {reportSummary.total}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Occurrences
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {orderedFindings.length}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Hauts / critiques
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {reportSummary.highOrCritical}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Pages observées
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {details.scan.pageCount}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Couverture
-              </dt>
-              <dd className="mt-2 text-lg font-semibold">{analysisCoverage}</dd>
-            </div>
-          </dl>
-        </section>
+        <ReportScorecard
+          scorecard={scorecard}
+          distinctProblems={reportSummary.total}
+          occurrences={orderedFindings.length}
+          pageCount={details.scan.pageCount}
+        />
       ) : null}
 
       {details.scan.status === "completed" && priorityFindings.length > 0 ? (
