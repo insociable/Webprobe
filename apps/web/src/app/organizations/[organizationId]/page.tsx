@@ -141,6 +141,11 @@ export default async function OrganizationPage({
               const scanActive =
                 site.latestScan?.status === "queued" ||
                 site.latestScan?.status === "running";
+              const scanCompleted = site.latestScan?.status === "completed";
+              const scanRetryable =
+                !site.latestScan ||
+                site.latestScan.status === "failed" ||
+                site.latestScan.status === "cancelled";
 
               return (
                 <article key={site.id} className="py-6">
@@ -178,26 +183,34 @@ export default async function OrganizationPage({
 
                       <div className="mt-5 flex flex-wrap gap-3">
                         {site.status === "pending_verification" &&
-                        !scanActive ? (
+                        scanRetryable ? (
                           <PublicAuditButton
                             organizationId={organizationId}
                             siteId={site.id}
+                            label={
+                              site.latestScan
+                                ? "Relancer l’audit public"
+                                : "Lancer l’audit public"
+                            }
                           />
                         ) : null}
 
                         {site.status === "pending_verification" &&
-                        overview.access.role !== "member" ? (
+                        scanCompleted &&
+                        site.latestScan ? (
                           <Link
                             href={
                               "/organizations/" +
                               organizationId +
                               "/sites/" +
                               site.id +
-                              "/verify"
+                              "/scans/" +
+                              site.latestScan.id
                             }
-                            className="am-button-secondary"
+                            className="am-button-primary"
                           >
-                            Activer le monitoring
+                            Voir le rapport
+                            <span aria-hidden="true">→</span>
                           </Link>
                         ) : null}
 
@@ -218,7 +231,35 @@ export default async function OrganizationPage({
                           </Link>
                         ) : null}
 
-                        {site.latestScan?.status === "completed" ? (
+                        {site.status === "pending_verification" &&
+                        overview.access.role !== "member" &&
+                        !scanActive ? (
+                          <Link
+                            href={
+                              "/organizations/" +
+                              organizationId +
+                              "/sites/" +
+                              site.id +
+                              "/verify"
+                            }
+                            className="am-button-secondary"
+                          >
+                            Activer le monitoring
+                          </Link>
+                        ) : null}
+
+                        {site.status === "pending_verification" &&
+                        scanCompleted ? (
+                          <PublicAuditButton
+                            organizationId={organizationId}
+                            siteId={site.id}
+                            appearance="link"
+                            label="Relancer l’audit"
+                          />
+                        ) : null}
+
+                        {site.status === "active" &&
+                        site.latestScan?.status === "completed" ? (
                           <Link
                             href={
                               "/organizations/" +

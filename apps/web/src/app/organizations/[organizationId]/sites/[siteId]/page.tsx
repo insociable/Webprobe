@@ -105,6 +105,12 @@ export default async function SitePage({
   const activeScan = history.scans.some(
     (scan) => scan.status === "queued" || scan.status === "running",
   );
+  const latestScan = history.scans[0] ?? null;
+  const latestScanCompleted = latestScan?.status === "completed";
+  const latestScanRetryable =
+    !latestScan ||
+    latestScan.status === "failed" ||
+    latestScan.status === "cancelled";
   const canManage = history.access.role !== "member";
 
   return (
@@ -152,14 +158,40 @@ export default async function SitePage({
         </div>
 
         <div className="flex flex-wrap gap-3">
-          {history.site.status === "pending_verification" && !activeScan ? (
+          {history.site.status === "pending_verification" &&
+          latestScanRetryable &&
+          !activeScan ? (
             <PublicAuditButton
               organizationId={organizationId}
               siteId={siteId}
+              label={
+                latestScan ? "Relancer l’audit public" : "Lancer l’audit public"
+              }
             />
           ) : null}
 
-          {history.site.status === "pending_verification" && canManage ? (
+          {history.site.status === "pending_verification" &&
+          latestScanCompleted &&
+          latestScan ? (
+            <Link
+              href={
+                "/organizations/" +
+                organizationId +
+                "/sites/" +
+                siteId +
+                "/scans/" +
+                latestScan.id
+              }
+              className="am-button-primary"
+            >
+              Voir le rapport
+              <span aria-hidden="true">→</span>
+            </Link>
+          ) : null}
+
+          {history.site.status === "pending_verification" &&
+          canManage &&
+          !activeScan ? (
             <Link
               href={
                 "/organizations/" +
@@ -172,6 +204,17 @@ export default async function SitePage({
             >
               Activer le monitoring
             </Link>
+          ) : null}
+
+          {history.site.status === "pending_verification" &&
+          latestScanCompleted &&
+          !activeScan ? (
+            <PublicAuditButton
+              organizationId={organizationId}
+              siteId={siteId}
+              appearance="link"
+              label="Relancer l’audit"
+            />
           ) : null}
 
           {history.site.status === "active" && canManage && !activeScan ? (

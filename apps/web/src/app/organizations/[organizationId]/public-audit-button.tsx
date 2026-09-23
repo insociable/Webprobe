@@ -14,9 +14,13 @@ const initialState: PublicAuditActionState = {
 export function PublicAuditButton({
   organizationId,
   siteId,
+  appearance = "primary",
+  label = "Lancer l’audit public",
 }: {
   organizationId: string;
   siteId: string;
+  appearance?: "primary" | "secondary" | "link";
+  label?: string;
 }) {
   const action = startPublicAuditAction.bind(null, organizationId, siteId);
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -26,9 +30,16 @@ export function PublicAuditButton({
       <form action={formAction}>
         <button
           disabled={pending}
-          className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className={
+            (appearance === "primary"
+              ? "am-button-primary"
+              : appearance === "secondary"
+                ? "am-button-secondary"
+                : "text-sm font-semibold text-[#7d8aff] transition hover:text-[#aab2ff]") +
+            " disabled:cursor-not-allowed disabled:opacity-50"
+          }
         >
-          {pending ? "Mise en file…" : "Lancer l’audit public"}
+          {pending ? "Mise en file…" : label}
         </button>
       </form>
       {state.error ? (
