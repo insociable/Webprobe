@@ -10,6 +10,10 @@ import { startWorkerObservability } from "./observability.js";
 import { startReportDeliveryCoordinator } from "./report-delivery.js";
 import { startScanDispatchCoordinator } from "./scan-dispatch.js";
 import { persistScanFailureForJob } from "./scan-persistence.js";
+import {
+  getPublicAuditRetentionPolicy,
+  startPublicAuditRetentionCoordinator,
+} from "./public-audit-retention.js";
 import { processScanJobAttempt } from "./scan-processor.js";
 import {
   beginScanAttempt,
@@ -224,9 +228,16 @@ const observabilityCoordinator = startWorkerObservability({
   logger,
 });
 
+const publicAuditRetentionPolicy = getPublicAuditRetentionPolicy();
+const publicAuditRetentionCoordinator = startPublicAuditRetentionCoordinator({
+  logger,
+  policy: publicAuditRetentionPolicy,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   await observabilityCoordinator.stop();
+  await publicAuditRetentionCoordinator.stop();
   await schedulerCoordinator.stop();
   await dispatchCoordinator.stop();
   await notificationCoordinator.stop();
@@ -249,6 +260,9 @@ logger.info(
   {
     queue: SCAN_QUEUE_NAME,
     attempts: MAX_SCAN_EXECUTION_ATTEMPTS,
+    publicAuditRetentionDays: publicAuditRetentionPolicy.retentionDays,
+    publicAuditRetentionBatchSize: publicAuditRetentionPolicy.batchSize,
+    publicAuditRetentionIntervalMs: publicAuditRetentionPolicy.intervalMs,
   },
   "scanner worker ready",
 );

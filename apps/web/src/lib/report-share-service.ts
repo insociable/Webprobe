@@ -215,6 +215,9 @@ export async function queueReportEmail(
 
   return db.transaction(async (tx) => {
     await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`report-share:scan:${scanId}`}, 0))`,
+    );
+    await tx.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`report-email:org:${organizationId}`}, 0))`,
     );
     await tx.execute(

@@ -89,11 +89,17 @@ octets restent hors PostgreSQL sous `SCAN_ARTIFACTS_DIR` (par défaut
 `storage/scan-artifacts`) ; la base ne contient que la clé, le type, la taille
 et le SHA-256.
 
-Les captures suivent la rétention de l'historique de scan. Le pilote ne propose
-pas encore de suppression de scans : les captures sont donc conservées tant que
-leur scan l'est. Toute future purge de scans devra supprimer les fichiers
-associés ; les fichiers orphelins peuvent être supprimés lors d'une maintenance
-après vérification de l'absence de métadonnée `scan_artifacts`.
+Les audits publics terminés suivent une rétention automatique de 90 jours par
+défaut, configurable avec `PUBLIC_AUDIT_RETENTION_DAYS`. La purge est exécutée
+par le worker en lots bornés : elle supprime d'abord les fichiers d'artefacts,
+puis le scan et ses données liées par cascade. Une erreur de suppression fichier
+fait échouer la purge de ce scan plutôt que de laisser volontairement un fichier
+orphelin. Un audit possédant encore un lien de rapport actif n'est pas purgé.
+
+Les scans de monitoring vérifié ne sont pas concernés par cette politique. Les
+paramètres `PUBLIC_AUDIT_RETENTION_BATCH_SIZE` et
+`PUBLIC_AUDIT_RETENTION_INTERVAL_SECONDS` bornent respectivement la taille d'un
+lot et la fréquence du coordinator.
 
 ## Rapports partageables
 

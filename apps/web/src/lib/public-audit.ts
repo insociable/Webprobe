@@ -1,8 +1,12 @@
 import { scanDispatches, scans, sites } from "@agency-saas/db";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./database";
-import { getSiteForOrganization } from "./organization-site-service";
+import {
+  getSiteForOrganization,
+  OrganizationAccessError,
+} from "./organization-site-service";
 import { hasPostgresErrorCode } from "./postgres-error";
+import { logPublicAuditEvent } from "./public-audit-log";
 import {
   getPublicAuditLimits,
   type PublicAuditLimits,
@@ -35,22 +39,25 @@ export async function createPublicAuditForSite(
   now = new Date(),
   limits: PublicAuditLimits = getPublicAuditLimits(),
 ) {
-  const site = await getSiteForOrganization(userId, organizationId, siteId);
-  if (!site) {
-    throw new PublicAuditError("Site not found", "site-not-found");
-  }
-  if (site.status === "paused") {
-    throw new PublicAuditError(
-      "Paused sites cannot start a public audit",
-      "site-not-eligible",
-    );
-  }
+  let hostname: string | undefined;
 
-  const hostname = canonicalHostname(site.canonicalUrl);
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const cooldownCutoff = new Date(now.getTime() - limits.domainCooldownMs);
   try {
-    return await db.transaction(async (tx) => {
+    const site = await getSiteForOrganization(userId, organizationId, siteId);
+    if (!site) {
+      throw new PublicAuditError("Site not found", "site-not-found");
+    }
+    if (site.status === "paused") {
+      throw new PublicAuditError(
+        "Paused sites cannot start a public audit",
+        "site-not-eligible",
+      );
+    }
+
+    hostname = canonicalHostname(site.canonicalUrl);
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    const cooldownCutoff = new Date(now.getTime() - limits.domainCooldownMs);
+
+    const created = await db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`public-audit:user:${userId}`}, 0))`,
       );
@@ -75,6 +82,7 @@ export async function createPublicAuditForSite(
           "user-hourly-limit",
         );
       }
+
       const [concurrentUsage] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(scans)
@@ -94,7 +102,6 @@ export async function createPublicAuditForSite(
       }
 
       const domainFilter = sql`lower(split_part(split_part(${sites.canonicalUrl}, '://', 2), '/', 1)) = ${hostname}`;
-
       const [domainUsage] = await tx
         .select({
           activeCount: sql<number>`count(*) filter (
@@ -130,7 +137,7 @@ export async function createPublicAuditForSite(
         );
       }
 
-      const [created] = await tx
+      const [row] = await tx
         .insert(scans)
         .values({
           organizationId,
@@ -143,20 +150,47 @@ export async function createPublicAuditForSite(
         })
         .returning();
 
-      if (!created) {
-        throw new Error("Public audit creation failed");
-      }
-
-      await tx.insert(scanDispatches).values({ scanId: created.id });
-      return created;
+      if (!row) throw new Error("Public audit creation failed");
+      await tx.insert(scanDispatches).values({ scanId: row.id });
+      return row;
     });
+
+    logPublicAuditEvent({
+      event: "queued",
+      userId,
+      organizationId,
+      siteId,
+      scanId: created.id,
+      hostname,
+    });
+    return created;
   } catch (error) {
-    if (hasPostgresErrorCode(error, "23505")) {
-      throw new PublicAuditError(
-        "A scan is already queued or running for this site",
-        "scan-already-running",
-      );
+    const normalized = hasPostgresErrorCode(error, "23505")
+      ? new PublicAuditError(
+          "A scan is already queued or running for this site",
+          "scan-already-running",
+        )
+      : error;
+
+    if (normalized instanceof PublicAuditError) {
+      logPublicAuditEvent({
+        event: "rejected",
+        userId,
+        organizationId,
+        siteId,
+        ...(hostname ? { hostname } : {}),
+        reason: normalized.code,
+      });
+    } else if (normalized instanceof OrganizationAccessError) {
+      logPublicAuditEvent({
+        event: "rejected",
+        userId,
+        organizationId,
+        siteId,
+        reason: "access-denied",
+      });
     }
-    throw error;
+
+    throw normalized;
   }
 }
