@@ -16,7 +16,7 @@ function positiveInteger(value: string | undefined, fallback: number): number {
 }
 
 export function getPublicAuditLimits(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Record<string, string | undefined> = process.env,
 ): PublicAuditLimits {
   return {
     userHourlyLimit: positiveInteger(
