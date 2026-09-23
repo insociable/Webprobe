@@ -390,7 +390,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
 
       {details.scan.scanMode === "public_audit" ? (
         <section className="border-b border-[#242d40] py-8">
-          <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+          <div className="report-public-scope border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
               Portée de l’audit
             </p>
@@ -435,7 +435,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               return (
                 <article
                   key={group.key}
-                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+                  className="report-priority-card rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="font-mono text-xs text-[#56627a]">

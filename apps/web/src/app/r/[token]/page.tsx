@@ -91,7 +91,7 @@ export default async function PublicReportPage({
         </div>
       </header>
 
-      <div className="mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14">
+      <div className="report-print-scope mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14">
         <section className="grid gap-8 border-b border-[#242d40] pb-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <p
@@ -119,7 +119,7 @@ export default async function PublicReportPage({
 
         {report.scan.scanMode === "public_audit" ? (
           <section className="border-b border-[#242d40] py-8">
-            <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+            <div className="report-public-scope border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                 Portée de l’audit
               </p>
@@ -162,13 +162,14 @@ export default async function PublicReportPage({
                 return (
                   <article
                     key={group.key}
-                    className="border border-[#242d40] bg-[#0d111a] p-5"
+                    className="report-priority-card border border-[#242d40] bg-[#0d111a] p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className="font-mono text-xs text-[#56627a]">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <span
+                        data-severity={finding.severity}
                         className={
                           "h-fit rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
                           severityStyles[finding.severity]
@@ -297,7 +298,7 @@ export default async function PublicReportPage({
                 return (
                   <article
                     key={group.key}
-                    className="border border-[#242d40] bg-[#0d111a] p-5 sm:p-6"
+                    className="report-finding-card border border-[#242d40] bg-[#0d111a] p-5 sm:p-6"
                   >
                     <div className="grid gap-4 sm:grid-cols-[42px_1fr_auto]">
                       <span className="font-mono text-xs text-[#56627a]">
@@ -322,6 +323,7 @@ export default async function PublicReportPage({
                         ) : null}
                       </div>
                       <span
+                        data-severity={finding.severity}
                         className={
                           "h-fit rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
                           severityStyles[finding.severity]
@@ -357,7 +359,7 @@ export default async function PublicReportPage({
                     </dl>
 
                     {remediation ? (
-                      <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                      <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
                         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                           Comment corriger
                         </p>

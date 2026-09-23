@@ -363,7 +363,7 @@ select {
     margin-left: 0 !important;
   }
 
-  .am-content {
+  :is(.am-content, .report-print-scope) {
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -414,52 +414,52 @@ select {
     font-weight: 700;
   }
 
-  .am-content > section {
+  :is(.am-content, .report-print-scope) > section {
     border-color: #d8dee9 !important;
   }
 
-  .am-content > section:first-of-type {
+  :is(.am-content, .report-print-scope) > section:first-of-type {
     padding-bottom: 7mm !important;
   }
 
-  .am-content > section:first-of-type h1 {
+  :is(.am-content, .report-print-scope) > section:first-of-type h1 {
     color: #111827 !important;
     font-size: 24pt !important;
     line-height: 1.05 !important;
   }
 
-  .am-content h1,
-  .am-content h2,
-  .am-content h3,
-  .am-content h4,
-  .am-content dd {
+  :is(.am-content, .report-print-scope) h1,
+  :is(.am-content, .report-print-scope) h2,
+  :is(.am-content, .report-print-scope) h3,
+  :is(.am-content, .report-print-scope) h4,
+  :is(.am-content, .report-print-scope) dd {
     color: #172033 !important;
   }
 
-  .am-content h2 {
+  :is(.am-content, .report-print-scope) h2 {
     font-size: 16pt !important;
     letter-spacing: -0.02em !important;
   }
 
-  .am-content h3 {
+  :is(.am-content, .report-print-scope) h3 {
     font-size: 11.5pt !important;
   }
 
-  .am-content p,
-  .am-content dt,
-  .am-content li,
-  .am-content span {
+  :is(.am-content, .report-print-scope) p,
+  :is(.am-content, .report-print-scope) dt,
+  :is(.am-content, .report-print-scope) li,
+  :is(.am-content, .report-print-scope) span {
     color: #526076 !important;
   }
 
-  .am-content .am-kicker {
+  :is(.am-content, .report-print-scope) .am-kicker {
     color: #5968d9 !important;
     font-weight: 700;
   }
 
-  .am-content .am-panel,
-  .am-content .am-panel-soft,
-  .am-content .report-action-row {
+  :is(.am-content, .report-print-scope) .am-panel,
+  :is(.am-content, .report-print-scope) .am-panel-soft,
+  :is(.am-content, .report-print-scope) .report-action-row {
     break-inside: avoid;
     page-break-inside: avoid;
     border-color: #d8dee9 !important;
@@ -467,12 +467,36 @@ select {
     box-shadow: none !important;
   }
 
-  .am-content .am-panel-soft {
+  :is(.am-content, .report-print-scope) .am-panel-soft {
     border: 1px solid #e2e8f0 !important;
     border-radius: 4px !important;
   }
 
-  .am-content .report-finding-card {
+  :is(.am-content, .report-print-scope) .report-public-scope,
+  :is(.am-content, .report-print-scope) .report-priority-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-color: #d8dee9 !important;
+    background: #f8fafc !important;
+  }
+
+  :is(.am-content, .report-print-scope) .report-public-scope h2,
+  :is(.am-content, .report-print-scope) .report-priority-card h3,
+  :is(.am-content, .report-print-scope) .report-priority-card dd {
+    color: #172033 !important;
+  }
+
+  :is(.am-content, .report-print-scope) .report-public-scope p,
+  :is(.am-content, .report-print-scope) .report-priority-card p,
+  :is(.am-content, .report-print-scope) .report-priority-card dt {
+    color: #526076 !important;
+  }
+
+  :is(.am-content, .report-print-scope) .report-public-scope > p:first-child {
+    color: #5968d9 !important;
+  }
+
+  :is(.am-content, .report-print-scope) .report-finding-card {
     break-inside: auto !important;
     page-break-inside: auto !important;
     border: 1px solid #cbd5e1 !important;
@@ -482,7 +506,7 @@ select {
     padding: 5mm !important;
   }
 
-  .am-content .report-remediation {
+  :is(.am-content, .report-print-scope) .report-remediation {
     break-inside: auto !important;
     page-break-inside: auto !important;
     border: 1px solid #d8daf8 !important;
@@ -492,90 +516,90 @@ select {
     padding: 4.5mm !important;
   }
 
-  .am-content .report-remediation h4 {
+  :is(.am-content, .report-print-scope) .report-remediation h4 {
     color: #202a62 !important;
   }
 
-  .am-content .report-remediation ol {
+  :is(.am-content, .report-print-scope) .report-remediation ol {
     margin-top: 2.5mm !important;
   }
 
-  .am-content [class*="bg-black"] {
+  :is(.am-content, .report-print-scope) [class*="bg-black"] {
     background: #f8fafc !important;
   }
 
-  .am-content [class*="border-[#"],
-  .am-content [class*="border-white"] {
+  :is(.am-content, .report-print-scope) [class*="border-[#"],
+  :is(.am-content, .report-print-scope) [class*="border-white"] {
     border-color: #d8dee9 !important;
   }
 
-  .am-content [data-severity] {
+  :is(.am-content, .report-print-scope) [data-severity] {
     border-width: 1px !important;
     font-weight: 700;
   }
 
-  .am-content [data-severity="info"],
-  .am-content [data-severity="low"] {
+  :is(.am-content, .report-print-scope) [data-severity="info"],
+  :is(.am-content, .report-print-scope) [data-severity="low"] {
     color: #334155 !important;
     border-color: #94a3b8 !important;
     background: #f1f5f9 !important;
   }
 
-  .am-content [data-severity="medium"] {
+  :is(.am-content, .report-print-scope) [data-severity="medium"] {
     color: #7c4a03 !important;
     border-color: #d6a85f !important;
     background: #fff7e6 !important;
   }
 
-  .am-content [data-severity="high"] {
+  :is(.am-content, .report-print-scope) [data-severity="high"] {
     color: #9f1239 !important;
     border-color: #e6a4b8 !important;
     background: #fff1f4 !important;
   }
 
-  .am-content [data-severity="critical"] {
+  :is(.am-content, .report-print-scope) [data-severity="critical"] {
     color: #991b1b !important;
     border-color: #e59b9b !important;
     background: #fff0f0 !important;
   }
 
-  .am-content a,
-  .am-content [class*="break-all"] {
+  :is(.am-content, .report-print-scope) a,
+  :is(.am-content, .report-print-scope) [class*="break-all"] {
     overflow-wrap: anywhere;
     word-break: break-word;
   }
 
-  .am-content a {
+  :is(.am-content, .report-print-scope) a {
     color: #27316f !important;
     text-decoration: none;
   }
 
-  .am-content img {
+  :is(.am-content, .report-print-scope) img {
     max-width: 100% !important;
   }
 
-  .am-content section,
-  .am-content article {
+  :is(.am-content, .report-print-scope) section,
+  :is(.am-content, .report-print-scope) article {
     orphans: 3;
     widows: 3;
   }
 
-  .am-content section {
+  :is(.am-content, .report-print-scope) section {
     break-after: auto;
   }
 
-  .am-content .report-finding-card + .report-finding-card {
+  :is(.am-content, .report-print-scope) .report-finding-card + .report-finding-card {
     margin-top: 4mm !important;
   }
 
-  .am-content .report-print-pages {
+  :is(.am-content, .report-print-scope) .report-print-pages {
     display: block !important;
     margin-top: 3mm;
     border-top: 1px solid #e2e8f0;
     padding-top: 2.5mm;
   }
 
-  .am-content .report-print-pages-title {
+  :is(.am-content, .report-print-scope) .report-print-pages-title {
     margin: 0 0 1.5mm !important;
     color: #475569 !important;
     font-size: 7.8pt !important;
@@ -584,12 +608,12 @@ select {
     letter-spacing: 0.06em;
   }
 
-  .am-content .report-print-pages ul {
+  :is(.am-content, .report-print-scope) .report-print-pages ul {
     margin: 0;
     padding-left: 4mm;
   }
 
-  .am-content .report-print-pages li {
+  :is(.am-content, .report-print-scope) .report-print-pages li {
     margin: 0 0 0.8mm;
     color: #526076 !important;
     font-size: 8pt;
@@ -598,19 +622,19 @@ select {
     word-break: break-word;
   }
 
-  .am-content .report-action-plan {
+  :is(.am-content, .report-print-scope) .report-action-plan {
     break-before: auto;
   }
 
-  .am-content h2,
-  .am-content h3,
-  .am-content h4,
-  .am-content .report-print-pages-title {
+  :is(.am-content, .report-print-scope) h2,
+  :is(.am-content, .report-print-scope) h3,
+  :is(.am-content, .report-print-scope) h4,
+  :is(.am-content, .report-print-scope) .report-print-pages-title {
     break-after: avoid-page;
     page-break-after: avoid;
   }
 
-  .am-content .report-remediation li {
+  :is(.am-content, .report-print-scope) .report-remediation li {
     break-inside: avoid;
     page-break-inside: avoid;
   }
