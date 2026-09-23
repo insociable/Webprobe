@@ -232,47 +232,177 @@ const exactRemediations: Record<string, FindingRemediation> = {
 
 function accessibilityRemediation(code: string): FindingRemediation {
   const ruleId = code.replace(/^accessibility\./, "");
-
-  if (ruleId === "color-contrast") {
-    return {
-      title: "Améliorer le contraste des contenus",
+  const remediations: Record<string, FindingRemediation> = {
+    region: {
+      title: "Rattacher le contenu aux zones structurelles de la page",
       summary:
-        "Certains textes ou composants n’ont pas un contraste suffisant avec leur arrière-plan.",
+        "La règle region signale qu'une partie du contenu visible se trouve en dehors des landmarks structurants de la page. Les lecteurs d'écran utilisent ces zones pour se déplacer rapidement entre le contenu principal, la navigation, l'en-tête, le pied de page ou les contenus complémentaires.",
       steps: [
-        "Identifiez les éléments concernés sur la page signalée.",
-        "Ajustez couleur du texte, arrière-plan ou graisse afin d’atteindre un contraste lisible.",
-        "Vérifiez les états hover, focus, disabled et les variantes responsive.",
+        "Repérez les blocs signalés et identifiez leur rôle réel : contenu principal, navigation, en-tête, pied de page ou contenu complémentaire.",
+        "Placez le contenu principal dans un élément <main> unique. Utilisez <nav>, <header>, <footer> et <aside> uniquement lorsque leur rôle sémantique correspond réellement au contenu.",
+        "Évitez de créer des landmarks uniquement pour satisfaire le test : la structure doit rester simple, cohérente et refléter l'organisation visuelle de la page.",
+        "Si plusieurs landmarks du même type sont nécessaires, donnez-leur un nom accessible distinct avec aria-label ou aria-labelledby.",
       ],
       verification:
-        "Relancez le scan d’accessibilité et vérifiez que la règle color-contrast n’est plus signalée.",
-    };
-  }
-
-  if (ruleId === "heading-order") {
-    return {
-      title: "Rétablir une hiérarchie de titres cohérente",
+        "Naviguez dans la liste des landmarks avec un lecteur d'écran ou les outils d'accessibilité du navigateur, puis relancez le scan. Les contenus utiles ne doivent plus rester hors de toute zone structurelle.",
+    },
+    "landmark-one-main": {
+      title: "Conserver une seule zone principale <main>",
       summary:
-        "La structure des titres saute ou mélange des niveaux, ce qui gêne la navigation assistée.",
+        "Une page doit exposer un contenu principal clairement identifiable. La règle échoue lorsqu'aucun landmark main n'est disponible, ou lorsque plusieurs zones principales sont présentes en même temps.",
       steps: [
-        "Conservez un ordre logique h1, h2, h3 selon la structure du contenu.",
-        "N’utilisez pas les niveaux de titre uniquement pour obtenir une taille visuelle.",
+        "Dans le layout global, identifiez le conteneur qui porte le contenu central propre à la page et utilisez un seul élément <main> pour ce rôle.",
+        "Supprimez les <main> imbriqués ou dupliqués dans les composants enfants. Dans une SPA, le composant de layout doit généralement porter le <main>, pas chaque sous-composant.",
+        "Si une zone doit rester dans le DOM mais ne représente pas le contenu principal courant, utilisez un conteneur sémantique adapté plutôt qu'un second <main>.",
+        "Vérifiez également qu'aucun style responsive ne rend simultanément visibles deux variantes de <main>.",
       ],
       verification:
-        "Relancez le scan et contrôlez que la règle heading-order est résolue.",
-    };
+        "Inspectez l'arbre d'accessibilité : un seul landmark main doit être exposé et contenir le contenu principal de la page. Relancez ensuite le scan.",
+    },
+    "color-contrast": {
+      title: "Rétablir un contraste lisible entre texte et arrière-plan",
+      summary:
+        "Le contraste mesuré est insuffisant pour certains textes ou composants. En niveau AA, le texte courant vise généralement un ratio d'au moins 4,5:1 et le grand texte 3:1.",
+      steps: [
+        "Repérez les éléments concernés et relevez les couleurs réelles du texte et de l'arrière-plan, y compris après transparence ou superposition.",
+        "Ajustez en priorité la couleur du texte ou du fond. Augmenter uniquement la graisse ne suffit pas toujours à atteindre le ratio requis.",
+        "Vérifiez les variantes hover, focus, disabled, liens visités, badges, placeholders et les thèmes clair/sombre si le site en possède plusieurs.",
+        "Centralisez la correction dans les variables CSS ou le composant source lorsqu'une même combinaison de couleurs est réutilisée sur plusieurs pages.",
+      ],
+      verification:
+        "Contrôlez les ratios avec les DevTools ou un outil de contraste, puis relancez le scan. Vérifiez aussi manuellement les états interactifs qui ne sont pas toujours visibles au chargement initial.",
+    },
+    "heading-order": {
+      title: "Rétablir une hiérarchie logique des titres",
+      summary:
+        "Les titres structurent la page pour les lecteurs d'écran, les moteurs de recherche et la lecture visuelle. Un saut de niveau ou un titre choisi uniquement pour sa taille peut rendre cette structure difficile à comprendre.",
+      steps: [
+        "Identifiez le titre principal de la page puis organisez les sections dans un ordre logique : h1 pour le sujet principal, h2 pour les grandes sections, h3 pour leurs sous-sections, etc.",
+        "Évitez les sauts artificiels de h2 vers h4 lorsqu'aucun niveau intermédiaire n'existe dans la structure du contenu.",
+        "Ne choisissez pas un niveau de titre pour obtenir une taille visuelle : utilisez le CSS pour la présentation et le HTML pour la structure.",
+        "Corrigez le composant réutilisé si la même rupture de hiérarchie apparaît sur plusieurs pages.",
+      ],
+      verification:
+        "Parcourez l'arbre des titres dans les DevTools ou avec un lecteur d'écran et vérifiez que la structure reste compréhensible sans regarder la mise en page. Relancez ensuite le scan.",
+    },
+    "image-alt": {
+      title: "Fournir une alternative textuelle adaptée aux images",
+      summary:
+        "Une image informative doit transmettre une information équivalente lorsqu'elle n'est pas visible. Les images purement décoratives doivent au contraire être ignorées par les technologies d'assistance.",
+      steps: [
+        "Pour une image informative, renseignez un attribut alt court qui décrit sa fonction ou l'information utile, sans répéter inutilement le texte voisin.",
+        'Pour une image décorative, utilisez alt="" afin qu\'elle ne soit pas annoncée comme un contenu utile.',
+        "Pour les images complexes, fournissez une explication plus détaillée à proximité ou via une description associée.",
+      ],
+      verification:
+        "Désactivez temporairement les images ou inspectez l'arbre d'accessibilité pour vérifier que le sens de la page reste compréhensible, puis relancez le scan.",
+    },
+    "button-name": {
+      title: "Donner un nom accessible à chaque bouton",
+      summary:
+        "Un bouton uniquement représenté par une icône ou mal étiqueté peut être annoncé comme 'bouton' sans indication de son action.",
+      steps: [
+        "Ajoutez un texte visible lorsque c'est possible ; sinon fournissez un aria-label ou aria-labelledby qui décrit clairement l'action.",
+        "Vérifiez que le nom accessible correspond à l'action réelle, par exemple 'Fermer le menu' plutôt qu'un libellé vague comme 'Action'.",
+        "Évitez de masquer avec aria-hidden le seul contenu qui donne son nom au bouton.",
+      ],
+      verification:
+        "Inspectez le nom accessible dans les DevTools ou parcourez les boutons avec un lecteur d'écran, puis relancez le scan.",
+    },
+    "link-name": {
+      title: "Donner un libellé compréhensible à chaque lien",
+      summary:
+        "Un lien vide, uniquement visuel ou dont le nom accessible ne décrit pas sa destination peut devenir incompréhensible lorsqu'il est parcouru hors contexte.",
+      steps: [
+        "Ajoutez un texte de lien explicite ou un nom accessible cohérent lorsque le lien est uniquement constitué d'une icône ou d'une image.",
+        "Évitez les libellés génériques répétés comme 'cliquez ici' lorsque la destination peut être nommée directement.",
+        "Vérifiez que les images utilisées comme liens possèdent une alternative textuelle qui décrit la destination.",
+      ],
+      verification:
+        "Parcourez la liste des liens avec un lecteur d'écran : chaque destination doit être identifiable sans lire le paragraphe environnant. Relancez ensuite le scan.",
+    },
+    "html-has-lang": {
+      title: "Déclarer la langue principale du document",
+      summary:
+        "La langue déclarée permet notamment aux lecteurs d'écran de choisir la bonne prononciation et aux navigateurs de mieux interpréter le contenu.",
+      steps: [
+        "Ajoutez l'attribut lang sur l'élément <html>, par exemple <html lang=\"fr\"> pour une page principalement en français.",
+        "Si une portion importante de contenu change de langue, utilisez également lang sur le conteneur concerné.",
+        "Vérifiez que le framework ou le CMS ne remplace pas cette valeur au rendu final.",
+      ],
+      verification:
+        "Inspectez le HTML effectivement servi par le navigateur puis relancez le scan. La valeur lang doit correspondre à la langue principale de la page.",
+    },
+    "document-title": {
+      title: "Définir un titre de document explicite",
+      summary:
+        "Le contenu de <title> permet d'identifier rapidement la page dans un onglet, l'historique, les favoris et les technologies d'assistance.",
+      steps: [
+        "Ajoutez un <title> non vide et spécifique à la page dans le <head> du document.",
+        "Évitez de réutiliser exactement le même titre sur toutes les pages ; incluez le sujet principal et, si utile, le nom du site.",
+        "Vérifiez le titre final après rendu côté serveur ou client si le framework le génère dynamiquement.",
+      ],
+      verification:
+        "Contrôlez le titre affiché dans l'onglet et dans le DOM final, puis relancez le scan.",
+    },
+    label: {
+      title: "Associer un libellé accessible aux champs de formulaire",
+      summary:
+        "Un champ sans libellé associé peut être annoncé uniquement par son type ou son placeholder, ce qui rend sa fonction ambiguë.",
+      steps: [
+        "Associez un élément <label> au champ avec for/id, ou englober directement le contrôle dans le label.",
+        "Lorsque le design ne permet pas de label visible, utilisez aria-label ou aria-labelledby de façon explicite plutôt qu'un placeholder comme seul libellé.",
+        "Vérifiez aussi les champs générés par les composants de recherche, filtres, newsletter et formulaires modaux.",
+      ],
+      verification:
+        "Inspectez le nom accessible de chaque champ dans les DevTools ou avec un lecteur d'écran puis relancez le scan.",
+    },
+    "page-has-heading-one": {
+      title: "Ajouter un titre principal H1 à la page",
+      summary:
+        "Un H1 explicite aide à identifier rapidement le sujet principal de la page et fournit un point d'entrée clair dans la hiérarchie des titres.",
+      steps: [
+        "Ajoutez un H1 qui décrit le sujet principal de la page, idéalement près du début du contenu principal.",
+        "Évitez d'utiliser le logo ou le nom du site comme H1 identique sur toutes les pages si un titre de page plus précis existe.",
+        "Conservez ensuite une hiérarchie h2/h3 cohérente pour les sections et sous-sections.",
+      ],
+      verification:
+        "Vérifiez l'arbre des titres et assurez-vous qu'un H1 pertinent est exposé, puis relancez le scan.",
+    },
+    "landmark-unique": {
+      title: "Distinguer les landmarks de même type",
+      summary:
+        "Lorsque plusieurs zones de navigation ou landmarks similaires existent, chacune doit pouvoir être distinguée afin qu'un utilisateur sache vers laquelle il se déplace.",
+      steps: [
+        "Identifiez les landmarks de même type présents simultanément sur la page.",
+        "Donnez-leur un nom accessible distinct via aria-label ou aria-labelledby, par exemple 'Navigation principale' et 'Navigation pied de page'.",
+        "Supprimez les landmarks redondants lorsqu'ils ne représentent pas réellement des zones fonctionnelles distinctes.",
+      ],
+      verification:
+        "Parcourez la liste des landmarks avec un lecteur d'écran ou les DevTools et vérifiez que chaque zone est identifiable sans ambiguïté, puis relancez le scan.",
+    },
+  };
+
+  const exact = remediations[ruleId];
+  if (exact) {
+    return exact;
   }
 
   return {
-    title: "Corriger la règle d’accessibilité signalée",
-    summary: `Le contrôle d’accessibilité ${ruleId} a échoué sur cette page.`,
+    title: `Corriger la règle d'accessibilité ${ruleId}`,
+    summary:
+      `Le contrôle automatisé ${ruleId} a détecté une structure ou un composant qui ne respecte pas le comportement attendu. ` +
+      "Le bon correctif consiste à comprendre le rôle du composant source puis à corriger ce composant, plutôt qu'à masquer le signal sur chaque page.",
     steps: [
-      "Repérez les éléments concernés à partir de la page et du nombre de nœuds indiqués.",
-      "Corrigez le composant source plutôt que chaque occurrence générée si le problème est récurrent.",
-      "Testez au clavier et avec les outils d’accessibilité du navigateur avant de relancer le scan.",
+      "Repérez d'abord les pages concernées puis le composant commun qui génère le défaut. Si le problème apparaît sur plusieurs URL, commencez par le layout ou le composant partagé.",
+      `Consultez le code associé à la règle ${ruleId} et inspectez le nom, le rôle, les attributs ARIA et la structure HTML réellement exposés dans l'arbre d'accessibilité.`,
+      "Corrigez la sémantique HTML native en priorité. N'ajoutez des attributs ARIA que lorsqu'un élément HTML natif ne couvre pas correctement le besoin.",
+      "Testez la correction au clavier et dans l'arbre d'accessibilité du navigateur avant de la généraliser à toutes les pages.",
     ],
-    verification: `Relancez le scan et vérifiez que la règle ${ruleId} n’est plus signalée.`,
+    verification: `Relancez le scan et confirmez que la règle ${ruleId} disparaît sur toutes les pages concernées sans introduire de nouvelle régression d'accessibilité.`,
   };
 }
+
 function scannerV2Remediation(code: string): FindingRemediation | null {
   if (code === "seo.noindex") {
     return {

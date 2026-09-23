@@ -11,6 +11,7 @@ import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
+  getFindingDisplayTitle,
   getPriorityFindings,
   summarizeReportFindings,
   summarizeReportSections,
@@ -238,9 +239,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(orderedFindings);
-  const reportSummary = summarizeReportFindings(orderedFindings);
-  const sectionSummaries = summarizeReportSections(orderedFindings);
-  const priorityFindings = getPriorityFindings(orderedFindings, 3);
+  const distinctFindings = findingGroups.map((group) => group.primary);
+  const reportSummary = summarizeReportFindings(distinctFindings);
+  const sectionSummaries = summarizeReportSections(distinctFindings);
+  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const comparison = details.comparison;
   const scannerV2QualityState = scannerV2Quality(details.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
@@ -285,8 +287,18 @@ export default async function ScanPage({ params }: ScanPageProps) {
       <ScanStatusRefresher active={pending} />
 
       <div className="print-only am-print-brand" aria-hidden="true">
-        <strong>Agency Monitor</strong>
-        <span>Rapport d’audit de site</span>
+        <div>
+          <strong>Agency Monitor</strong>
+          <span>Rapport d’audit technique</span>
+        </div>
+        <div className="am-print-brand-meta">
+          <span>
+            {details.scan.scanMode === "public_audit"
+              ? "Audit public"
+              : "Monitoring vérifié"}
+          </span>
+          <span>{formatDate(details.scan.completedAt)}</span>
+        </div>
       </div>
 
       <section className="border-b border-[#242d40] pb-9">
@@ -432,13 +444,21 @@ export default async function ScanPage({ params }: ScanPageProps) {
             Vue synthétique destinée à prioriser les actions sans masquer les
             limites de collecte du scan.
           </p>
-          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="am-panel-soft p-4">
               <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Problèmes
+                Problèmes distincts
               </dt>
               <dd className="mt-2 text-2xl font-semibold">
                 {reportSummary.total}
+              </dd>
+            </div>
+            <div className="am-panel-soft p-4">
+              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
+                Occurrences
+              </dt>
+              <dd className="mt-2 text-2xl font-semibold">
+                {orderedFindings.length}
               </dd>
             </div>
             <div className="am-panel-soft p-4">
@@ -495,7 +515,9 @@ export default async function ScanPage({ params }: ScanPageProps) {
                       {severityLabels[finding.severity]}
                     </span>
                   </div>
-                  <h3 className="mt-4 font-semibold">{finding.title}</h3>
+                  <h3 className="mt-4 font-semibold">
+                    {getFindingDisplayTitle(finding)}
+                  </h3>
                   <p className="mt-3 text-sm leading-6 text-white/50">
                     {businessContext.impact}
                   </p>
@@ -555,7 +577,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
                 </p>
                 <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
                   <div>
-                    <dt className="text-white/30">Constats</dt>
+                    <dt className="text-white/30">Problèmes distincts</dt>
                     <dd className="mt-1 text-lg font-semibold text-white/80">
                       {section.total}
                     </dd>
@@ -724,7 +746,9 @@ export default async function ScanPage({ params }: ScanPageProps) {
         <p className="text-sm text-white/45">Analyse</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
           {findingGroups.length} problème
-          {findingGroups.length > 1 ? "s" : ""}
+          {findingGroups.length > 1 ? "s" : ""} distinct
+          {findingGroups.length > 1 ? "s" : ""} · {orderedFindings.length}{" "}
+          occurrence{orderedFindings.length > 1 ? "s" : ""}
         </h2>
 
         {orderedFindings.length === 0 ? (
@@ -737,7 +761,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <div className="mt-6 space-y-4">
             {findingGroups.map((group) => {
               const finding = group.primary;
-              const grouped = group.findings.length > 1;
+              const grouped = group.occurrenceCount > 1;
               const evidence = grouped ? [] : visibleEvidence(finding.evidence);
               const remediation = getFindingRemediation(finding.code);
               const businessContext = getFindingBusinessContext(finding);
@@ -747,7 +771,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               return (
                 <article
                   key={group.key}
-                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
+                  className="report-finding-card rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
@@ -757,19 +781,26 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         · {finding.code}
                       </p>
                       <h3 className="mt-2 text-lg font-semibold">
-                        {finding.title}
+                        {getFindingDisplayTitle(finding)}
                       </h3>
                       {grouped ? (
                         <div className="mt-3">
                           <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
-                            {group.pageUrls.length} pages concernées
+                            {group.occurrenceCount} occurrences ·{" "}
+                            {group.pageUrls.length} pages / ressources
                           </span>
                           <ul className="mt-3 space-y-1.5 text-sm text-white/40">
-                            {group.pageUrls.map((pageUrl) => (
+                            {group.pageUrls.slice(0, 5).map((pageUrl) => (
                               <li key={pageUrl} className="break-all">
                                 {pageUrl}
                               </li>
                             ))}
+                            {group.pageUrls.length > 5 ? (
+                              <li className="font-medium text-white/55">
+                                + {group.pageUrls.length - 5} autres pages /
+                                ressources concernées
+                              </li>
+                            ) : null}
                           </ul>
                         </div>
                       ) : finding.pageUrl ? (
@@ -840,15 +871,21 @@ export default async function ScanPage({ params }: ScanPageProps) {
                   ) : null}
 
                   {remediation ? (
-                    <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                    <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
                       <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                         Comment corriger
                       </p>
                       <h4 className="mt-2 font-semibold text-[#eef1ff]">
                         {remediation.title}
                       </h4>
-                      <p className="mt-2 text-sm leading-6 text-white/55">
+                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                        Ce que cela signifie
+                      </p>
+                      <p className="mt-1 text-sm leading-6 text-white/55">
                         {remediation.summary}
+                      </p>
+                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                        Plan de correction
                       </p>
                       <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
                         {remediation.steps.map((step, index) => (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getFindingBusinessContext,
+  getFindingDisplayTitle,
   getPriorityFindings,
   groupFindingsByReportSection,
   reportSectionKeyForFinding,
@@ -90,6 +91,20 @@ describe("report presentation", () => {
         codes: ["availability.http-5xx", "broken-link.http-error"],
       },
     ]);
+  });
+
+  it("uses rule-specific titles and impacts for repeated accessibility findings", () => {
+    const landmark = {
+      category: "accessibility",
+      severity: "medium" as const,
+      code: "accessibility.landmark-one-main",
+      title: "Accessibilité : règle landmark-one-main non respectée",
+    };
+
+    expect(getFindingDisplayTitle(landmark)).toContain("<main>");
+    expect(getFindingBusinessContext(landmark).impact).toContain(
+      "lecteur d’écran",
+    );
   });
 
   it("adds a concrete impact and intervention context", () => {

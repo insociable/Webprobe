@@ -29,6 +29,8 @@ describe("finding remediation catalog", () => {
       "network.request-failed",
       "performance.lcp.slow",
       "performance.cls.high",
+      "accessibility.region",
+      "accessibility.landmark-one-main",
       "accessibility.color-contrast",
       "accessibility.heading-order",
       "accessibility.image-alt",
@@ -37,5 +39,15 @@ describe("finding remediation catalog", () => {
     for (const code of codes) {
       expect(getFindingRemediation(code), code).not.toBeNull();
     }
+  });
+
+  it("provides detailed guidance for the accessibility rules seen in prospect audits", () => {
+    const region = getFindingRemediation("accessibility.region");
+    const main = getFindingRemediation("accessibility.landmark-one-main");
+
+    expect(region?.steps.length).toBeGreaterThanOrEqual(4);
+    expect(region?.summary).toContain("landmarks");
+    expect(main?.steps.length).toBeGreaterThanOrEqual(4);
+    expect(main?.summary).toContain("contenu principal");
   });
 });

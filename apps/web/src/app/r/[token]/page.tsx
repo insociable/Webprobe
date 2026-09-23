@@ -5,6 +5,7 @@ import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
+  getFindingDisplayTitle,
   getPriorityFindings,
   summarizeReportFindings,
   summarizeReportSections,
@@ -77,9 +78,10 @@ export default async function PublicReportPage({
     (a, b) => rank[b.severity] - rank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(findings);
-  const reportSummary = summarizeReportFindings(findings);
-  const sectionSummaries = summarizeReportSections(findings);
-  const priorityFindings = getPriorityFindings(findings, 3);
+  const distinctFindings = findingGroups.map((group) => group.primary);
+  const reportSummary = summarizeReportFindings(distinctFindings);
+  const sectionSummaries = summarizeReportSections(distinctFindings);
+  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const quality = scannerV2Quality(report.scan.summary);
   const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
   const hasIncompleteAnalysis =
@@ -154,8 +156,12 @@ export default async function PublicReportPage({
               <p className="am-metric-value">{report.scan.pageCount}</p>
             </div>
             <div className="am-metric-cell">
-              <p className="am-metric-label">Problèmes</p>
+              <p className="am-metric-label">Problèmes distincts</p>
               <p className="am-metric-value">{findingGroups.length}</p>
+            </div>
+            <div className="am-metric-cell">
+              <p className="am-metric-label">Occurrences</p>
+              <p className="am-metric-value">{findings.length}</p>
             </div>
             <div className="am-metric-cell">
               <p className="am-metric-label">Hauts / critiques</p>
@@ -201,7 +207,9 @@ export default async function PublicReportPage({
                         {severityLabels[finding.severity]}
                       </span>
                     </div>
-                    <h3 className="mt-4 font-semibold">{finding.title}</h3>
+                    <h3 className="mt-4 font-semibold">
+                      {getFindingDisplayTitle(finding)}
+                    </h3>
                     <p className="mt-3 text-sm leading-6 text-[#8f9aaf]">
                       {businessContext.impact}
                     </p>
@@ -262,7 +270,7 @@ export default async function PublicReportPage({
                   </p>
                   <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
                     <div>
-                      <dt className="text-[#647188]">Constats</dt>
+                      <dt className="text-[#647188]">Problèmes distincts</dt>
                       <dd className="mt-1 text-lg font-semibold">
                         {section.total}
                       </dd>
@@ -369,8 +377,15 @@ export default async function PublicReportPage({
             <div>
               <p className="am-kicker">Analyse</p>
               <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-                Findings observés
+                Problèmes distincts
               </h2>
+              <p className="mt-2 text-sm text-[#6f7b91]">
+                {findingGroups.length} problème
+                {findingGroups.length > 1 ? "s" : ""} distinct
+                {findingGroups.length > 1 ? "s" : ""} · {findings.length}{" "}
+                occurrence
+                {findings.length > 1 ? "s" : ""}
+              </p>
             </div>
             <span className="font-mono text-xs text-[#657188]">
               {String(findingGroups.length).padStart(2, "0")}
@@ -387,7 +402,7 @@ export default async function PublicReportPage({
             <div className="mt-6 space-y-4">
               {findingGroups.map((group, index) => {
                 const finding = group.primary;
-                const grouped = group.findings.length > 1;
+                const grouped = group.occurrenceCount > 1;
                 const remediation = getFindingRemediation(finding.code);
                 const businessContext = getFindingBusinessContext(finding);
                 return (
@@ -403,18 +418,27 @@ export default async function PublicReportPage({
                         <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
                           {finding.category}
                         </p>
-                        <h3 className="mt-2 font-semibold">{finding.title}</h3>
+                        <h3 className="mt-2 font-semibold">
+                          {getFindingDisplayTitle(finding)}
+                        </h3>
                         {grouped ? (
                           <div className="mt-3">
                             <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
-                              {group.pageUrls.length} pages concernées
+                              {group.occurrenceCount} occurrences ·{" "}
+                              {group.pageUrls.length} pages / ressources
                             </span>
                             <ul className="mt-3 space-y-1.5 text-sm text-[#6f7b91]">
-                              {group.pageUrls.map((pageUrl) => (
+                              {group.pageUrls.slice(0, 5).map((pageUrl) => (
                                 <li key={pageUrl} className="break-all">
                                   {pageUrl}
                                 </li>
                               ))}
+                              {group.pageUrls.length > 5 ? (
+                                <li className="font-medium text-[#8f9aaf]">
+                                  + {group.pageUrls.length - 5} autres pages /
+                                  ressources concernées
+                                </li>
+                              ) : null}
                             </ul>
                           </div>
                         ) : finding.pageUrl ? (
@@ -466,8 +490,14 @@ export default async function PublicReportPage({
                         <h4 className="mt-2 font-semibold text-[#eef1ff]">
                           {remediation.title}
                         </h4>
-                        <p className="mt-2 text-sm leading-6 text-[#8f9aaf]">
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#647188]">
+                          Ce que cela signifie
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-[#8f9aaf]">
                           {remediation.summary}
+                        </p>
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#647188]">
+                          Plan de correction
                         </p>
                         <ol className="mt-4 space-y-2 text-sm leading-6 text-[#aeb7c8]">
                           {remediation.steps.map((step, stepIndex) => (
@@ -479,6 +509,12 @@ export default async function PublicReportPage({
                             </li>
                           ))}
                         </ol>
+                        <p className="mt-4 border-t border-white/10 pt-4 text-xs leading-5 text-[#7f8a9f]">
+                          <span className="font-semibold text-[#aeb7c8]">
+                            Vérification :
+                          </span>{" "}
+                          {remediation.verification}
+                        </p>
                       </div>
                     ) : null}
                   </article>
