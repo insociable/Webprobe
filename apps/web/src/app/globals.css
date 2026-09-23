@@ -596,7 +596,9 @@ select {
     break-after: auto;
   }
 
-  :is(.am-content, .report-print-scope) .report-finding-card + .report-finding-card {
+  :is(.am-content, .report-print-scope)
+    .report-finding-card
+    + .report-finding-card {
     margin-top: 4mm !important;
   }
 
