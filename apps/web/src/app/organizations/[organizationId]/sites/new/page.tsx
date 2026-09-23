@@ -36,9 +36,7 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
   }
 
   return (
-    <WorkspaceShell
-      trail={[{ label: "Nouveau site" }]}
-    >
+    <WorkspaceShell trail={[{ label: "Nouveau site" }]}>
       <section className="max-w-3xl">
         <p className="am-kicker">Audit public</p>
         <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
