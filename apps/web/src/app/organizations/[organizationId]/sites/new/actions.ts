@@ -12,6 +12,7 @@ import {
 } from "@/lib/organization-site-service";
 import { hasPostgresErrorCode } from "@/lib/postgres-error";
 import { createPublicAuditForSite } from "@/lib/public-audit";
+import { deriveSiteDisplayName } from "@/lib/site-display-name";
 
 export type CreateSiteActionState = {
   error: string | null;
@@ -27,9 +28,22 @@ export async function createSiteAction(
   }
 
   const session = await requireCurrentSession();
+  const parsedUrl = SiteCreateSchema.shape.canonicalUrl.safeParse(
+    formData.get("canonicalUrl"),
+  );
+  if (!parsedUrl.success) {
+    return {
+      error: parsedUrl.error.issues[0]?.message ?? "URL du site invalide.",
+    };
+  }
+
+  const requestedName = formData.get("name");
   const parsed = SiteCreateSchema.safeParse({
-    name: formData.get("name"),
-    canonicalUrl: formData.get("canonicalUrl"),
+    canonicalUrl: parsedUrl.data,
+    name: deriveSiteDisplayName(
+      parsedUrl.data,
+      typeof requestedName === "string" ? requestedName : null,
+    ),
   });
   if (!parsed.success) {
     return {

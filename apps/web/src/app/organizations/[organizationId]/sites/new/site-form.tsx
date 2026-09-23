@@ -10,48 +10,60 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
   return (
-    <form action={formAction} className="mt-8 space-y-5">
+    <form action={formAction} className="mt-7 space-y-5">
       <label className="block">
         <span className="mb-2 block text-sm font-medium text-white/70">
-          Nom du site
+          URL du site
         </span>
         <input
           autoFocus
           required
-          minLength={2}
-          maxLength={160}
-          name="name"
-          placeholder="Site vitrine"
-          className="am-field"
-        />
-      </label>
-      <label className="block">
-        <span className="mb-2 block text-sm font-medium text-white/70">
-          URL principale
-        </span>
-        <input
-          required
           inputMode="url"
           name="canonicalUrl"
-          placeholder="https://www.exemple.fr"
-          className="am-field"
+          placeholder="https://entreprise.fr"
+          className="am-field text-base"
         />
         <span className="mt-2 block text-xs leading-5 text-white/35">
-          HTTP(S) uniquement, sans paramètres, fragment, identifiants ou port
-          non standard.
+          Analyse non intrusive des éléments publiquement accessibles.
         </span>
       </label>
 
-      <button
-        disabled={pending}
-        className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {pending ? "Lancement…" : "Lancer l’audit public"}
-      </button>
+      <details className="rounded-lg border border-[#242d40] bg-[#0b1019]">
+        <summary className="cursor-pointer list-none px-4 py-3 text-xs font-medium text-[#7f8a9f] [&::-webkit-details-marker]:hidden">
+          Nom personnalisé — facultatif ▾
+        </summary>
+        <div className="border-t border-[#242d40] p-4">
+          <label className="block">
+            <span className="mb-2 block text-xs text-white/45">
+              Nom affiché dans Agency Monitor
+            </span>
+            <input
+              minLength={2}
+              maxLength={160}
+              name="name"
+              placeholder="Par défaut : nom de domaine"
+              className="am-field"
+            />
+          </label>
+        </div>
+      </details>
+
+      <div className="flex flex-wrap items-center gap-4">
+        <button
+          disabled={pending}
+          className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {pending ? "Lancement…" : "Lancer l’audit"}
+        </button>
+        <span className="text-xs text-[#59647a]">
+          Sécurité · Performance · SEO · Réseau · Accessibilité
+        </span>
+      </div>
+
       {state.error ? (
         <p
           aria-live="polite"
-          className="rounded-xl border border-red-300/20 bg-red-300/[0.06] px-4 py-3 text-sm text-red-100"
+          className="rounded-lg border border-red-300/20 bg-red-300/[0.06] px-4 py-3 text-sm text-red-100"
         >
           {state.error}
         </p>

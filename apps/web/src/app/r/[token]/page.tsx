@@ -3,20 +3,22 @@ import { notFound } from "next/navigation";
 import { ProductMark } from "@/components/product-mark";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportCorrelations } from "@/components/report-correlations";
+import { ReportCoverageDetails } from "@/components/report-coverage-details";
+import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
+import { ReportSecurityHttp } from "@/components/report-security-http";
+import { ReportTechnicalDetails } from "@/components/report-technical-details";
+import { ReportScorecard } from "@/components/report-scorecard";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
-  getPriorityFindings,
-  summarizeReportFindings,
-  summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getPublicReportByToken } from "@/lib/public-report-service";
-import {
-  scannerV2CrawlLimitation,
-  scannerV2Quality,
-} from "@/lib/scanner-v2-quality";
+import { scoreReport } from "@/lib/report-score";
+import { buildReportRecommendations } from "@/lib/report-recommendations";
+import { correlateReportSignals } from "@/lib/report-correlations";
 
 export const metadata: Metadata = {
   title: "Rapport de surveillance",
@@ -44,19 +46,6 @@ const severityStyles = {
   critical: "border-[#a44355] bg-[#301017] text-[#ff7185]",
 } as const;
 
-const scannerV2AnalyzerLabels = {
-  crawl: "Crawl",
-  network: "Réseau",
-  performance: "Performance",
-  seo: "SEO",
-} as const;
-
-const scannerV2StatusLabels = {
-  complete: "Complet",
-  partial: "Partiel",
-  unavailable: "Indisponible",
-} as const;
-
 function formatDate(value: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
     dateStyle: "long",
@@ -80,20 +69,16 @@ export default async function PublicReportPage({
     (a, b) => rank[b.severity] - rank[a.severity],
   );
   const findingGroups = groupFindingsForDisplay(findings);
-  const distinctFindings = findingGroups.map((group) => group.primary);
-  const reportSummary = summarizeReportFindings(distinctFindings);
-  const sectionSummaries = summarizeReportSections(distinctFindings);
-  const priorityFindings = getPriorityFindings(distinctFindings, 3);
-  const quality = scannerV2Quality(report.scan.summary);
-  const crawlLimitation = scannerV2CrawlLimitation(report.scan.summary);
-  const hasIncompleteAnalysis =
-    quality !== null &&
-    Object.values(quality).some((status) => status !== "complete");
-  const analysisCoverage = quality
-    ? Object.values(quality).every((status) => status === "complete")
-      ? "Complète"
-      : "Partielle"
-    : "Non mesurée";
+  const scorecard = scoreReport({
+    summary: report.scan.summary,
+    findings,
+  });
+  const hasIncompleteAnalysis = scorecard.coverage !== "complete";
+  const recommendations = buildReportRecommendations(findings, scorecard, 5);
+  const correlations = correlateReportSignals({
+    summary: report.scan.summary,
+    findings,
+  });
 
   return (
     <main className="min-h-screen">
@@ -106,7 +91,7 @@ export default async function PublicReportPage({
         </div>
       </header>
 
-      <div className="mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14">
+      <div className="report-print-scope mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14">
         <section className="grid gap-8 border-b border-[#242d40] pb-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <p
@@ -134,7 +119,7 @@ export default async function PublicReportPage({
 
         {report.scan.scanMode === "public_audit" ? (
           <section className="border-b border-[#242d40] py-8">
-            <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+            <div className="report-public-scope border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
               <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                 Portée de l’audit
               </p>
@@ -151,34 +136,16 @@ export default async function PublicReportPage({
           </section>
         ) : null}
 
-        <section className="py-8">
-          <div className="am-metric-grid">
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Pages observées</p>
-              <p className="am-metric-value">{report.scan.pageCount}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Problèmes distincts</p>
-              <p className="am-metric-value">{findingGroups.length}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Occurrences</p>
-              <p className="am-metric-value">{findings.length}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Hauts / critiques</p>
-              <p className="am-metric-value">{reportSummary.highOrCritical}</p>
-            </div>
-            <div className="am-metric-cell">
-              <p className="am-metric-label">Couverture</p>
-              <p className="mt-2 text-sm font-medium text-[#d5dbe7]">
-                {analysisCoverage}
-              </p>
-            </div>
-          </div>
-        </section>
+        <ReportScorecard
+          scorecard={scorecard}
+          distinctProblems={findingGroups.length}
+          occurrences={findings.length}
+          pageCount={report.scan.pageCount}
+        />
 
-        {priorityFindings.length > 0 ? (
+        <ReportRecommendationCounts counts={recommendations.counts} />
+
+        {recommendations.priorities.length > 0 ? (
           <section className="border-t border-[#242d40] py-9">
             <p className="am-kicker">Priorités</p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
@@ -189,18 +156,20 @@ export default async function PublicReportPage({
               avec une lecture orientée impact et intervention.
             </p>
             <div className="mt-6 grid gap-4 lg:grid-cols-3">
-              {priorityFindings.map((finding, index) => {
+              {recommendations.priorities.map((group, index) => {
+                const finding = group.primary;
                 const businessContext = getFindingBusinessContext(finding);
                 return (
                   <article
-                    key={`${finding.fingerprint}:priority`}
-                    className="border border-[#242d40] bg-[#0d111a] p-5"
+                    key={group.key}
+                    className="report-priority-card border border-[#242d40] bg-[#0d111a] p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className="font-mono text-xs text-[#56627a]">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <span
+                        data-severity={finding.severity}
                         className={
                           "h-fit rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
                           severityStyles[finding.severity]
@@ -236,98 +205,9 @@ export default async function PublicReportPage({
           </section>
         ) : null}
 
-        {sectionSummaries.length > 0 ? (
-          <section className="border-t border-[#242d40] py-9">
-            <p className="am-kicker">Analyse par domaine</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-              Où concentrer l’attention
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
-              Les constats sont regroupés pour séparer les enjeux de sécurité,
-              visibilité, performance et disponibilité.
-            </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {sectionSummaries.map((section) => (
-                <article
-                  key={section.definition.key}
-                  className="border border-[#242d40] bg-[#0d111a] p-5"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold">
-                      {section.definition.label}
-                    </h3>
-                    {section.highestSeverity ? (
-                      <span
-                        className={
-                          "rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] " +
-                          severityStyles[section.highestSeverity]
-                        }
-                      >
-                        {severityLabels[section.highestSeverity]}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-[#7f8a9f]">
-                    {section.definition.description}
-                  </p>
-                  <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
-                    <div>
-                      <dt className="text-[#647188]">Problèmes distincts</dt>
-                      <dd className="mt-1 text-lg font-semibold">
-                        {section.total}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[#647188]">Hauts / critiques</dt>
-                      <dd className="mt-1 text-lg font-semibold">
-                        {section.highOrCritical}
-                      </dd>
-                    </div>
-                  </dl>
-                </article>
-              ))}
-            </div>
-          </section>
-        ) : null}
+        <ReportSecurityHttp summary={report.scan.summary} />
 
-        {quality ? (
-          <section className="border-t border-[#242d40] py-9">
-            <p className="am-kicker">Qualité de l’analyse</p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-              Couverture Scanner V2
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
-              Un état partiel ou indisponible décrit la qualité de collecte. Il
-              ne transforme pas le scan en échec.
-            </p>
-            {crawlLimitation ? (
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-[#d4b27b]">
-                {crawlLimitation === "robots-restricted"
-                  ? "Le fichier robots.txt limite volontairement la couverture du crawl."
-                  : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
-              </p>
-            ) : null}
-            <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Object.entries(quality).map(([analyzer, status]) => (
-                <div
-                  key={analyzer}
-                  className="border border-[#242d40] bg-[#0d111a] p-4"
-                >
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
-                    {
-                      scannerV2AnalyzerLabels[
-                        analyzer as keyof typeof scannerV2AnalyzerLabels
-                      ]
-                    }
-                  </dt>
-                  <dd className="mt-2 text-sm font-semibold text-[#d5dbe7]">
-                    {scannerV2StatusLabels[status]}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-        ) : null}
+        <ReportCorrelations correlations={correlations} />
 
         {counts ? (
           <section className="border-t border-[#242d40] py-9">
@@ -375,8 +255,12 @@ export default async function PublicReportPage({
         ) : null}
 
         {findingGroups.length > 0 ? (
-          <ReportActionPlan groups={findingGroups} />
+          <ReportActionPlan groups={recommendations.groups} />
         ) : null}
+
+        <ReportCoverageDetails summary={report.scan.summary} />
+
+        <ReportTechnicalDetails summary={report.scan.summary} />
 
         <section className="border-t border-[#242d40] py-9">
           <div className="flex items-end justify-between gap-4">
@@ -414,7 +298,7 @@ export default async function PublicReportPage({
                 return (
                   <article
                     key={group.key}
-                    className="border border-[#242d40] bg-[#0d111a] p-5 sm:p-6"
+                    className="report-finding-card border border-[#242d40] bg-[#0d111a] p-5 sm:p-6"
                   >
                     <div className="grid gap-4 sm:grid-cols-[42px_1fr_auto]">
                       <span className="font-mono text-xs text-[#56627a]">
@@ -439,6 +323,7 @@ export default async function PublicReportPage({
                         ) : null}
                       </div>
                       <span
+                        data-severity={finding.severity}
                         className={
                           "h-fit rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
                           severityStyles[finding.severity]
@@ -474,7 +359,7 @@ export default async function PublicReportPage({
                     </dl>
 
                     {remediation ? (
-                      <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                      <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
                         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
                           Comment corriger
                         </p>
