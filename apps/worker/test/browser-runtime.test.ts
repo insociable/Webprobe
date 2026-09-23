@@ -23,6 +23,12 @@ describe("isolated browser runtime", () => {
     expect(isAllowedBrowserRequest("https://example.com/api", "POST")).toBe(
       false,
     );
+    expect(isAllowedBrowserRequest("https://example.com/api", "PUT")).toBe(
+      false,
+    );
+    expect(isAllowedBrowserRequest("https://example.com/api", "PATCH")).toBe(
+      false,
+    );
     expect(isAllowedBrowserRequest("https://example.com/api", "DELETE")).toBe(
       false,
     );
@@ -50,6 +56,13 @@ describe("isolated browser runtime", () => {
 
   it("forces Chromium through the local safe proxy with direct DNS disabled", async () => {
     let launchOptions: LaunchOptions | undefined;
+    let contextOptions:
+      | {
+          userAgent?: string;
+          acceptDownloads?: boolean;
+          serviceWorkers?: string;
+        }
+      | undefined;
     let onPage: ((page: Page) => void) | undefined;
     let contextClosed = false;
     let browserClosed = false;
@@ -85,7 +98,14 @@ describe("isolated browser runtime", () => {
     } as unknown as BrowserContext;
 
     const fakeBrowser = {
-      newContext: async () => fakeContext,
+      newContext: async (options: {
+        userAgent?: string;
+        acceptDownloads?: boolean;
+        serviceWorkers?: string;
+      }) => {
+        contextOptions = options;
+        return fakeContext;
+      },
       close: async () => {
         browserClosed = true;
       },
@@ -102,6 +122,11 @@ describe("isolated browser runtime", () => {
     expect(launchOptions?.proxy?.server).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect(launchOptions?.proxy?.bypass).toBe("");
     expect(launchOptions?.chromiumSandbox).toBe(true);
+    expect(contextOptions).toMatchObject({
+      acceptDownloads: false,
+      serviceWorkers: "block",
+      userAgent: "AgencyMonitor/1.0",
+    });
     expect(launchOptions?.args).toEqual(
       expect.arrayContaining([
         "--disable-quic",

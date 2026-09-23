@@ -38,6 +38,14 @@ export type IsolatedBrowserSession = {
 };
 
 const allowedBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const defaultBrowserUserAgent = "AgencyMonitor/1.0";
+
+function browserUserAgent(): string {
+  const configured = process.env.AGENCY_MONITOR_USER_AGENT?.trim();
+  return configured && configured.length <= 200
+    ? configured
+    : defaultBrowserUserAgent;
+}
 
 const chromiumSafetyArgs = [
   "--disable-background-networking",
@@ -144,6 +152,7 @@ export async function createIsolatedBrowserSession(
       ignoreHTTPSErrors: false,
       javaScriptEnabled: true,
       serviceWorkers: "block",
+      userAgent: browserUserAgent(),
     });
     context.setDefaultNavigationTimeout(navigationTimeoutMs);
     context.setDefaultTimeout(navigationTimeoutMs);
