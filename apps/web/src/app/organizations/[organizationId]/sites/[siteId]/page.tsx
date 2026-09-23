@@ -223,6 +223,33 @@ export default async function SitePage({
         </div>
       </section>
 
+      {history.site.status === "pending_verification" ? (
+        <section className="mt-7 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+            Monitoring verrouillé
+          </p>
+          <h2 className="mt-2 text-lg font-semibold">
+            La vérification DNS débloque le suivi continu
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
+            Tant que le domaine n’est pas vérifié, Agency Monitor reste en audit
+            public one-shot. La validation active ensuite le planning, les
+            alertes de monitoring et le partage de rapports. Les audits publics
+            déjà réalisés restent conservés et distincts du monitoring.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {["Planning", "Alertes", "Partage de rapports"].map((item) => (
+              <span
+                key={item}
+                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aeb9cc]"
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {audit === "deferred" ? (
         <section className="mt-7 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
           <p className="font-semibold text-amber-100">Site créé.</p>

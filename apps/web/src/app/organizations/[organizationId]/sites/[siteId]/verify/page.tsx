@@ -113,6 +113,44 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           ))}
         </div>
 
+        <section className="mb-8">
+          <p className="am-kicker">Après vérification</p>
+          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+            Ce que le contrôle du domaine débloque
+          </h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              [
+                "Monitoring continu",
+                "Scans de monitoring manuels et planning hebdomadaire sur le domaine vérifié.",
+              ],
+              [
+                "Alertes",
+                "Notifications sur les incidents et rétablissements observés par le monitoring.",
+              ],
+              [
+                "Partage de rapports",
+                "Liens temporaires et envoi de rapports lorsque le domaine a été vérifié.",
+              ],
+              [
+                "Historique conservé",
+                "Les audits publics passés restent visibles et leurs comparaisons restent séparées du monitoring.",
+              ],
+            ].map(([title, detail]) => (
+              <article key={title} className="am-panel-soft p-5">
+                <h3 className="font-semibold">{title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#7f8a9f]">
+                  {detail}
+                </p>
+              </article>
+            ))}
+          </div>
+          <p className="mt-4 border-l-2 border-[#40506d] pl-4 text-xs leading-5 text-[#68758c]">
+            La vérification n’altère pas les audits déjà réalisés : elle
+            autorise les futurs scans de monitoring et leurs propres baselines.
+          </p>
+        </section>
+
         <VerificationPanel
           organizationId={organizationId}
           siteId={siteId}
