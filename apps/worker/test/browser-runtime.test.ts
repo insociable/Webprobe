@@ -20,6 +20,26 @@ describe("isolated browser runtime", () => {
   it("allows only idempotent HTTP(S) requests and local data/blob URLs", () => {
     expect(isAllowedBrowserRequest("https://example.com/", "GET")).toBe(true);
     expect(isAllowedBrowserRequest("http://example.com/", "HEAD")).toBe(true);
+    expect(
+      isAllowedBrowserRequest(
+        "https://example.com/preflight",
+        "OPTIONS",
+        "verified_monitoring",
+      ),
+    ).toBe(true);
+    expect(
+      isAllowedBrowserRequest(
+        "https://example.com/preflight",
+        "OPTIONS",
+        "public_audit",
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedBrowserRequest("https://example.com/", "GET", "public_audit"),
+    ).toBe(true);
+    expect(
+      isAllowedBrowserRequest("https://example.com/", "HEAD", "public_audit"),
+    ).toBe(true);
     expect(isAllowedBrowserRequest("https://example.com/api", "POST")).toBe(
       false,
     );

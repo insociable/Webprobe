@@ -70,6 +70,7 @@ export async function processScanJobAttempt(
 
   if (httpProbe.ok && isHtmlDocument(httpProbe)) {
     browserScan = await runBrowserScan(context.targetUrl, {
+      scanMode: context.scanMode,
       maxPages: payload.profile.maxPages,
       navigationTimeoutMs: payload.profile.navigationTimeoutMs,
       checkAccessibility: payload.profile.checkAccessibility,

@@ -122,6 +122,63 @@ describeIntegration("scan dispatch transactional outbox", () => {
     }
   });
 
+  it("dispatches an unverified public audit with the bounded public profile", async () => {
+    const { db } = getDatabase();
+    const organizationId = randomUUID();
+    const siteId = randomUUID();
+
+    await db.insert(organizations).values({
+      id: organizationId,
+      name: "Public audit dispatch test",
+    });
+    await db.insert(sites).values({
+      id: siteId,
+      organizationId,
+      name: "Unverified public target",
+      canonicalUrl: "https://public.example/",
+      status: "pending_verification",
+    });
+    const [scan] = await db
+      .insert(scans)
+      .values({
+        organizationId,
+        siteId,
+        trigger: "manual",
+        scanMode: "public_audit",
+        status: "queued",
+      })
+      .returning({ id: scans.id });
+    if (!scan) throw new Error("public audit scan creation failed");
+
+    await db.insert(scanDispatches).values({
+      scanId: scan.id,
+      nextAttemptAt: new Date(0),
+    });
+
+    const delivered: ScanJob[] = [];
+    try {
+      const result = await dispatchDueScanJobs(async (payload) => {
+        delivered.push(payload);
+      });
+
+      expect(result).toMatchObject({
+        attempted: 1,
+        dispatched: 1,
+        deferred: 0,
+        cancelled: 0,
+      });
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]?.profile).toMatchObject({
+        maxPages: 15,
+        navigationTimeoutMs: 20_000,
+        checkAccessibility: true,
+        captureScreenshots: true,
+      });
+    } finally {
+      await deleteFixture(organizationId);
+    }
+  });
+
   it("survives BullMQ acceptance followed by a lost response without duplicate work", async () => {
     const fixture = await createFixture();
     const queue = new Queue<ScanJob>(SCAN_QUEUE_NAME, {

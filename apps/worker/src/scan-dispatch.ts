@@ -11,6 +11,7 @@ export type ClaimedScanDispatch = {
   scanId: string;
   organizationId: string;
   siteId: string;
+  scanMode: "public_audit" | "verified_monitoring";
   targetUrl: string;
   attemptCount: number;
 };
@@ -65,6 +66,7 @@ export async function claimDueScanDispatches(
         siteId: scans.siteId,
         scanStatus: scans.status,
         scanTrigger: scans.trigger,
+        scanMode: scans.scanMode,
         scheduleId: scans.scheduleId,
         targetUrl: sites.canonicalUrl,
         siteStatus: sites.status,
@@ -129,7 +131,16 @@ export async function claimDueScanDispatches(
         row.scanTrigger === "scheduled" &&
         (!row.scheduleId || row.scheduleEnabled !== true);
 
-      if (row.siteStatus !== "active" || !row.verifiedAt || invalidSchedule) {
+      const invalidSite =
+        row.scanMode === "verified_monitoring"
+          ? row.siteStatus !== "active" || !row.verifiedAt
+          : row.siteStatus !== "pending_verification" &&
+            row.siteStatus !== "active";
+      const invalidMode =
+        row.scanTrigger === "scheduled" &&
+        row.scanMode !== "verified_monitoring";
+
+      if (invalidSite || invalidMode || invalidSchedule) {
         await tx
           .update(scans)
           .set({
@@ -170,6 +181,7 @@ export async function claimDueScanDispatches(
         scanId: row.scanId,
         organizationId: row.organizationId,
         siteId: row.siteId,
+        scanMode: row.scanMode,
         targetUrl: row.targetUrl,
         attemptCount,
       });
@@ -247,6 +259,15 @@ export async function dispatchDueScanJobs(
       organizationId: dispatch.organizationId,
       siteId: dispatch.siteId,
       targetUrl: dispatch.targetUrl,
+      profile:
+        dispatch.scanMode === "public_audit"
+          ? {
+              maxPages: 15,
+              navigationTimeoutMs: 20_000,
+              checkAccessibility: true,
+              captureScreenshots: true,
+            }
+          : undefined,
     });
 
     try {

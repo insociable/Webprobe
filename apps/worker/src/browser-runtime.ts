@@ -26,6 +26,7 @@ export type BrowserRuntimeOptions = {
   resolver?: DnsResolver;
   navigationTimeoutMs?: number;
   maxPages?: number;
+  scanMode?: "public_audit" | "verified_monitoring";
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
 };
 
@@ -37,7 +38,8 @@ export type IsolatedBrowserSession = {
   close(): Promise<void>;
 };
 
-const allowedBrowserMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const verifiedMonitoringMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const publicAuditMethods = new Set(["GET", "HEAD"]);
 const defaultBrowserUserAgent = "AgencyMonitor/1.0";
 
 function browserUserAgent(): string {
@@ -74,6 +76,7 @@ function boundedMaxPages(value?: number): number {
 export function isAllowedBrowserRequest(
   rawUrl: string,
   method: string,
+  scanMode: "public_audit" | "verified_monitoring" = "verified_monitoring",
 ): boolean {
   let protocol: string;
   try {
@@ -86,9 +89,13 @@ export function isAllowedBrowserRequest(
     return true;
   }
 
+  const allowedMethods =
+    scanMode === "public_audit"
+      ? publicAuditMethods
+      : verifiedMonitoringMethods;
   return (
     (protocol === "http:" || protocol === "https:") &&
-    allowedBrowserMethods.has(method.toUpperCase())
+    allowedMethods.has(method.toUpperCase())
   );
 }
 
@@ -115,6 +122,7 @@ export async function createIsolatedBrowserSession(
   options: BrowserRuntimeOptions = {},
 ): Promise<IsolatedBrowserSession> {
   const resolver = options.resolver ?? defaultDnsResolver;
+  const scanMode = options.scanMode ?? "verified_monitoring";
   const navigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
   );
@@ -167,7 +175,7 @@ export async function createIsolatedBrowserSession(
 
     await context.route("**/*", async (route) => {
       const request = route.request();
-      if (isAllowedBrowserRequest(request.url(), request.method())) {
+      if (isAllowedBrowserRequest(request.url(), request.method(), scanMode)) {
         await route.continue();
         return;
       }

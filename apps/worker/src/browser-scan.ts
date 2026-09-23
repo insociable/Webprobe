@@ -87,6 +87,7 @@ export type ScannerV2Completeness = {
 
 export type BrowserScanOptions = {
   resolver?: DnsResolver;
+  scanMode?: "public_audit" | "verified_monitoring";
   maxPages?: number;
   navigationTimeoutMs?: number;
   scanTimeoutMs?: number;
@@ -356,6 +357,7 @@ export async function runBrowserScan(
   options: BrowserScanOptions = {},
 ): Promise<BrowserScanResult> {
   const resolver = options.resolver ?? defaultDnsResolver;
+  const scanMode = options.scanMode ?? "verified_monitoring";
   const maxPages = boundedCrawlPages(options.maxPages);
   const navigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
@@ -385,6 +387,7 @@ export async function runBrowserScan(
   const initialCandidate = initialCandidateResult.candidate;
   const session = await createSession({
     resolver,
+    scanMode,
     maxPages: 1,
     navigationTimeoutMs,
   });
