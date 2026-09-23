@@ -48,6 +48,18 @@ export function canResolveFindingFromSummary(
   );
 }
 
+export function canCompareNewFinding(
+  previousSummary: unknown,
+  _category: string,
+  code: string,
+): boolean {
+  const analyzer = scannerV2AnalyzerForFindingCode(code);
+  if (!analyzer) return true;
+  return (
+    scannerV2AnalyzerStatusFromSummary(previousSummary, analyzer) === "complete"
+  );
+}
+
 export function canCompareMissingFinding(
   code: string,
   currentSummary: unknown,

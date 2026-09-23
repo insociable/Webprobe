@@ -23,8 +23,8 @@ export class ManualScanError extends Error {
   }
 }
 
-const manualScanSiteHourlyLimit = 6;
-const manualScanOrganizationDailyLimit = 60;
+const manualScanSiteHourlyLimit = 3;
+const manualScanOrganizationDailyLimit = 30;
 
 export async function createManualScanForSite(
   userId: string,

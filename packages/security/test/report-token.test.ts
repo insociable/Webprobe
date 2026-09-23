@@ -3,6 +3,8 @@ import {
   decryptReportShareToken,
   encryptReportShareToken,
   generateReportShareToken,
+  getReportPublicBaseUrl,
+  getReportTokenSecret,
   hashReportShareToken,
   isReportShareToken,
 } from "../src/index.js";
@@ -10,6 +12,47 @@ import {
 const secret = "test-report-token-secret-that-is-long-enough";
 
 describe("report share token protection", () => {
+  it("requires dedicated report credentials and HTTPS in production", () => {
+    const authSecret = "a".repeat(32);
+    expect(() =>
+      getReportTokenSecret({
+        NODE_ENV: "production",
+        BETTER_AUTH_SECRET: authSecret,
+      }),
+    ).toThrow();
+    expect(() =>
+      getReportTokenSecret({
+        NODE_ENV: "production",
+        BETTER_AUTH_SECRET: authSecret,
+        REPORT_TOKEN_SECRET: authSecret,
+      }),
+    ).toThrow();
+    expect(
+      getReportTokenSecret({
+        NODE_ENV: "production",
+        BETTER_AUTH_SECRET: authSecret,
+        REPORT_TOKEN_SECRET: "b".repeat(32),
+      }),
+    ).toBe("b".repeat(32));
+    expect(() =>
+      getReportPublicBaseUrl({
+        NODE_ENV: "production",
+        REPORT_PUBLIC_BASE_URL: "http://example.com",
+      }),
+    ).toThrow();
+    expect(
+      getReportPublicBaseUrl({
+        NODE_ENV: "production",
+        REPORT_PUBLIC_BASE_URL: "https://example.com/",
+      }),
+    ).toBe("https://example.com");
+    expect(() =>
+      getReportPublicBaseUrl({
+        NODE_ENV: "production",
+        REPORT_PUBLIC_BASE_URL: "https://example.com/report",
+      }),
+    ).toThrow();
+  });
   it("generates unguessable fixed-shape tokens and hashes them", () => {
     const first = generateReportShareToken();
     const second = generateReportShareToken();

@@ -20,6 +20,21 @@ function finding(
 }
 
 describe("scan degradation detection", () => {
+  it("does not alert on first V2 evidence against a legacy baseline", () => {
+    const result = detectScanDegradations(
+      [
+        finding({
+          category: "network",
+          code: "network.http-5xx",
+          fingerprint: "network-new",
+          severity: "high",
+        }),
+      ],
+      [],
+      null,
+    );
+    expect(result).toEqual([]);
+  });
   it("alerts on new medium/high/critical findings only", () => {
     const result = detectScanDegradations(
       [
