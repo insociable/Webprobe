@@ -8,6 +8,7 @@ import type {
   Response,
 } from "playwright";
 import {
+  createIsolatedBrowserSession,
   isAllowedBrowserRequest,
   observeBrowserTarget,
 } from "../src/browser-runtime.js";
@@ -57,6 +58,138 @@ describe("isolated browser runtime", () => {
     expect(isAllowedBrowserRequest("blob:https://example.com/id", "GET")).toBe(
       true,
     );
+  });
+
+  it("enforces public audit request budgets and blocks OPTIONS, WebSocket, and downloads", async () => {
+    let routeHandler: ((route: any) => Promise<void>) | undefined;
+    let webSocketHandler: ((webSocket: any) => void) | undefined;
+    let pageHandler: ((page: any) => void) | undefined;
+    let downloadHandler: ((download: any) => void) | undefined;
+
+    const fakeContext = {
+      setDefaultNavigationTimeout: () => undefined,
+      setDefaultTimeout: () => undefined,
+      on: (event: string, handler: (page: any) => void) => {
+        if (event === "page") pageHandler = handler;
+        return fakeContext;
+      },
+      route: async (
+        _pattern: string,
+        handler: (route: any) => Promise<void>,
+      ) => {
+        routeHandler = handler;
+      },
+      routeWebSocket: async (
+        _pattern: unknown,
+        handler: (webSocket: any) => void,
+      ) => {
+        webSocketHandler = handler;
+      },
+      close: async () => undefined,
+    } as unknown as BrowserContext;
+
+    const fakeBrowser = {
+      newContext: async () => fakeContext,
+      close: async () => undefined,
+    } as unknown as Browser;
+
+    const session = await createIsolatedBrowserSession({
+      resolver: publicResolver,
+      scanMode: "public_audit",
+      maxRequests: 3,
+      maxRequestsPerHostname: 2,
+      launchBrowser: async () => fakeBrowser,
+    });
+
+    const invokeRoute = async (
+      url: string,
+      method = "GET",
+      resourceType = "image",
+    ) => {
+      let continued = 0;
+      let aborted = 0;
+      const route = {
+        request: () => ({
+          url: () => url,
+          method: () => method,
+          resourceType: () => resourceType,
+          isNavigationRequest: () => resourceType === "document",
+          redirectedFrom: () => null,
+        }),
+        continue: async () => {
+          continued += 1;
+        },
+        abort: async () => {
+          aborted += 1;
+        },
+      };
+      if (!routeHandler) throw new Error("Route handler not installed");
+      await routeHandler(route);
+      return { continued, aborted };
+    };
+
+    try {
+      expect(
+        await invokeRoute("https://a.example/preflight", "OPTIONS", "xhr"),
+      ).toEqual({ continued: 0, aborted: 1 });
+      expect(await invokeRoute("https://a.example/1")).toEqual({
+        continued: 1,
+        aborted: 0,
+      });
+      expect(await invokeRoute("https://a.example/2")).toEqual({
+        continued: 1,
+        aborted: 0,
+      });
+      expect(await invokeRoute("https://a.example/3")).toEqual({
+        continued: 0,
+        aborted: 1,
+      });
+      expect(await invokeRoute("https://b.example/1")).toEqual({
+        continued: 1,
+        aborted: 0,
+      });
+      expect(await invokeRoute("https://c.example/1")).toEqual({
+        continued: 0,
+        aborted: 1,
+      });
+
+      expect(session.requestBudget?.()).toEqual({
+        total: 3,
+        blocked: 2,
+        exhausted: true,
+        byHostname: {
+          "a.example": 2,
+          "b.example": 1,
+        },
+      });
+
+      let webSocketClosed = 0;
+      webSocketHandler?.({
+        close: () => {
+          webSocketClosed += 1;
+        },
+      });
+      expect(webSocketClosed).toBe(1);
+
+      const fakeOpenedPage = {
+        on: (event: string, handler: (download: any) => void) => {
+          if (event === "download") downloadHandler = handler;
+          return fakeOpenedPage;
+        },
+        close: async () => undefined,
+      };
+      pageHandler?.(fakeOpenedPage);
+      let downloadCancelled = 0;
+      downloadHandler?.({
+        cancel: async () => {
+          downloadCancelled += 1;
+        },
+      });
+      await Promise.resolve();
+      expect(downloadCancelled).toBe(1);
+    } finally {
+      await session.close();
+    }
   });
 
   it("rejects private targets before launching Chromium", async () => {
