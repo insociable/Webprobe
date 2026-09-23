@@ -12,18 +12,24 @@ import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
   getFindingDisplayTitle,
-  getPriorityFindings,
   summarizeReportFindings,
-  summarizeReportSections,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
+import { scoreReport } from "@/lib/report-score";
+import { buildReportRecommendations } from "@/lib/report-recommendations";
+import { correlateReportSignals } from "@/lib/report-correlations";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
-import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { ReportActionPlan } from "@/components/report-action-plan";
+import { ReportCorrelations } from "@/components/report-correlations";
+import { ReportCoverageDetails } from "@/components/report-coverage-details";
+import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
+import { ReportSecurityHttp } from "@/components/report-security-http";
+import { ReportTechnicalDetails } from "@/components/report-technical-details";
+import { ReportScorecard } from "@/components/report-scorecard";
 import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
@@ -140,62 +146,6 @@ function visibleEvidence(
   });
 }
 
-type ScannerV2AnalyzerStatus = "complete" | "partial" | "unavailable";
-
-const scannerV2AnalyzerLabels = {
-  crawl: "Crawl",
-  network: "Réseau",
-  performance: "Performance",
-  seo: "SEO",
-} as const;
-
-const scannerV2StatusLabels: Record<ScannerV2AnalyzerStatus, string> = {
-  complete: "Complet",
-  partial: "Partiel",
-  unavailable: "Indisponible",
-};
-
-function scannerV2Quality(
-  summary: Record<string, unknown>,
-): Record<
-  keyof typeof scannerV2AnalyzerLabels,
-  ScannerV2AnalyzerStatus
-> | null {
-  const scannerV2 = summary.scannerV2;
-  if (typeof scannerV2 !== "object" || scannerV2 === null) {
-    return null;
-  }
-
-  const completeness = (scannerV2 as { completeness?: unknown }).completeness;
-  if (typeof completeness !== "object" || completeness === null) {
-    return null;
-  }
-
-  const result = {} as Record<
-    keyof typeof scannerV2AnalyzerLabels,
-    ScannerV2AnalyzerStatus
-  >;
-  for (const analyzer of Object.keys(scannerV2AnalyzerLabels) as Array<
-    keyof typeof scannerV2AnalyzerLabels
-  >) {
-    const value = (completeness as Record<string, unknown>)[analyzer];
-    const status =
-      typeof value === "object" && value !== null
-        ? (value as { status?: unknown }).status
-        : null;
-    if (
-      status !== "complete" &&
-      status !== "partial" &&
-      status !== "unavailable"
-    ) {
-      return null;
-    }
-    result[analyzer] = status;
-  }
-
-  return result;
-}
-
 async function loadScan(
   userId: string,
   organizationId: string,
@@ -243,18 +193,20 @@ export default async function ScanPage({ params }: ScanPageProps) {
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const distinctFindings = findingGroups.map((group) => group.primary);
   const reportSummary = summarizeReportFindings(distinctFindings);
-  const sectionSummaries = summarizeReportSections(distinctFindings);
-  const priorityFindings = getPriorityFindings(distinctFindings, 3);
   const comparison = details.comparison;
-  const scannerV2QualityState = scannerV2Quality(details.scan.summary);
-  const crawlLimitation = scannerV2CrawlLimitation(details.scan.summary);
-  const analysisCoverage = scannerV2QualityState
-    ? Object.values(scannerV2QualityState).every(
-        (status) => status === "complete",
-      )
-      ? "Complète"
-      : "Partielle"
-    : "Non mesurée";
+  const scorecard = scoreReport({
+    summary: details.scan.summary,
+    findings: orderedFindings,
+  });
+  const recommendations = buildReportRecommendations(
+    orderedFindings,
+    scorecard,
+    5,
+  );
+  const correlations = correlateReportSignals({
+    summary: details.scan.summary,
+    findings: orderedFindings,
+  });
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -399,26 +351,46 @@ export default async function ScanPage({ params }: ScanPageProps) {
                 ? "Étape 1 sur 3 · le scan attend un worker disponible. Aucun trafic vers la cible n’est encore nécessaire."
                 : "Étape 2 sur 3 · navigation bornée, collecte et analyses sont en cours. Le rapport sera généré à la fin de cette étape."}
             </p>
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div
-                className={
-                  "h-full animate-pulse rounded-full bg-sky-300/70 " +
-                  (details.scan.status === "queued" ? "w-1/3" : "w-2/3")
-                }
-              />
-            </div>
-            <div className="mt-2 flex justify-between font-mono text-[9px] uppercase tracking-[0.1em] text-white/30">
-              <span>File</span>
-              <span>Collecte</span>
-              <span>Rapport</span>
-            </div>
+            <ol className="mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                {
+                  label: "Préparation",
+                  state: details.scan.status === "queued" ? "active" : "done",
+                },
+                {
+                  label: "Analyse bornée",
+                  state:
+                    details.scan.status === "running" ? "active" : "upcoming",
+                },
+                { label: "Génération du rapport", state: "upcoming" },
+              ].map((step) => (
+                <li
+                  key={step.label}
+                  className={
+                    "rounded-md border px-3 py-2 text-xs " +
+                    (step.state === "done"
+                      ? "border-emerald-400/25 bg-emerald-400/[0.05] text-emerald-100"
+                      : step.state === "active"
+                        ? "border-sky-300/30 bg-sky-300/[0.06] text-sky-100"
+                        : "border-white/10 bg-black/10 text-white/35")
+                  }
+                >
+                  {step.state === "done"
+                    ? "✓ "
+                    : step.state === "active"
+                      ? "• "
+                      : ""}
+                  {step.label}
+                </li>
+              ))}
+            </ol>
           </div>
         ) : null}
       </section>
 
       {details.scan.scanMode === "public_audit" ? (
         <section className="border-b border-[#242d40] py-8">
-          <div className="border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+          <div className="report-public-scope border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
               Portée de l’audit
             </p>
@@ -437,71 +409,33 @@ export default async function ScanPage({ params }: ScanPageProps) {
       ) : null}
 
       {details.scan.status === "completed" ? (
-        <section className="border-b border-[#242d40] py-10">
-          <p className="am-kicker">Résumé exécutif</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-            Les points à retenir
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
-            Vue synthétique destinée à prioriser les actions sans masquer les
-            limites de collecte du scan.
-          </p>
-          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Problèmes distincts
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {reportSummary.total}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Occurrences
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {orderedFindings.length}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Hauts / critiques
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {reportSummary.highOrCritical}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Pages observées
-              </dt>
-              <dd className="mt-2 text-2xl font-semibold">
-                {details.scan.pageCount}
-              </dd>
-            </div>
-            <div className="am-panel-soft p-4">
-              <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                Couverture
-              </dt>
-              <dd className="mt-2 text-lg font-semibold">{analysisCoverage}</dd>
-            </div>
-          </dl>
-        </section>
+        <ReportScorecard
+          scorecard={scorecard}
+          distinctProblems={reportSummary.total}
+          occurrences={orderedFindings.length}
+          pageCount={details.scan.pageCount}
+        />
       ) : null}
 
-      {details.scan.status === "completed" && priorityFindings.length > 0 ? (
+      {details.scan.status === "completed" ? (
+        <ReportRecommendationCounts counts={recommendations.counts} />
+      ) : null}
+
+      {details.scan.status === "completed" &&
+      recommendations.priorities.length > 0 ? (
         <section className="border-b border-[#242d40] py-10">
           <p className="am-kicker">Priorités</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
             À traiter en premier
           </h2>
           <div className="mt-6 grid gap-4 lg:grid-cols-3">
-            {priorityFindings.map((finding, index) => {
+            {recommendations.priorities.map((group, index) => {
+              const finding = group.primary;
               const businessContext = getFindingBusinessContext(finding);
               return (
                 <article
-                  key={`${finding.fingerprint}:priority`}
-                  className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
+                  key={group.key}
+                  className="report-priority-card rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="font-mono text-xs text-[#56627a]">
@@ -544,57 +478,12 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {details.scan.status === "completed" && sectionSummaries.length > 0 ? (
-        <section className="border-b border-[#242d40] py-10">
-          <p className="am-kicker">Analyse par domaine</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
-            Où concentrer l’attention
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/45">
-            Les constats sont regroupés par domaine pour distinguer rapidement
-            sécurité, visibilité, performance et disponibilité.
-          </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {sectionSummaries.map((section) => (
-              <article
-                key={section.definition.key}
-                className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-semibold">{section.definition.label}</h3>
-                  {section.highestSeverity ? (
-                    <span
-                      data-severity={section.highestSeverity}
-                      className={
-                        "rounded-md border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.1em] " +
-                        severityStyles[section.highestSeverity]
-                      }
-                    >
-                      {severityLabels[section.highestSeverity]}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-2 text-sm leading-6 text-white/45">
-                  {section.definition.description}
-                </p>
-                <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
-                  <div>
-                    <dt className="text-white/30">Problèmes distincts</dt>
-                    <dd className="mt-1 text-lg font-semibold text-white/80">
-                      {section.total}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-white/30">Hauts / critiques</dt>
-                    <dd className="mt-1 text-lg font-semibold text-white/80">
-                      {section.highOrCritical}
-                    </dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
-          </div>
-        </section>
+      {details.scan.status === "completed" ? (
+        <ReportSecurityHttp summary={details.scan.summary} />
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportCorrelations correlations={correlations} />
       ) : null}
 
       {details.scan.status === "failed" ||
@@ -667,43 +556,6 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {scannerV2QualityState ? (
-        <section className="border-b border-white/10 py-10">
-          <p className="text-sm text-white/45">Qualité de l’analyse</p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-            Couverture Scanner V2
-          </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/40">
-            Un analyseur partiel signifie que ses résultats restent
-            exploitables, mais que certaines observations n’ont pas pu être
-            collectées. Cela ne transforme pas le scan en échec.
-          </p>
-          {crawlLimitation ? (
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-amber-200/70">
-              {crawlLimitation === "robots-restricted"
-                ? "Le fichier robots.txt limite volontairement les pages que l’audit public peut parcourir."
-                : "La politique robots.txt n’a pas pu être déterminée de façon fiable ; le crawl profond a été arrêté par précaution."}
-            </p>
-          ) : null}
-          <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {(
-              Object.entries(scannerV2QualityState) as Array<
-                [keyof typeof scannerV2AnalyzerLabels, ScannerV2AnalyzerStatus]
-              >
-            ).map(([analyzer, status]) => (
-              <div key={analyzer} className="am-panel-soft p-4">
-                <dt className="text-xs uppercase tracking-[0.14em] text-white/35">
-                  {scannerV2AnalyzerLabels[analyzer]}
-                </dt>
-                <dd className="mt-2 text-sm font-semibold">
-                  {scannerV2StatusLabels[status]}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ) : null}
-
       {comparison ? (
         <section className="border-b border-white/10 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -745,7 +597,46 @@ export default async function ScanPage({ params }: ScanPageProps) {
       ) : null}
 
       {details.scan.status === "completed" && findingGroups.length > 0 ? (
-        <ReportActionPlan groups={findingGroups} />
+        <ReportActionPlan groups={recommendations.groups} />
+      ) : null}
+
+      {details.scan.status === "completed" &&
+      isUnverifiedPublicAudit &&
+      details.access.role !== "member" ? (
+        <section className="no-print border-b border-[#242d40] py-10">
+          <div className="rounded-lg border border-[#2d3751] bg-[#0d121d] p-6">
+            <p className="am-kicker">Monitoring continu</p>
+            <h2 className="mt-3 text-xl font-semibold">
+              Passer du diagnostic au suivi continu
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#7f8a9f]">
+              Vérifiez la propriété du domaine pour débloquer les scans
+              automatiques, l’historique complet, les comparaisons dans le
+              temps, les alertes et le suivi des incidents.
+            </p>
+            <ul className="mt-4 grid gap-2 text-sm text-[#9aa6b9] sm:grid-cols-2 lg:grid-cols-3">
+              <li>✓ Scans automatiques</li>
+              <li>✓ Historique complet</li>
+              <li>✓ Comparaison dans le temps</li>
+              <li>✓ Alertes</li>
+              <li>✓ Suivi des incidents</li>
+            </ul>
+            <Link
+              href={`/organizations/${organizationId}/sites/${siteId}/verify`}
+              className="am-button-secondary mt-5 inline-flex"
+            >
+              Vérifier le domaine
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportCoverageDetails summary={details.scan.summary} />
+      ) : null}
+
+      {details.scan.status === "completed" ? (
+        <ReportTechnicalDetails summary={details.scan.summary} />
       ) : null}
 
       <section className="py-10">
