@@ -447,6 +447,8 @@ export type HttpProbeOptions = {
   requester?: HttpRequester;
   timeoutMs?: number;
   maxRedirects?: number;
+  beforeRequest?: (url: URL) => void;
+  allowRedirect?: (from: URL, to: URL) => boolean;
 };
 
 export async function probeHttpTarget(
@@ -462,6 +464,9 @@ export async function probeHttpTarget(
   let totalDurationMs = 0;
 
   while (true) {
+    // The guarded V3 caller checks authorization, scope and budget here,
+    // before DNS resolution or any network request. V2 callers are unchanged.
+    if (options.beforeRequest) options.beforeRequest(new URL(currentUrl));
     const target = await assertPublicHttpUrl(currentUrl, resolver);
 
     let response: RawProbeResponse;
@@ -492,6 +497,18 @@ export async function probeHttpTarget(
           targetUrl: reportSafeUrl(target.url),
           redirects,
           error: { kind: "redirect", code: "INVALID_REDIRECT" },
+        };
+      }
+
+      if (
+        options.allowRedirect &&
+        !options.allowRedirect(target.url, nextUrl)
+      ) {
+        return {
+          ok: false,
+          targetUrl: reportSafeUrl(target.url),
+          redirects,
+          error: { kind: "redirect", code: "REDIRECT_NOT_ALLOWED" },
         };
       }
 
