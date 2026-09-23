@@ -41,4 +41,14 @@ describe("monitoring state", () => {
       }).key,
     ).toBe("paused");
   });
+
+  it("fails closed when a paused site has no verification timestamp", () => {
+    expect(
+      getMonitoringState({
+        status: "paused",
+        verifiedAt: null,
+        scheduleEnabled: true,
+      }).key,
+    ).toBe("verification_required");
+  });
 });

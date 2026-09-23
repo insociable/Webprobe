@@ -21,6 +21,15 @@ export function getMonitoringState({
   verifiedAt,
   scheduleEnabled,
 }: MonitoringStateInput): MonitoringState {
+  if (!verifiedAt || status === "pending_verification") {
+    return {
+      key: "verification_required",
+      label: "Vérification requise",
+      detail:
+        "Public Audit uniquement tant que le domaine n’est pas vérifié par DNS.",
+    };
+  }
+
   if (status === "paused") {
     return {
       key: "paused",

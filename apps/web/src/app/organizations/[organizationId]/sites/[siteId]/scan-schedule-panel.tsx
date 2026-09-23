@@ -130,7 +130,8 @@ export function ScanSchedulePanel({
             name="enabled"
             type="checkbox"
             defaultChecked={values.enabled}
-            className="h-4 w-4 accent-[#6d7cff]"
+            disabled={!siteActive}
+            className="h-4 w-4 accent-[#6d7cff] disabled:cursor-not-allowed disabled:opacity-50"
           />
           Activer le scan automatique
         </label>
@@ -146,7 +147,8 @@ export function ScanSchedulePanel({
             <select
               name="dayOfWeek"
               defaultValue={values.dayOfWeek}
-              className="am-field mt-2"
+              disabled={!siteActive}
+              className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {dayLabels.map((label, index) => (
                 <option key={label} value={index + 1}>
@@ -163,7 +165,8 @@ export function ScanSchedulePanel({
               type="time"
               required
               defaultValue={timeValue(values.minuteOfDay)}
-              className="am-field mt-2"
+              disabled={!siteActive}
+              className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </label>
         </div>
@@ -175,7 +178,8 @@ export function ScanSchedulePanel({
             required
             maxLength={100}
             defaultValue={values.timeZone}
-            className="am-field mt-2"
+            disabled={!siteActive}
+            className="am-field mt-2 disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
 
@@ -187,10 +191,14 @@ export function ScanSchedulePanel({
         ) : null}
 
         <button
-          disabled={pending}
+          disabled={pending || !siteActive}
           className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {pending ? "Enregistrement…" : "Enregistrer la planification"}
+          {pending
+            ? "Enregistrement…"
+            : siteActive
+              ? "Enregistrer la planification"
+              : "Vérification requise"}
         </button>
       </form>
 
