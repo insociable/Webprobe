@@ -69,10 +69,15 @@ export async function processScanJobAttempt(
   let browserScan: BrowserScanResult | null = null;
 
   if (httpProbe.ok && isHtmlDocument(httpProbe)) {
+    const publicAudit = context.scanMode === "public_audit";
     browserScan = await runBrowserScan(context.targetUrl, {
       scanMode: context.scanMode,
-      maxPages: payload.profile.maxPages,
-      navigationTimeoutMs: payload.profile.navigationTimeoutMs,
+      maxPages: publicAudit
+        ? Math.min(payload.profile.maxPages, 15)
+        : payload.profile.maxPages,
+      navigationTimeoutMs: publicAudit
+        ? Math.min(payload.profile.navigationTimeoutMs, 20_000)
+        : payload.profile.navigationTimeoutMs,
       checkAccessibility: payload.profile.checkAccessibility,
       captureScreenshot: payload.profile.captureScreenshots,
     });
