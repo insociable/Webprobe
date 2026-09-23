@@ -22,6 +22,8 @@ import { listActiveReportShares } from "@/lib/report-share-service";
 import { scannerV2CrawlLimitation } from "@/lib/scanner-v2-quality";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
+import { ReportAffectedPages } from "@/components/report-affected-pages";
+import { ReportActionPlan } from "@/components/report-action-plan";
 import { ReportSharePanel } from "./report-share-panel";
 
 type ScanPageProps = {
@@ -271,6 +273,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
 
   return (
     <WorkspaceShell
+      currentOrganizationId={organizationId}
       trail={[
         {
           label: details.site.name,
@@ -742,6 +745,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
+      {details.scan.status === "completed" && findingGroups.length > 0 ? (
+        <ReportActionPlan groups={findingGroups} />
+      ) : null}
+
       <section className="py-10">
         <p className="text-sm text-white/45">Analyse</p>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -784,25 +791,10 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         {getFindingDisplayTitle(finding)}
                       </h3>
                       {grouped ? (
-                        <div className="mt-3">
-                          <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
-                            {group.occurrenceCount} occurrences ·{" "}
-                            {group.pageUrls.length} pages / ressources
-                          </span>
-                          <ul className="mt-3 space-y-1.5 text-sm text-white/40">
-                            {group.pageUrls.slice(0, 5).map((pageUrl) => (
-                              <li key={pageUrl} className="break-all">
-                                {pageUrl}
-                              </li>
-                            ))}
-                            {group.pageUrls.length > 5 ? (
-                              <li className="font-medium text-white/55">
-                                + {group.pageUrls.length - 5} autres pages /
-                                ressources concernées
-                              </li>
-                            ) : null}
-                          </ul>
-                        </div>
+                        <ReportAffectedPages
+                          occurrenceCount={group.occurrenceCount}
+                          pageUrls={group.pageUrls}
+                        />
                       ) : finding.pageUrl ? (
                         <p className="mt-2 break-all text-sm text-white/40">
                           {finding.pageUrl}

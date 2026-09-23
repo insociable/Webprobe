@@ -61,7 +61,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
   }
 
   const session = await requireCurrentSession();
-  const { access, state } = await loadVerificationPageData(
+  const { state } = await loadVerificationPageData(
     session.user.id,
     organizationId,
     siteId,
@@ -73,14 +73,8 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
 
   return (
     <WorkspaceShell
-      trail={[
-        {
-          label: access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: state.site.name },
-        { label: "Vérification DNS" },
-      ]}
+      currentOrganizationId={organizationId}
+      trail={[{ label: state.site.name }, { label: "Vérification DNS" }]}
     >
       <section className="max-w-4xl border-b border-[#242d40] pb-9">
         <p className="am-kicker">Activer le monitoring</p>

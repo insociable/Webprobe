@@ -137,6 +137,36 @@ export async function createInitialOrganizationForUser(
   });
 }
 
+export async function updateOrganizationName(
+  userId: string,
+  organizationId: string,
+  name: string,
+) {
+  const access = await requireOrganizationAccess(userId, organizationId);
+  if (!canManageOrganization(access.role)) {
+    throw new OrganizationAccessError(
+      "Only organization owners and admins can rename an organization",
+    );
+  }
+
+  const normalized = name.trim().replace(/\s+/g, " ");
+  if (normalized.length < 2 || normalized.length > 120) {
+    throw new Error("Invalid organization name");
+  }
+
+  const [organization] = await db
+    .update(organizations)
+    .set({ name: normalized, updatedAt: new Date() })
+    .where(eq(organizations.id, organizationId))
+    .returning();
+
+  if (!organization) {
+    throw new Error("Organization update failed");
+  }
+
+  return organization;
+}
+
 export async function listSitesForOrganization(
   userId: string,
   organizationId: string,

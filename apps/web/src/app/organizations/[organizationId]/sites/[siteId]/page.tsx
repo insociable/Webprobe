@@ -115,13 +115,8 @@ export default async function SitePage({
 
   return (
     <WorkspaceShell
-      trail={[
-        {
-          label: history.access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: history.site.name },
-      ]}
+      currentOrganizationId={organizationId}
+      trail={[{ label: history.site.name }]}
     >
       <ScanStatusRefresher active={activeScan} />
 

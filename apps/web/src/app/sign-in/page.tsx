@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ProductMark } from "@/components/product-shell";
+import { ProductMark } from "@/components/product-mark";
 import { authClient } from "@/lib/auth-client";
 
 type Step = "email" | "otp";

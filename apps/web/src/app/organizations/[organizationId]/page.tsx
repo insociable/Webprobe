@@ -10,6 +10,7 @@ import { AlertPreferencePanel } from "./alert-preference-panel";
 import { ManualScanButton } from "./manual-scan-button";
 import { PublicAuditButton } from "./public-audit-button";
 import { ReportBrandingPanel } from "./report-branding-panel";
+import { OrganizationNameForm } from "./organization-name-form";
 
 type OrganizationPageProps = {
   params: Promise<{ organizationId: string }>;
@@ -69,12 +70,12 @@ export default async function OrganizationPage({
   );
 
   return (
-    <WorkspaceShell trail={[{ label: overview.access.organizationName }]}>
+    <WorkspaceShell currentOrganizationId={organizationId}>
       <ScanStatusRefresher active={scansInProgress > 0} />
 
       <section className="flex flex-col gap-6 border-b border-[#242d40] pb-9 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="am-kicker">Organisation</p>
+          <p className="am-kicker">Espace</p>
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
             {overview.access.organizationName}
           </h1>
@@ -338,7 +339,19 @@ export default async function OrganizationPage({
       </section>
 
       {overview.access.role !== "member" ? (
-        <section className="mt-14 border-t border-[#242d40] pt-8">
+        <section id="settings" className="mt-14 border-t border-[#242d40] pt-8">
+          <div className="mb-8">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Espace
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Nom et paramètres
+            </h2>
+            <OrganizationNameForm
+              organizationId={organizationId}
+              currentName={overview.access.organizationName}
+            />
+          </div>
           <div className="mb-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
               Configuration

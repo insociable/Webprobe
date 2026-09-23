@@ -4,7 +4,6 @@ import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getUserMemberships } from "@/lib/membership-context";
 import { getOrganizationOverview } from "@/lib/organization-overview";
-import { ProfileNameForm } from "./profile-name-form";
 
 const scanStatusLabels = {
   queued: "En file",
@@ -98,18 +97,7 @@ export default async function DashboardPage() {
         ) : null}
       </section>
 
-      <section className="grid gap-4 border-b border-[#242d40] py-7 lg:grid-cols-[1fr_1.2fr]">
-        <div className="am-panel-soft p-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
-            Compte
-          </p>
-          <p className="mt-2 text-sm text-[#b7c0d1]">{session.user.email}</p>
-          <p className="mt-4 text-xs leading-5 text-[#6f7b91]">Nom affiché</p>
-          <ProfileNameForm
-            currentName={hasCustomDisplayName ? session.user.name : ""}
-          />
-        </div>
-
+      <section className="border-b border-[#242d40] py-7">
         <div className="am-metric-grid">
           <div className="am-metric-cell">
             <p className="am-metric-label">Sites</p>
@@ -144,32 +132,25 @@ export default async function DashboardPage() {
         <div className="mt-7 space-y-10">
           {workspaces.map(({ membership, overview }) => (
             <section key={membership.organizationId}>
-              <div className="flex flex-col gap-3 border-b border-[#242d40] pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-[#dfe5f2]">
+              {workspaces.length > 1 ? (
+                <div className="flex items-center justify-between border-b border-[#242d40] pb-3">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.13em] text-[#647188]">
                     {membership.organizationName}
                   </p>
-                  <Link
-                    href={"/organizations/" + membership.organizationId}
-                    className="mt-1 inline-flex text-xs text-[#6f7b91] transition hover:text-[#aab5c9]"
-                  >
-                    Paramètres de l’espace →
-                  </Link>
+                  {membership.role !== "member" ? (
+                    <Link
+                      href={
+                        "/organizations/" +
+                        membership.organizationId +
+                        "/sites/new"
+                      }
+                      className="text-xs font-medium text-[#8793ff] hover:text-[#aeb6ff]"
+                    >
+                      Ajouter un site +
+                    </Link>
+                  ) : null}
                 </div>
-                {membership.role !== "member" ? (
-                  <Link
-                    href={
-                      "/organizations/" +
-                      membership.organizationId +
-                      "/sites/new"
-                    }
-                    className="am-button-secondary"
-                  >
-                    Ajouter un site
-                    <span aria-hidden="true">+</span>
-                  </Link>
-                ) : null}
-              </div>
+              ) : null}
 
               {overview.sites.length === 0 ? (
                 <div className="mt-5 border-l-2 border-[#6d7cff] bg-[#0d121d] p-6">

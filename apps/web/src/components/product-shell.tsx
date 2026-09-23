@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/sign-out-button";
+import { WorkspaceAccountMenu } from "@/components/workspace-account-menu";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { ProductMark } from "@/components/product-mark";
 
 type TrailItem = {
   label: string;
@@ -9,29 +12,14 @@ type TrailItem = {
 type WorkspaceShellProps = {
   children: React.ReactNode;
   trail?: TrailItem[];
+  currentOrganizationId?: string;
 };
 
-export function ProductMark({ withName = true }: { withName?: boolean }) {
-  return (
-    <span className="inline-flex items-center gap-3">
-      <span className="am-brand-mark" aria-hidden="true">
-        <span className="am-brand-dot" />
-      </span>
-      {withName ? (
-        <span>
-          <span className="block text-sm font-semibold tracking-[-0.01em] text-white">
-            Agency Monitor
-          </span>
-          <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.16em] text-[#6f7b91]">
-            Site observatory
-          </span>
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
+export function WorkspaceShell({
+  children,
+  trail = [],
+  currentOrganizationId,
+}: WorkspaceShellProps) {
   return (
     <div className="am-workspace">
       <aside className="am-rail">
@@ -60,6 +48,8 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
             </a>
           </nav>
         </div>
+
+        <WorkspaceSwitcher currentOrganizationId={currentOrganizationId} />
 
         {trail.length > 0 ? (
           <div className="mt-8 border-t border-[#20283a] pt-6">
@@ -90,11 +80,11 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
         ) : null}
 
         <div className="mt-auto border-t border-[#20283a] pt-5">
-          <div className="mb-4 flex items-center gap-2 px-2 text-xs text-[#7f8a9f]">
+          <div className="mb-3 flex items-center gap-2 px-2 text-[11px] text-[#6f7b91]">
             <span className="am-status-dot" />
-            Pilote opérationnel
+            Plateforme opérationnelle
           </div>
-          <SignOutButton />
+          <WorkspaceAccountMenu />
         </div>
       </aside>
 

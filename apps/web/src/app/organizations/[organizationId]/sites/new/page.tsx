@@ -37,13 +37,8 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
 
   return (
     <WorkspaceShell
-      trail={[
-        {
-          label: access.organizationName,
-          href: "/organizations/" + organizationId,
-        },
-        { label: "Audit public" },
-      ]}
+      currentOrganizationId={organizationId}
+      trail={[{ label: "Nouveau site" }]}
     >
       <section className="max-w-3xl">
         <p className="am-kicker">Audit public</p>

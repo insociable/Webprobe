@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ProductMark } from "@/components/product-shell";
+import { ProductMark } from "@/components/product-mark";
+import { ReportAffectedPages } from "@/components/report-affected-pages";
+import { ReportActionPlan } from "@/components/report-action-plan";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
@@ -372,6 +374,10 @@ export default async function PublicReportPage({
           </section>
         ) : null}
 
+        {findingGroups.length > 0 ? (
+          <ReportActionPlan groups={findingGroups} />
+        ) : null}
+
         <section className="border-t border-[#242d40] py-9">
           <div className="flex items-end justify-between gap-4">
             <div>
@@ -422,25 +428,10 @@ export default async function PublicReportPage({
                           {getFindingDisplayTitle(finding)}
                         </h3>
                         {grouped ? (
-                          <div className="mt-3">
-                            <span className="inline-flex rounded-md border border-[#40506d] bg-[#121a28] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#b8c6dc]">
-                              {group.occurrenceCount} occurrences ·{" "}
-                              {group.pageUrls.length} pages / ressources
-                            </span>
-                            <ul className="mt-3 space-y-1.5 text-sm text-[#6f7b91]">
-                              {group.pageUrls.slice(0, 5).map((pageUrl) => (
-                                <li key={pageUrl} className="break-all">
-                                  {pageUrl}
-                                </li>
-                              ))}
-                              {group.pageUrls.length > 5 ? (
-                                <li className="font-medium text-[#8f9aaf]">
-                                  + {group.pageUrls.length - 5} autres pages /
-                                  ressources concernées
-                                </li>
-                              ) : null}
-                            </ul>
-                          </div>
+                          <ReportAffectedPages
+                            occurrenceCount={group.occurrenceCount}
+                            pageUrls={group.pageUrls}
+                          />
                         ) : finding.pageUrl ? (
                           <p className="mt-2 break-all text-sm text-[#6f7b91]">
                             {finding.pageUrl}
