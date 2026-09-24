@@ -51,6 +51,63 @@ describe("deep catalog", () => {
     });
   });
 
+  it("places an absent enforced CSP finding in the dedicated control", async () => {
+    const http: HttpProbeResult = {
+      ok: true,
+      finalUrl: "https://example.com/",
+      statusCode: 200,
+      durationMs: 10,
+      redirects: [],
+      headers: {
+        "content-security-policy-report-only": "default-src 'self'",
+      },
+      securityHeaders: [],
+      tls: null,
+      cookies: [],
+    };
+    const browser: BrowserRuntimeObservation = {
+      finalUrl: "https://example.com/",
+      statusCode: 200,
+      pageCount: 1,
+      durationMs: 10,
+    };
+    const runs = await catalogRuns(http, browser);
+    const findingsFor = (id: string) =>
+      (runs.find((item) => item.checkId === id)?.evidence[0]?.data.findings ??
+        []) as Array<{ code: string }>;
+    expect(findingsFor("deep-csp").map((item) => item.code)).toContain(
+      "csp-absent",
+    );
+    expect(
+      findingsFor("deep-security-headers").map((item) => item.code),
+    ).not.toContain("csp-absent");
+    const noCspRuns = await catalogRuns({ ...http, headers: {} }, browser);
+    expect(
+      noCspRuns.find((item) => item.checkId === "deep-csp")?.evidence[0]
+        ?.data,
+    ).toMatchObject({
+      summary: "Aucune CSP observée.",
+      findings: [{ code: "csp-absent", level: "review" }],
+    });
+    const failedHttpRuns = await catalogRuns(
+      {
+        ok: false,
+        finalUrl: "https://example.com/",
+        durationMs: 10,
+        redirects: [],
+        error: { kind: "timeout", message: "timed out" },
+      },
+      browser,
+    );
+    const failedCsp = failedHttpRuns.find(
+      (item) => item.checkId === "deep-csp",
+    );
+    expect(failedCsp?.evidence[0]?.data).toMatchObject({
+      httpObserved: false,
+      findings: [],
+    });
+  });
+
   it("emits structured, passive evidence for every catalog check", async () => {
     const http: HttpProbeResult = {
       ok: true,

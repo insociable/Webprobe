@@ -1,3 +1,9 @@
+import {
+  deepFindings,
+  deepHttpObservationFailed,
+  scoreDeepAudit,
+} from "../lib/deep-report-metrics";
+
 type DeepCheckRunView = {
   id: string;
   checkId: string;
@@ -178,6 +184,20 @@ export function DeepAuditReport({
   summary,
   checkRuns,
 }: DeepAuditReportProps) {
+  const score = scoreDeepAudit(checkRuns);
+  const dedicatedCspCompleted = checkRuns.some(
+    (run) => run.checkId === "deep-csp" && run.status === "completed",
+  );
+  const httpObservationFailed = deepHttpObservationFailed(checkRuns);
+  const cspMissing = checkRuns.some((run) => {
+    if (run.checkId !== "deep-csp" || run.status !== "completed") return false;
+    const data = asRecord(run.evidence[0]?.data);
+    return (
+      data?.applied === false &&
+      data.httpObserved !== false &&
+      !httpObservationFailed
+    );
+  });
   const coverage = asRecord(summary.v3Coverage);
   const budget = coverage ? asRecord(coverage.budgetUsed) : null;
   const reasons = Array.isArray(coverage?.reasons)
@@ -201,7 +221,10 @@ export function DeepAuditReport({
   );
 
   const coverageComplete =
-    status === "completed" && reasons.length === 0 && failed === 0;
+    status === "completed" &&
+    reasons.length === 0 &&
+    failed === 0 &&
+    !score.limitedCoverage;
 
   return (
     <section className="border-b border-[#242d40] py-10">
@@ -222,6 +245,31 @@ export function DeepAuditReport({
             ? "Couverture complète du périmètre"
             : "Couverture à vérifier"}
         </span>
+      </div>
+
+      <div className="am-panel-soft mt-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.12em] text-white/40">
+            Score Deep
+          </p>
+          <p className="mt-1 text-3xl font-semibold tracking-[-0.04em]">
+            {status === "completed" && score.value !== null
+              ? `${score.value} / 100`
+              : "Non évalué"}
+          </p>
+        </div>
+        <div className="max-w-xl text-sm leading-6 text-white/50 sm:text-right">
+          <p className="font-medium text-white/70">
+            {status === "completed" ? score.label : "Analyse en cours"}
+            {score.limitedCoverage && status === "completed"
+              ? ` · Couverture partielle (${score.completedControls}/${score.expectedControls} contrôles de diagnostic)`
+              : ""}
+          </p>
+          <p>
+            Indice des constats observés, ni pourcentage de sécurité ni
+            certification. Les contrôles détaillés font foi.
+          </p>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -290,7 +338,7 @@ export function DeepAuditReport({
             })}
           </div>
         </div>
-      ) : status === "completed" ? (
+      ) : coverageComplete ? (
         <div className="mt-5 border-l-2 border-emerald-300/60 bg-emerald-200/[0.04] p-4">
           <p className="text-sm text-emerald-100 opacity-75">
             Tous les contrôles prévus ont été exécutés dans le périmètre et les
@@ -335,14 +383,15 @@ export function DeepAuditReport({
                       typeof evidenceData?.summary === "string"
                         ? evidenceData.summary
                         : presentation.description;
-                    const findings = Array.isArray(evidenceData?.findings)
-                      ? evidenceData.findings
-                          .map(asRecord)
-                          .filter(
-                            (item): item is Record<string, unknown> =>
-                              item !== null,
-                          )
-                      : [];
+                    const findings = deepFindings(
+                      run,
+                      dedicatedCspCompleted,
+                      httpObservationFailed,
+                    );
+                    const cspUnavailable =
+                      run.checkId === "deep-csp" &&
+                      (evidenceData?.httpObserved === false ||
+                        httpObservationFailed);
                     return (
                       <article
                         key={run.id}
@@ -447,6 +496,17 @@ export function DeepAuditReport({
                               );
                             })}
                           </div>
+                        ) : cspUnavailable ? (
+                          <p className="mt-4 text-sm text-amber-100 opacity-75">
+                            Politique CSP non évaluée : réponse HTTP
+                            indisponible.
+                          </p>
+                        ) : run.checkId === "deep-security-headers" &&
+                          cspMissing ? (
+                          <p className="mt-4 text-sm text-white/55">
+                            Le diagnostic de la CSP figure dans le contrôle
+                            Politique CSP.
+                          </p>
                         ) : run.status === "completed" ? (
                           <p className="mt-4 text-sm text-emerald-100 opacity-75">
                             Aucun point nécessitant une action n’a été relevé

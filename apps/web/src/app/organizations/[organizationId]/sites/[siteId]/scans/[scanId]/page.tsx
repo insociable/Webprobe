@@ -15,6 +15,7 @@ import {
   summarizeReportFindings,
 } from "@/lib/report-presentation";
 import { getScanDetailsForSite } from "@/lib/scan-history";
+import { observedPageCount } from "@/lib/deep-report-metrics";
 import {
   reportScoreCategoryForFindingCategory,
   scoreReport,
@@ -338,7 +339,13 @@ export default async function ScanPage({ params }: ScanPageProps) {
             <dt className="text-xs uppercase tracking-[0.15em] text-white/35">
               Pages observées
             </dt>
-            <dd className="mt-2 text-sm">{details.scan.pageCount}</dd>
+            <dd className="mt-2 text-sm">
+              {observedPageCount(
+                details.scan.scanMode,
+                details.scan.pageCount,
+                details.checkRuns,
+              ) ?? "—"}
+            </dd>
           </div>
         </dl>
 

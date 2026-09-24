@@ -288,14 +288,6 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
             recommendation: "Limiter la liste des origines autorisées.",
             observed: permissions,
           });
-        if (!header(headers, "content-security-policy"))
-          findings.push({
-            code: "csp-absent",
-            level: "review",
-            summary: "CSP appliquée absente.",
-            recommendation:
-              "Déployer une CSP adaptée en partant d'un mode rapport.",
-          });
         if (
           http.cookies?.length &&
           /(?:^|,)\s*public\b/i.test(header(headers, "cache-control") ?? "")
@@ -334,6 +326,14 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
       const reportOnly = header(headers, "content-security-policy-report-only");
       const directives = applied ? parseCsp(applied) : {};
       const findings: Finding[] = [];
+      if (http.ok && !applied)
+        findings.push({
+          code: "csp-absent",
+          level: "review",
+          summary: "Aucune CSP appliquée n'a été observée.",
+          recommendation:
+            "Définir une politique adaptée, la valider en mode rapport puis l'appliquer.",
+        });
       if (applied) {
         const scripts =
           directives["script-src"] ?? directives["default-src"] ?? [];
@@ -393,13 +393,16 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
       return evidence(
         "deep-csp",
         "Politique CSP",
-        applied
-          ? "CSP appliquée analysée."
-          : reportOnly
-            ? "CSP en mode rapport uniquement."
-            : "Aucune CSP observée.",
+        !http.ok
+          ? "CSP non évaluée : réponse HTTP indisponible."
+          : applied
+            ? "CSP appliquée analysée."
+            : reportOnly
+              ? "CSP en mode rapport uniquement."
+              : "Aucune CSP observée.",
         findings,
         {
+          httpObserved: http.ok,
           applied: Boolean(applied),
           reportOnly: Boolean(reportOnly),
           directives,
