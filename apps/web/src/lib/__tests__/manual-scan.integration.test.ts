@@ -10,7 +10,11 @@ import {
 } from "@agency-saas/db";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../database";
-import { createManualScanForSite, ManualScanError } from "../manual-scan";
+import {
+  createDeepScanForSite,
+  createManualScanForSite,
+  ManualScanError,
+} from "../manual-scan";
 import { OrganizationAccessError } from "../organization-site-service";
 
 const describeDatabase =
@@ -144,6 +148,54 @@ describeDatabase("manual scan creation", () => {
       expect(persisted).toEqual({
         status: "queued",
         trigger: "manual",
+      });
+      expect(dispatch).toEqual({
+        status: "pending",
+        attemptCount: 0,
+      });
+    } finally {
+      await cleanupFixture(fixture.organizationId, [
+        fixture.ownerId,
+        fixture.memberId,
+      ]);
+    }
+  });
+
+  it("creates a Deep scan and durable dispatch from the existing verified site", async () => {
+    const fixture = await createFixture();
+
+    try {
+      const scan = await createDeepScanForSite(
+        fixture.ownerId,
+        fixture.organizationId,
+        fixture.activeSiteId,
+      );
+
+      const [persisted] = await db
+        .select({
+          status: scans.status,
+          trigger: scans.trigger,
+          scanMode: scans.scanMode,
+          summary: scans.summary,
+        })
+        .from(scans)
+        .where(eq(scans.id, scan.id))
+        .limit(1);
+
+      const [dispatch] = await db
+        .select({
+          status: scanDispatches.status,
+          attemptCount: scanDispatches.attemptCount,
+        })
+        .from(scanDispatches)
+        .where(eq(scanDispatches.scanId, scan.id))
+        .limit(1);
+
+      expect(persisted).toMatchObject({
+        status: "queued",
+        trigger: "manual",
+        scanMode: "verified_deep_audit",
+        summary: { internalDeepWorker: true },
       });
       expect(dispatch).toEqual({
         status: "pending",

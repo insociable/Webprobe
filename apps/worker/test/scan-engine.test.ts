@@ -167,7 +167,7 @@ describe("scope and authorization", () => {
     });
   });
 
-  it("retains V2 verification semantics and requires a current deep grant", () => {
+  it("uses site verification for Deep and still honors legacy Deep grants", () => {
     const now = new Date("2026-09-23T12:00:00.000Z");
     const base = {
       siteId: "site-1",
@@ -179,9 +179,10 @@ describe("scope and authorization", () => {
       allowed: true,
       level: "verified",
     });
-    expect(
-      authorizeScan({ ...base, mode: "verified_deep_audit" }),
-    ).toMatchObject({ reason: "deep-grant-missing" });
+    expect(authorizeScan({ ...base, mode: "verified_deep_audit" })).toEqual({
+      allowed: true,
+      level: "deep",
+    });
     const deepGrant = {
       siteId: "site-1",
       proofType: "dns_txt" as const,

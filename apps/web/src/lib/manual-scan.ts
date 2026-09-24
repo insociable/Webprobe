@@ -32,6 +32,37 @@ export async function createManualScanForSite(
   siteId: string,
   now = new Date(),
 ) {
+  return createManualScanForSiteMode(
+    userId,
+    organizationId,
+    siteId,
+    "verified_monitoring",
+    now,
+  );
+}
+
+export async function createDeepScanForSite(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+  now = new Date(),
+) {
+  return createManualScanForSiteMode(
+    userId,
+    organizationId,
+    siteId,
+    "verified_deep_audit",
+    now,
+  );
+}
+
+async function createManualScanForSiteMode(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+  mode: "verified_monitoring" | "verified_deep_audit",
+  now: Date,
+) {
   const access = await requireOrganizationAccess(userId, organizationId);
   if (!canManageOrganization(access.role)) {
     throw new OrganizationAccessError(
@@ -105,6 +136,9 @@ export async function createManualScanForSite(
           siteId,
           status: "queued",
           trigger: "manual",
+          scanMode: mode,
+          summary:
+            mode === "verified_deep_audit" ? { internalDeepWorker: true } : {},
           queuedAt: now,
         })
         .returning();

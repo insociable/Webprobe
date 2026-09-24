@@ -133,14 +133,12 @@ export async function claimDueScanDispatches(
         (!row.scheduleId || row.scheduleEnabled !== true);
 
       const invalidSite =
-        row.scanMode === "verified_monitoring"
-          ? row.siteStatus !== "active" || !row.verifiedAt
-          : row.siteStatus !== "pending_verification" &&
-            row.siteStatus !== "active";
+        row.scanMode === "public_audit"
+          ? row.siteStatus === "paused"
+          : row.siteStatus !== "active" || !row.verifiedAt;
       const invalidMode =
-        row.scanMode === "verified_deep_audit" ||
-        (row.scanTrigger === "scheduled" &&
-          row.scanMode !== "verified_monitoring");
+        row.scanTrigger === "scheduled" &&
+        row.scanMode !== "verified_monitoring";
 
       if (invalidSite || invalidMode || invalidSchedule) {
         await tx
@@ -150,10 +148,7 @@ export async function claimDueScanDispatches(
             completedAt: now,
             summary: {
               cancellation: {
-                code:
-                  row.scanMode === "verified_deep_audit"
-                    ? "deep-engine-unavailable"
-                    : "scan-context-invalid-before-dispatch",
+                code: "scan-context-invalid-before-dispatch",
               },
             },
           })

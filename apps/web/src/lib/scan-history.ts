@@ -1,4 +1,4 @@
-import { findings, scanArtifacts, scans } from "@agency-saas/db";
+import { findings, scanArtifacts, scanCheckRuns, scans } from "@agency-saas/db";
 import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
 import { db } from "./database";
 import {
@@ -86,6 +86,12 @@ export async function getScanDetailsForSite(
     )
     .orderBy(findings.createdAt);
 
+  const checkRuns = await db
+    .select()
+    .from(scanCheckRuns)
+    .where(eq(scanCheckRuns.scanId, scanId))
+    .orderBy(scanCheckRuns.startedAt);
+
   const [screenshotArtifact] = await db
     .select({ id: scanArtifacts.id })
     .from(scanArtifacts)
@@ -150,6 +156,7 @@ export async function getScanDetailsForSite(
     site,
     scan,
     findings: scanFindings,
+    checkRuns,
     comparison,
     screenshotAvailable: Boolean(screenshotArtifact),
   };

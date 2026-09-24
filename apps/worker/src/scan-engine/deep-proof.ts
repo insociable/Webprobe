@@ -65,8 +65,53 @@ export async function revalidateDeepAuditAuthorization(input: {
     return { allowed: false, reason: "site-inactive" };
   if (!row.site.verifiedAt)
     return { allowed: false, reason: "site-unverified" };
+  const siteVerifiedAt = row.site.verifiedAt;
   const grant = row.grant;
-  if (!grant) return { allowed: false, reason: "deep-grant-missing" };
+  if (!grant) {
+    return db.transaction(async (tx) => {
+      if (input.signal?.aborted) throw abortError();
+      const [currentSite] = await tx
+        .select()
+        .from(sites)
+        .where(
+          and(
+            eq(sites.id, input.siteId),
+            eq(sites.organizationId, input.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (
+        !currentSite ||
+        currentSite.status !== "active" ||
+        !currentSite.verifiedAt
+      ) {
+        return { allowed: false, reason: "site-inactive" } as const;
+      }
+      if (
+        currentSite.canonicalUrl !== row.site.canonicalUrl ||
+        currentSite.verifiedAt.getTime() !== siteVerifiedAt.getTime()
+      ) {
+        return { allowed: false, reason: "deep-grant-invalid" } as const;
+      }
+      const decision = authorizeScan({
+        mode: "verified_deep_audit",
+        siteId: input.siteId,
+        siteStatus: currentSite.status,
+        verifiedAt: currentSite.verifiedAt,
+        now: new Date(),
+      });
+      return decision.allowed
+        ? {
+            ...decision,
+            grantIdentity: {
+              canonicalUrl: currentSite.canonicalUrl,
+              siteVerifiedAt: currentSite.verifiedAt,
+            },
+          }
+        : decision;
+    });
+  }
   if (grant.revokedAt) return { allowed: false, reason: "deep-grant-revoked" };
   if (grant.expiresAt <= new Date())
     return { allowed: false, reason: "deep-grant-expired" };

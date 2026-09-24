@@ -24,9 +24,9 @@ export type DeepLease = Readonly<{
 }>;
 
 export type DeepGrantIdentity = Readonly<{
-  generationId: string;
-  tokenHash: string;
-  verifiedAt: Date;
+  generationId?: string;
+  tokenHash?: string;
+  verifiedAt?: Date;
   canonicalUrl: string;
   siteVerifiedAt: Date;
 }>;
@@ -213,18 +213,32 @@ export async function assertDeepLease(
   if (grant) {
     if (
       row.canonicalUrl !== grant.canonicalUrl ||
-      row.siteVerifiedAt.getTime() !== grant.siteVerifiedAt.getTime() ||
-      row.proofType !== "dns_txt" ||
-      row.recordName !== expectedDeepProofRecord(row.canonicalUrl) ||
-      row.tokenHash !== grant.tokenHash ||
-      !row.generationId ||
-      row.generationId !== grant.generationId ||
-      row.proofVerifiedAt?.getTime() !== grant.verifiedAt.getTime() ||
-      !row.expiresAt ||
-      row.expiresAt <= row.now ||
-      row.revokedAt
-    )
+      row.siteVerifiedAt.getTime() !== grant.siteVerifiedAt.getTime()
+    ) {
+      throw new DeepLeaseError("Deep site verification changed");
+    }
+
+    const usesLegacyGrant =
+      grant.generationId !== undefined ||
+      grant.tokenHash !== undefined ||
+      grant.verifiedAt !== undefined;
+    if (
+      usesLegacyGrant &&
+      (!grant.generationId ||
+        !grant.tokenHash ||
+        !grant.verifiedAt ||
+        row.proofType !== "dns_txt" ||
+        row.recordName !== expectedDeepProofRecord(row.canonicalUrl) ||
+        row.tokenHash !== grant.tokenHash ||
+        !row.generationId ||
+        row.generationId !== grant.generationId ||
+        row.proofVerifiedAt?.getTime() !== grant.verifiedAt.getTime() ||
+        !row.expiresAt ||
+        row.expiresAt <= row.now ||
+        row.revokedAt)
+    ) {
       throw new DeepLeaseError("Deep authorization changed or expired");
+    }
   }
 }
 

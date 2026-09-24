@@ -130,35 +130,50 @@ export async function persistDeepCheckRuns(input: {
     )
       throw new Error("Deep site changed before persistence");
     if (input.grantIdentity) {
-      const [grant] = await tx
-        .select()
-        .from(deepAuditAuthorizations)
-        .where(eq(deepAuditAuthorizations.siteId, input.siteId))
-        .for("update")
-        .limit(1);
-      const [clock] = await tx
-        .select({ now: sql<Date>`clock_timestamp()`.mapWith(scans.queuedAt) })
-        .from(scans)
-        .where(eq(scans.id, input.scanId))
-        .limit(1);
       if (
-        !grant ||
-        !clock ||
         site.canonicalUrl !== input.grantIdentity.canonicalUrl ||
         site.verifiedAt.getTime() !==
-          input.grantIdentity.siteVerifiedAt.getTime() ||
-        grant.proofType !== "dns_txt" ||
-        grant.proofRecordName !== expectedDeepProofRecord(site.canonicalUrl) ||
-        grant.proofTokenHash !== input.grantIdentity.tokenHash ||
-        !grant.generationId ||
-        grant.generationId !== input.grantIdentity.generationId ||
-        grant.proofVerifiedAt.getTime() !==
-          input.grantIdentity.verifiedAt.getTime() ||
-        grant.expiresAt <= clock.now ||
-        grant.revokedAt ||
-        input.signal?.aborted
+          input.grantIdentity.siteVerifiedAt.getTime()
       ) {
-        throw new Error("Deep grant changed before persistence");
+        throw new Error("Deep site verification changed before persistence");
+      }
+
+      const usesLegacyGrant =
+        input.grantIdentity.generationId !== undefined ||
+        input.grantIdentity.tokenHash !== undefined ||
+        input.grantIdentity.verifiedAt !== undefined;
+      if (usesLegacyGrant) {
+        const [grant] = await tx
+          .select()
+          .from(deepAuditAuthorizations)
+          .where(eq(deepAuditAuthorizations.siteId, input.siteId))
+          .for("update")
+          .limit(1);
+        const [clock] = await tx
+          .select({ now: sql<Date>`clock_timestamp()`.mapWith(scans.queuedAt) })
+          .from(scans)
+          .where(eq(scans.id, input.scanId))
+          .limit(1);
+        if (
+          !input.grantIdentity.generationId ||
+          !input.grantIdentity.tokenHash ||
+          !input.grantIdentity.verifiedAt ||
+          !grant ||
+          !clock ||
+          grant.proofType !== "dns_txt" ||
+          grant.proofRecordName !==
+            expectedDeepProofRecord(site.canonicalUrl) ||
+          grant.proofTokenHash !== input.grantIdentity.tokenHash ||
+          !grant.generationId ||
+          grant.generationId !== input.grantIdentity.generationId ||
+          grant.proofVerifiedAt.getTime() !==
+            input.grantIdentity.verifiedAt.getTime() ||
+          grant.expiresAt <= clock.now ||
+          grant.revokedAt ||
+          input.signal?.aborted
+        ) {
+          throw new Error("Deep grant changed before persistence");
+        }
       }
     }
     const prior = await tx

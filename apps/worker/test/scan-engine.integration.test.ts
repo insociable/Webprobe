@@ -217,6 +217,101 @@ describeDatabase("V3 schema compatibility", () => {
         .where(eq(organizations.id, organizationId));
     }
   });
+  it("runs Deep from the existing verified-site proof without a second grant", async () => {
+    const { db } = getDatabase();
+    const organizationId = randomUUID();
+    const siteId = randomUUID();
+    const scanId = randomUUID();
+
+    try {
+      await db.insert(organizations).values({
+        id: organizationId,
+        name: "Verified-site Deep test",
+      });
+      await db.insert(sites).values({
+        id: siteId,
+        organizationId,
+        name: "Verified Deep target",
+        canonicalUrl: "https://verified-deep.example.test/",
+        status: "active",
+        verifiedAt: new Date(),
+      });
+      await db.insert(scans).values({
+        id: scanId,
+        organizationId,
+        siteId,
+        trigger: "manual",
+        status: "running",
+        scanMode: "verified_deep_audit",
+      });
+
+      let requests = 0;
+      await runDeepAuditCandidate({
+        scanId,
+        organizationId,
+        siteId,
+        targetUrl: "https://verified-deep.example.test/",
+        profile: {
+          ...resolveScanProfile("verified_deep_audit"),
+          allowedChecks: ["deep-http-observation"],
+        },
+        resolver: async () => [
+          { address: "93.184.216.34", family: 4 as const },
+        ],
+        requester: async (_target, _timeout, account) => {
+          requests += 1;
+          account?.(128);
+          return {
+            statusCode: 200,
+            durationMs: 1,
+            tls: null,
+            headers: {},
+          };
+        },
+      });
+
+      expect(requests).toBe(1);
+      const runs = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(eq(scanCheckRuns.scanId, scanId));
+      expect(runs).toHaveLength(2);
+      expect(runs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            checkId: "deep-http-observation",
+            status: "completed",
+          }),
+          expect.objectContaining({
+            checkId: "deep-browser-observation",
+            status: "skipped",
+          }),
+        ]),
+      );
+
+      const grants = await db
+        .select()
+        .from(deepAuditAuthorizations)
+        .where(eq(deepAuditAuthorizations.siteId, siteId));
+      expect(grants).toHaveLength(0);
+
+      const [persisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, scanId));
+      expect(persisted?.status).toBe("completed");
+      expect(persisted?.summary.v3Coverage).toMatchObject({
+        totalChecks: 2,
+        completedChecks: 1,
+        skippedChecks: 1,
+      });
+    } finally {
+      await db
+        .delete(organizations)
+        .where(eq(organizations.id, organizationId));
+    }
+  });
+
   it("preserves old scan defaults and stores deep audit metadata without enabling network execution", async () => {
     const { db } = getDatabase();
     const organizationId = randomUUID();

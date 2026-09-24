@@ -352,9 +352,11 @@ export default async function SitePage({
                       <p className="font-medium text-[#e2e7f1]">
                         {scan.scanMode === "public_audit"
                           ? "Audit public"
-                          : scan.trigger === "manual"
-                            ? "Monitoring manuel"
-                            : "Monitoring planifié"}
+                          : scan.scanMode === "verified_deep_audit"
+                            ? "Audit approfondi"
+                            : scan.trigger === "manual"
+                              ? "Monitoring manuel"
+                              : "Monitoring planifié"}
                       </p>
                       <p className="mt-1 text-sm text-[#68758c]">
                         {formatDate(scan.queuedAt)}

@@ -16,7 +16,8 @@ import { ScanContextError } from "./scan-persistence.js";
 /** Two server process settings are required; job data cannot enable Deep. */
 export function internalDeepWorkerEnabled(env: NodeJS.ProcessEnv): boolean {
   return (
-    env.WEBPROBE_RUNTIME_ENV === "preproduction" &&
+    (env.WEBPROBE_RUNTIME_ENV === "preproduction" ||
+      env.WEBPROBE_RUNTIME_ENV === "production") &&
     env.WEBPROBE_INTERNAL_DEEP_WORKER === "enabled"
   );
 }

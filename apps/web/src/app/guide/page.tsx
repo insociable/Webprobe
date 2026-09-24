@@ -21,15 +21,20 @@ const steps = [
   {
     number: "04",
     title: "Vérifier le domaine",
-    text: "Ajoutez l’enregistrement TXT demandé dans votre DNS puis lancez la vérification. Cette étape est obligatoire avant le monitoring continu.",
+    text: "Ajoutez l’enregistrement TXT demandé dans votre DNS puis lancez la vérification. Cette vérification unique autorise ensuite le monitoring et les audits approfondis.",
   },
   {
     number: "05",
-    title: "Activer le monitoring",
-    text: "Une fois le domaine vérifié, activez le scan automatique et choisissez le jour, l’heure et le fuseau horaire du planning hebdomadaire.",
+    title: "Choisir le type de scan",
+    text: "Sur un domaine vérifié, utilisez « Lancer un scan » pour le monitoring standard ou « Lancer un scan approfondi » pour les contrôles V3 Deep. Aucune seconde vérification DNS n’est demandée.",
   },
   {
     number: "06",
+    title: "Activer le monitoring",
+    text: "Pour le suivi récurrent, activez le scan automatique et choisissez le jour, l’heure et le fuseau horaire du planning hebdomadaire.",
+  },
+  {
+    number: "07",
     title: "Suivre l’évolution",
     text: "Consultez l’historique repliable, les rapports successifs, les changements de findings et les alertes du monitoring vérifié.",
   },
@@ -46,8 +51,8 @@ export default async function GuidePage() {
           Du premier audit au suivi continu
         </h1>
         <p className="mt-4 max-w-3xl leading-7 text-[#8793a8]">
-          Six étapes suffisent pour passer d’une observation publique ponctuelle
-          à un monitoring vérifié et récurrent.
+          Sept étapes suffisent pour passer d’une observation publique
+          ponctuelle à un monitoring vérifié et récurrent.
         </p>
       </section>
 

@@ -28,6 +28,7 @@ import { listActiveReportShares } from "@/lib/report-share-service";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
+import { DeepAuditReport } from "@/components/deep-audit-report";
 import { ReportActionPlan } from "@/components/report-action-plan";
 import { ReportCorrelations } from "@/components/report-correlations";
 import { ReportCoverageDetails } from "@/components/report-coverage-details";
@@ -52,6 +53,12 @@ const scanStatusLabels = {
   failed: "Échec",
   cancelled: "Annulé",
 } as const;
+
+function scanModeLabel(mode: string): string {
+  if (mode === "public_audit") return "Audit public";
+  if (mode === "verified_deep_audit") return "Audit approfondi";
+  return "Monitoring vérifié";
+}
 
 const severityLabels = {
   info: "Info",
@@ -222,10 +229,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
     summary: details.scan.summary,
     findings: orderedFindings,
   });
+  const isDeepAudit = details.scan.scanMode === "verified_deep_audit";
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
-  const canShareReport = !isUnverifiedPublicAudit;
+  const canShareReport = !isUnverifiedPublicAudit && !isDeepAudit;
   const activeShares =
     details.scan.status === "completed" &&
     details.access.role !== "member" &&
@@ -246,10 +254,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           href: "/organizations/" + organizationId + "/sites/" + siteId,
         },
         {
-          label:
-            details.scan.scanMode === "public_audit"
-              ? "Audit public"
-              : "Monitoring vérifié",
+          label: scanModeLabel(details.scan.scanMode),
         },
       ]}
     >
@@ -261,11 +266,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
           <span>Rapport d’audit technique</span>
         </div>
         <div className="am-print-brand-meta">
-          <span>
-            {details.scan.scanMode === "public_audit"
-              ? "Audit public"
-              : "Monitoring vérifié"}
-          </span>
+          <span>{scanModeLabel(details.scan.scanMode)}</span>
           <span>{formatDate(details.scan.completedAt)}</span>
         </div>
       </div>
@@ -273,11 +274,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
       <section className="border-b border-[#242d40] pb-9">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="am-kicker">
-              {details.scan.scanMode === "public_audit"
-                ? "Audit public"
-                : "Monitoring vérifié"}
-            </p>
+            <p className="am-kicker">{scanModeLabel(details.scan.scanMode)}</p>
             <h1 className="mt-4 text-4xl font-semibold tracking-[-0.045em]">
               {details.site.name}
             </h1>
@@ -310,9 +307,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
               Mode
             </dt>
             <dd className="mt-2 text-sm">
-              {details.scan.scanMode === "public_audit"
-                ? "Audit public"
-                : "Monitoring vérifié"}
+              {scanModeLabel(details.scan.scanMode)}
             </dd>
           </div>
           <div className="am-panel-soft p-4">
@@ -423,7 +418,15 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {isDeepAudit ? (
+        <DeepAuditReport
+          status={details.scan.status}
+          summary={details.scan.summary}
+          checkRuns={details.checkRuns}
+        />
+      ) : null}
+
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportScorecard
           scorecard={scorecard}
           distinctProblems={reportSummary.total}
@@ -433,11 +436,12 @@ export default async function ScanPage({ params }: ScanPageProps) {
         />
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportRecommendationCounts counts={recommendations.counts} />
       ) : null}
 
       {details.scan.status === "completed" &&
+      !isDeepAudit &&
       recommendations.priorities.length > 0 ? (
         <section className="border-b border-[#242d40] py-10">
           <p className="am-kicker">Priorités</p>
@@ -503,11 +507,11 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportSecurityHttp summary={details.scan.summary} />
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportCorrelations correlations={correlations} />
       ) : null}
 
@@ -581,7 +585,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {comparison ? (
+      {comparison && !isDeepAudit ? (
         <section className="border-b border-white/10 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -621,7 +625,9 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {details.scan.status === "completed" && findingGroups.length > 0 ? (
+      {details.scan.status === "completed" &&
+      !isDeepAudit &&
+      findingGroups.length > 0 ? (
         <ReportActionPlan groups={recommendations.groups} />
       ) : null}
 
@@ -656,204 +662,210 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportCoverageDetails summary={details.scan.summary} />
       ) : null}
 
-      {details.scan.status === "completed" ? (
+      {details.scan.status === "completed" && !isDeepAudit ? (
         <ReportTechnicalDetails summary={details.scan.summary} />
       ) : null}
 
-      <section className="py-10">
-        <p className="text-sm text-white/45">Analyse</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-          {findingGroups.length} problème
-          {findingGroups.length > 1 ? "s" : ""} distinct
-          {findingGroups.length > 1 ? "s" : ""} · {orderedFindings.length}{" "}
-          occurrence{orderedFindings.length > 1 ? "s" : ""}
-        </h2>
+      {!isDeepAudit ? (
+        <section className="py-10">
+          <p className="text-sm text-white/45">Analyse</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+            {findingGroups.length} problème
+            {findingGroups.length > 1 ? "s" : ""} distinct
+            {findingGroups.length > 1 ? "s" : ""} · {orderedFindings.length}{" "}
+            occurrence{orderedFindings.length > 1 ? "s" : ""}
+          </h2>
 
-        {orderedFindings.length === 0 ? (
-          <div className="mt-6 border-l-2 border-[#46557a] bg-[#0d121d] p-8">
-            <p className="text-white/50">
-              Aucun finding enregistré pour ce scan.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {findingGroups.map((group) => {
-              const finding = group.primary;
-              const grouped = group.occurrenceCount > 1;
-              const evidence = grouped ? [] : visibleEvidence(finding.evidence);
-              const remediation = getFindingRemediation(finding.code);
-              const businessContext = getFindingBusinessContext(finding);
-              const change = grouped
-                ? null
-                : comparison?.changesByFingerprint[finding.fingerprint];
-              return (
-                <article
-                  key={group.key}
-                  className="report-finding-card rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.16em] text-white/35">
-                        {findingCategoryLabels[finding.category] ??
-                          finding.category}{" "}
-                        · {finding.code}
-                      </p>
-                      <h3 className="mt-2 text-lg font-semibold">
-                        {getFindingDisplayTitle(finding)}
-                      </h3>
-                      {grouped ? (
-                        <ReportAffectedPages
-                          occurrenceCount={group.occurrenceCount}
-                          pageUrls={group.pageUrls}
-                        />
-                      ) : finding.pageUrl ? (
-                        <p className="mt-2 break-all text-sm text-white/40">
-                          {finding.pageUrl}
+          {orderedFindings.length === 0 ? (
+            <div className="mt-6 border-l-2 border-[#46557a] bg-[#0d121d] p-8">
+              <p className="text-white/50">
+                Aucun finding enregistré pour ce scan.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              {findingGroups.map((group) => {
+                const finding = group.primary;
+                const grouped = group.occurrenceCount > 1;
+                const evidence = grouped
+                  ? []
+                  : visibleEvidence(finding.evidence);
+                const remediation = getFindingRemediation(finding.code);
+                const businessContext = getFindingBusinessContext(finding);
+                const change = grouped
+                  ? null
+                  : comparison?.changesByFingerprint[finding.fingerprint];
+                return (
+                  <article
+                    key={group.key}
+                    className="report-finding-card rounded-lg border border-[#242d40] bg-[#0d111a] p-6"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-white/35">
+                          {findingCategoryLabels[finding.category] ??
+                            finding.category}{" "}
+                          · {finding.code}
                         </p>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {change ? (
-                        <span className="rounded-md border border-[#49558b] bg-[#151a31] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aab2ff]">
-                          {findingChangeLabels[change.change]}
-                          {change.previousSeverity &&
-                          change.previousSeverity !== finding.severity
-                            ? ` · ${severityLabels[change.previousSeverity]} → ${severityLabels[finding.severity]}`
-                            : ""}
+                        <h3 className="mt-2 text-lg font-semibold">
+                          {getFindingDisplayTitle(finding)}
+                        </h3>
+                        {grouped ? (
+                          <ReportAffectedPages
+                            occurrenceCount={group.occurrenceCount}
+                            pageUrls={group.pageUrls}
+                          />
+                        ) : finding.pageUrl ? (
+                          <p className="mt-2 break-all text-sm text-white/40">
+                            {finding.pageUrl}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {change ? (
+                          <span className="rounded-md border border-[#49558b] bg-[#151a31] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aab2ff]">
+                            {findingChangeLabels[change.change]}
+                            {change.previousSeverity &&
+                            change.previousSeverity !== finding.severity
+                              ? ` · ${severityLabels[change.previousSeverity]} → ${severityLabels[finding.severity]}`
+                              : ""}
+                          </span>
+                        ) : null}
+                        <span
+                          data-severity={finding.severity}
+                          className={
+                            "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
+                            severityStyles[finding.severity]
+                          }
+                        >
+                          {severityLabels[finding.severity]}
                         </span>
-                      ) : null}
-                      <span
-                        data-severity={finding.severity}
-                        className={
-                          "rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] " +
-                          severityStyles[finding.severity]
-                        }
-                      >
-                        {severityLabels[finding.severity]}
+                      </div>
+                    </div>
+
+                    <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr]">
+                      <div className="rounded-lg bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-white/35">
+                          Impact concret
+                        </dt>
+                        <dd className="mt-1 text-sm leading-6 text-white/65">
+                          {businessContext.impact}
+                        </dd>
+                      </div>
+                      <div className="rounded-lg bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-white/35">
+                          Type d’intervention
+                        </dt>
+                        <dd className="mt-1 text-sm text-white/70">
+                          {businessContext.intervention}
+                        </dd>
+                      </div>
+                      <div className="rounded-lg bg-black/15 px-4 py-3">
+                        <dt className="text-xs text-white/35">Effort estimé</dt>
+                        <dd className="mt-1 text-sm text-white/70">
+                          {businessContext.effort}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {evidence.length > 0 ? (
+                      <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {evidence.map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-lg bg-black/15 px-4 py-3"
+                          >
+                            <dt className="text-xs text-white/35">{label}</dt>
+                            <dd className="mt-1 break-all text-sm text-white/70">
+                              {value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+
+                    {remediation ? (
+                      <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+                          Comment corriger
+                        </p>
+                        <h4 className="mt-2 font-semibold text-[#eef1ff]">
+                          {remediation.title}
+                        </h4>
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                          Ce que cela signifie
+                        </p>
+                        <p className="mt-1 text-sm leading-6 text-white/55">
+                          {remediation.summary}
+                        </p>
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
+                          Plan de correction
+                        </p>
+                        <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
+                          {remediation.steps.map((step, index) => (
+                            <li key={step} className="flex gap-3">
+                              <span className="font-mono text-[#7f8cff]">
+                                {index + 1}.
+                              </span>
+                              <span>{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                        <p className="mt-4 border-t border-white/10 pt-4 text-xs leading-5 text-white/45">
+                          <span className="font-semibold text-white/65">
+                            Vérification :
+                          </span>{" "}
+                          {remediation.verification}
+                        </p>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {comparison && comparison.resolvedFindings.length > 0 ? (
+            <div className="mt-10">
+              <p className="text-sm text-white/45">Rétablissements</p>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">
+                {comparison.resolvedFindings.length} finding
+                {comparison.resolvedFindings.length > 1 ? "s" : ""} résolu
+                {comparison.resolvedFindings.length > 1 ? "s" : ""}
+              </h2>
+              <div className="mt-4 space-y-3">
+                {comparison.resolvedFindings.map((finding) => (
+                  <article
+                    key={finding.fingerprint}
+                    className="rounded-lg border border-[#285747] bg-[#0d1715] p-5"
+                  >
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#72c6a5]">
+                          Résolu · {finding.code}
+                        </p>
+                        <h3 className="mt-2 font-medium">{finding.title}</h3>
+                        {finding.pageUrl ? (
+                          <p className="mt-2 break-all text-sm text-white/40">
+                            {finding.pageUrl}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/55">
+                        Ancienne sévérité : {severityLabels[finding.severity]}
                       </span>
                     </div>
-                  </div>
-
-                  <dl className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr]">
-                    <div className="rounded-lg bg-black/15 px-4 py-3">
-                      <dt className="text-xs text-white/35">Impact concret</dt>
-                      <dd className="mt-1 text-sm leading-6 text-white/65">
-                        {businessContext.impact}
-                      </dd>
-                    </div>
-                    <div className="rounded-lg bg-black/15 px-4 py-3">
-                      <dt className="text-xs text-white/35">
-                        Type d’intervention
-                      </dt>
-                      <dd className="mt-1 text-sm text-white/70">
-                        {businessContext.intervention}
-                      </dd>
-                    </div>
-                    <div className="rounded-lg bg-black/15 px-4 py-3">
-                      <dt className="text-xs text-white/35">Effort estimé</dt>
-                      <dd className="mt-1 text-sm text-white/70">
-                        {businessContext.effort}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  {evidence.length > 0 ? (
-                    <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {evidence.map(([label, value]) => (
-                        <div
-                          key={label}
-                          className="rounded-lg bg-black/15 px-4 py-3"
-                        >
-                          <dt className="text-xs text-white/35">{label}</dt>
-                          <dd className="mt-1 break-all text-sm text-white/70">
-                            {value}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-
-                  {remediation ? (
-                    <div className="report-remediation mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
-                      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
-                        Comment corriger
-                      </p>
-                      <h4 className="mt-2 font-semibold text-[#eef1ff]">
-                        {remediation.title}
-                      </h4>
-                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
-                        Ce que cela signifie
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-white/55">
-                        {remediation.summary}
-                      </p>
-                      <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-white/35">
-                        Plan de correction
-                      </p>
-                      <ol className="mt-4 space-y-2 text-sm leading-6 text-white/65">
-                        {remediation.steps.map((step, index) => (
-                          <li key={step} className="flex gap-3">
-                            <span className="font-mono text-[#7f8cff]">
-                              {index + 1}.
-                            </span>
-                            <span>{step}</span>
-                          </li>
-                        ))}
-                      </ol>
-                      <p className="mt-4 border-t border-white/10 pt-4 text-xs leading-5 text-white/45">
-                        <span className="font-semibold text-white/65">
-                          Vérification :
-                        </span>{" "}
-                        {remediation.verification}
-                      </p>
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
-        )}
-
-        {comparison && comparison.resolvedFindings.length > 0 ? (
-          <div className="mt-10">
-            <p className="text-sm text-white/45">Rétablissements</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-tight">
-              {comparison.resolvedFindings.length} finding
-              {comparison.resolvedFindings.length > 1 ? "s" : ""} résolu
-              {comparison.resolvedFindings.length > 1 ? "s" : ""}
-            </h2>
-            <div className="mt-4 space-y-3">
-              {comparison.resolvedFindings.map((finding) => (
-                <article
-                  key={finding.fingerprint}
-                  className="rounded-lg border border-[#285747] bg-[#0d1715] p-5"
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#72c6a5]">
-                        Résolu · {finding.code}
-                      </p>
-                      <h3 className="mt-2 font-medium">{finding.title}</h3>
-                      {finding.pageUrl ? (
-                        <p className="mt-2 break-all text-sm text-white/40">
-                          {finding.pageUrl}
-                        </p>
-                      ) : null}
-                    </div>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/55">
-                      Ancienne sévérité : {severityLabels[finding.severity]}
-                    </span>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </section>
+          ) : null}
+        </section>
+      ) : null}
     </WorkspaceShell>
   );
 }

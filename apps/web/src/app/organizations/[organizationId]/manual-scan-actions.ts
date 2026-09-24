@@ -4,7 +4,11 @@ import { OrganizationReadSchema, SiteReadSchema } from "@agency-saas/contracts";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireCurrentSession } from "@/lib/current-session";
-import { createManualScanForSite, ManualScanError } from "@/lib/manual-scan";
+import {
+  createDeepScanForSite,
+  createManualScanForSite,
+  ManualScanError,
+} from "@/lib/manual-scan";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 
 export type ManualScanActionState = {
@@ -38,15 +42,11 @@ function humanScanError(error: unknown): string {
   return "Impossible de lancer le scan pour le moment.";
 }
 
-export async function startManualScanAction(
+async function runManualScanAction(
   organizationId: string,
   siteId: string,
-  _previousState: ManualScanActionState,
-  _formData: FormData,
+  mode: "standard" | "deep",
 ): Promise<ManualScanActionState> {
-  void _previousState;
-  void _formData;
-
   if (
     !OrganizationReadSchema.shape.id.safeParse(organizationId).success ||
     !SiteReadSchema.shape.id.safeParse(siteId).success
@@ -59,13 +59,16 @@ export async function startManualScanAction(
 
   const session = await requireCurrentSession();
 
-  let scan: Awaited<ReturnType<typeof createManualScanForSite>>;
+  let scan;
   try {
-    scan = await createManualScanForSite(
-      session.user.id,
-      organizationId,
-      siteId,
-    );
+    scan =
+      mode === "deep"
+        ? await createDeepScanForSite(session.user.id, organizationId, siteId)
+        : await createManualScanForSite(
+            session.user.id,
+            organizationId,
+            siteId,
+          );
   } catch (error) {
     return {
       ...initialManualScanActionState,
@@ -76,4 +79,26 @@ export async function startManualScanAction(
   revalidatePath(`/organizations/${organizationId}`);
   revalidatePath(`/organizations/${organizationId}/sites/${siteId}`);
   redirect(`/organizations/${organizationId}/sites/${siteId}/scans/${scan.id}`);
+}
+
+export async function startManualScanAction(
+  organizationId: string,
+  siteId: string,
+  _previousState: ManualScanActionState,
+  _formData: FormData,
+): Promise<ManualScanActionState> {
+  void _previousState;
+  void _formData;
+  return runManualScanAction(organizationId, siteId, "standard");
+}
+
+export async function startDeepScanAction(
+  organizationId: string,
+  siteId: string,
+  _previousState: ManualScanActionState,
+  _formData: FormData,
+): Promise<ManualScanActionState> {
+  void _previousState;
+  void _formData;
+  return runManualScanAction(organizationId, siteId, "deep");
 }

@@ -171,6 +171,65 @@ describeIntegration("scan dispatch transactional outbox", () => {
     }
   });
 
+  it("dispatches a Deep scan for an active verified site", async () => {
+    const { db } = getDatabase();
+    const organizationId = randomUUID();
+    const siteId = randomUUID();
+
+    await db.insert(organizations).values({
+      id: organizationId,
+      name: "Deep dispatch test",
+    });
+    await db.insert(sites).values({
+      id: siteId,
+      organizationId,
+      name: "Verified Deep target",
+      canonicalUrl: "https://deep-dispatch.example/",
+      status: "active",
+      verifiedAt: new Date(),
+    });
+    const [scan] = await db
+      .insert(scans)
+      .values({
+        organizationId,
+        siteId,
+        trigger: "manual",
+        scanMode: "verified_deep_audit",
+        status: "queued",
+        summary: { internalDeepWorker: true },
+      })
+      .returning({ id: scans.id });
+    if (!scan) throw new Error("Deep dispatch scan creation failed");
+
+    await db.insert(scanDispatches).values({
+      scanId: scan.id,
+      nextAttemptAt: new Date(0),
+    });
+
+    const delivered: ScanJob[] = [];
+    try {
+      const result = await dispatchDueScanJobs(async (payload) => {
+        delivered.push(payload);
+      });
+
+      expect(result).toMatchObject({
+        attempted: 1,
+        dispatched: 1,
+        deferred: 0,
+        cancelled: 0,
+      });
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]).toMatchObject({
+        scanId: scan.id,
+        organizationId,
+        siteId,
+        targetUrl: "https://deep-dispatch.example/",
+      });
+    } finally {
+      await deleteFixture(organizationId);
+    }
+  });
+
   it("survives BullMQ acceptance followed by a lost response without duplicate work", async () => {
     const fixture = await createFixture();
     const queue = new Queue<ScanJob>(SCAN_QUEUE_NAME, {

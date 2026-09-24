@@ -21,7 +21,12 @@ const faq = [
   {
     question: "Pourquoi vérifier son domaine ?",
     answer:
-      "La vérification DNS prouve que vous pouvez administrer le domaine avant d’autoriser le monitoring continu et le partage public des rapports. Elle n’est jamais contournée par l’interface.",
+      "La vérification DNS prouve que vous pouvez administrer le domaine avant d’autoriser le monitoring continu, les audits approfondis et le partage public des rapports. La même vérification suffit pour les deux types de scan.",
+  },
+  {
+    question: "Quelle différence entre un scan et un scan approfondi ?",
+    answer:
+      "Les deux sont disponibles après la même vérification DNS du domaine. « Lancer un scan » utilise le monitoring standard. « Lancer un scan approfondi » utilise le moteur Deep V3 avec ses transports réseau gardés, ses budgets, ses checks et ses preuves techniques. Un seul scan peut être actif à la fois pour un site.",
   },
   {
     question: "Comment fonctionne le score ?",

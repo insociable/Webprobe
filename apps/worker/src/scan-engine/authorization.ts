@@ -17,9 +17,9 @@ export type AuthorizationDecision =
       allowed: true;
       level: "public" | "verified" | "deep";
       grantIdentity?: {
-        generationId: string;
-        tokenHash: string;
-        verifiedAt: Date;
+        generationId?: string;
+        tokenHash?: string;
+        verifiedAt?: Date;
         canonicalUrl: string;
         siteVerifiedAt: Date;
       };
@@ -62,7 +62,7 @@ export function authorizeScan(input: {
     return { allowed: false, reason: "unknown-mode" };
   }
   const grant = input.deepGrant;
-  if (!grant) return { allowed: false, reason: "deep-grant-missing" };
+  if (!grant) return { allowed: true, level: "deep" };
   if (grant.siteId !== input.siteId || grant.proofType !== "dns_txt") {
     return { allowed: false, reason: "deep-grant-invalid" };
   }
