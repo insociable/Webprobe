@@ -260,6 +260,11 @@ export async function runDeepAuditCandidate(input: {
       lease,
       signal: monitor.signal,
     });
+    if (!authorization.allowed) {
+      throw Object.assign(new Error("Deep authorization denied"), {
+        code: "deep-authorization-denied",
+      });
+    }
   } finally {
     monitor.stop();
     await releaseDeepLease(lease);

@@ -22,10 +22,13 @@ export async function persistDeepCheckRuns(input: {
   ledger: BudgetLedger;
   lease: DeepLease;
   grantIdentity: DeepGrantIdentity | null;
+  authorizationReason?: string | null;
   signal?: AbortSignal;
 }): Promise<void> {
   if (input.signal?.aborted) throw new Error("Deep execution aborted");
   if (input.runs.length === 0) throw new Error("No check runs to persist");
+  if (!input.grantIdentity && !input.authorizationReason)
+    throw new Error("Deep authorization reason missing");
   if (
     !input.grantIdentity &&
     input.runs.some(
@@ -35,6 +38,8 @@ export async function persistDeepCheckRuns(input: {
     )
   )
     throw new Error("Deep grant missing for check results");
+  const authorizationDenied = !input.grantIdentity;
+  const authorizationErrorCode = "deep-authorization-denied";
   const identities = input.runs.map(
     (run) => `${run.checkId}\0${run.checkVersion}`,
   );
@@ -180,10 +185,18 @@ export async function persistDeepCheckRuns(input: {
     await tx
       .update(scans)
       .set({
-        status: "completed",
+        status: authorizationDenied ? "failed" : "completed",
         completedAt: sql`clock_timestamp()`,
         summary: {
           ...scan.summary,
+          ...(authorizationDenied
+            ? {
+                deepError: {
+                  code: authorizationErrorCode,
+                  reason: input.authorizationReason,
+                },
+              }
+            : {}),
           v3Coverage: {
             totalChecks: input.runs.length,
             completedChecks: input.runs.filter(
@@ -203,9 +216,9 @@ export async function persistDeepCheckRuns(input: {
     const [completed] = await tx
       .update(scanAttempts)
       .set({
-        status: "completed",
+        status: authorizationDenied ? "failed" : "completed",
         retryable: false,
-        errorCode: null,
+        errorCode: authorizationDenied ? authorizationErrorCode : null,
         completedAt: sql`clock_timestamp()`,
         leaseUntil: null,
       })

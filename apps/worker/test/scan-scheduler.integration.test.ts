@@ -368,6 +368,249 @@ describeDatabase("scheduled scan coordinator persistence", () => {
     }
   });
 
+  it("fails a stale Deep scan when a retained BullMQ job is failed before lease acquisition", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const fixture = await createFixture({
+      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+    });
+
+    try {
+      const [scan] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "running",
+          startedAt: new Date("2026-09-22T07:30:00.000Z"),
+          summary: { internalDeepWorker: true },
+        })
+        .returning({ id: scans.id });
+      if (!scan) throw new Error("fixture Deep scan creation failed");
+
+      const result = await recoverOrphanedRunningScans(
+        async () => "failed",
+        now,
+      );
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 1,
+        inspectionFailed: 0,
+      });
+
+      const [persisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, scan.id));
+      expect(persisted?.status).toBe("failed");
+      expect(persisted?.summary).toMatchObject({
+        deepError: { code: "deep-worker-job-failed" },
+      });
+
+      expect(
+        await db
+          .select()
+          .from(scanDispatches)
+          .where(eq(scanDispatches.scanId, scan.id)),
+      ).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("does not reconcile a stale Deep scan while its PostgreSQL lease is current", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const fixture = await createFixture({
+      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+    });
+
+    try {
+      const [scan] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "running",
+          startedAt: new Date("2026-09-22T07:30:00.000Z"),
+          summary: { internalDeepWorker: true },
+        })
+        .returning({ id: scans.id });
+      if (!scan) throw new Error("fixture Deep scan creation failed");
+
+      await db.insert(scanAttempts).values({
+        scanId: scan.id,
+        attemptNumber: 1,
+        status: "running",
+        leaseToken: randomUUID(),
+        leaseUntil: new Date(Date.now() + 60_000),
+      });
+
+      const result = await recoverOrphanedRunningScans(
+        async () => "failed",
+        now,
+      );
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 0,
+        inspectionFailed: 0,
+      });
+
+      const [persisted] = await db
+        .select({ status: scans.status })
+        .from(scans)
+        .where(eq(scans.id, scan.id));
+      expect(persisted?.status).toBe("running");
+
+      const [attempt] = await db
+        .select({ status: scanAttempts.status })
+        .from(scanAttempts)
+        .where(eq(scanAttempts.scanId, scan.id));
+      expect(attempt?.status).toBe("running");
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("terminalizes a Deep crash with a missing job after its lease expires", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const fixture = await createFixture({
+      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+    });
+
+    try {
+      const [scan] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "running",
+          startedAt: new Date("2026-09-22T07:30:00.000Z"),
+          summary: { internalDeepWorker: true },
+        })
+        .returning({ id: scans.id });
+      if (!scan) throw new Error("fixture Deep scan creation failed");
+
+      await db.insert(scanAttempts).values({
+        scanId: scan.id,
+        attemptNumber: 1,
+        status: "running",
+        leaseToken: randomUUID(),
+        leaseUntil: new Date(Date.now() - 60_000),
+      });
+
+      const result = await recoverOrphanedRunningScans(
+        async () => "missing",
+        now,
+      );
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 1,
+        inspectionFailed: 0,
+      });
+
+      const [persisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, scan.id));
+      expect(persisted?.status).toBe("failed");
+      expect(persisted?.summary).toMatchObject({
+        deepError: { code: "deep-worker-job-missing" },
+      });
+
+      const [attempt] = await db
+        .select({
+          status: scanAttempts.status,
+          retryable: scanAttempts.retryable,
+          errorCode: scanAttempts.errorCode,
+          leaseUntil: scanAttempts.leaseUntil,
+        })
+        .from(scanAttempts)
+        .where(eq(scanAttempts.scanId, scan.id));
+      expect(attempt).toEqual({
+        status: "failed",
+        retryable: false,
+        errorCode: "deep-worker-job-missing",
+        leaseUntil: null,
+      });
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("terminalizes exhausted Deep attempts without creating a V2 dispatch", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const fixture = await createFixture({
+      nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+    });
+
+    try {
+      const [scan] = await db
+        .insert(scans)
+        .values({
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "running",
+          startedAt: new Date("2026-09-22T07:30:00.000Z"),
+          summary: { internalDeepWorker: true },
+        })
+        .returning({ id: scans.id });
+      if (!scan) throw new Error("fixture Deep scan creation failed");
+
+      await db.insert(scanAttempts).values(
+        Array.from({ length: 5 }, (_, index) => ({
+          scanId: scan.id,
+          attemptNumber: index + 1,
+          status: "retrying" as const,
+          retryable: true,
+          errorCode: "deep-interrupted",
+          completedAt: new Date("2026-09-22T07:31:00.000Z"),
+        })),
+      );
+
+      const result = await recoverOrphanedRunningScans(
+        async () => "failed",
+        now,
+      );
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 1,
+        inspectionFailed: 0,
+      });
+
+      const [persisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, scan.id));
+      expect(persisted?.status).toBe("failed");
+      expect(persisted?.summary).toMatchObject({
+        deepError: { code: "deep-worker-job-failed" },
+      });
+      expect(
+        await db
+          .select()
+          .from(scanDispatches)
+          .where(eq(scanDispatches.scanId, scan.id)),
+      ).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
   it("leaves stale running scans untouched when Redis inspection fails", async () => {
     const { db } = getDatabase();
     const now = new Date("2026-09-22T08:00:00.000Z");

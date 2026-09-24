@@ -1,6 +1,12 @@
 import { ScanJobSchema, type ScanJob } from "@agency-saas/contracts";
-import { scanDispatches, scanSchedules, scans, sites } from "@agency-saas/db";
-import { and, asc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import {
+  scanAttempts,
+  scanDispatches,
+  scanSchedules,
+  scans,
+  sites,
+} from "@agency-saas/db";
+import { and, asc, desc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
 import {
@@ -8,7 +14,21 @@ import {
   MAX_STALE_RECOVERY_ATTEMPTS,
 } from "./scan-retry.js";
 
-export type ScheduledJobPresenceChecker = (scanId: string) => Promise<boolean>;
+export type ScheduledJobState =
+  | boolean
+  | "missing"
+  | "waiting"
+  | "active"
+  | "delayed"
+  | "prioritized"
+  | "waiting-children"
+  | "completed"
+  | "failed"
+  | "unknown";
+
+export type ScheduledJobPresenceChecker = (
+  scanId: string,
+) => Promise<ScheduledJobState>;
 
 export type StaleScanRecoveryResult = {
   checked: number;
@@ -219,6 +239,120 @@ export async function cancelInvalidQueuedScheduledScans(
   return cancelled.length;
 }
 
+async function reconcileStaleDeepScan(
+  scanId: string,
+  inspection: ScheduledJobState,
+): Promise<"failed" | "pending" | "inspection-failed"> {
+  const { db } = getDatabase();
+
+  return db.transaction(async (tx) => {
+    const [scan] = await tx
+      .select({
+        id: scans.id,
+        status: scans.status,
+        mode: scans.scanMode,
+        summary: scans.summary,
+      })
+      .from(scans)
+      .where(eq(scans.id, scanId))
+      .for("update")
+      .limit(1);
+
+    if (
+      !scan ||
+      scan.status !== "running" ||
+      scan.mode !== "verified_deep_audit"
+    ) {
+      return "pending";
+    }
+
+    const [latest] = await tx
+      .select({
+        id: scanAttempts.id,
+        status: scanAttempts.status,
+        leaseUntil: scanAttempts.leaseUntil,
+        leaseActive: sql<boolean>`${scanAttempts.leaseUntil} > clock_timestamp()`,
+      })
+      .from(scanAttempts)
+      .where(eq(scanAttempts.scanId, scanId))
+      .orderBy(desc(scanAttempts.attemptNumber))
+      .for("update")
+      .limit(1);
+
+    // A current database lease outranks a stale queue observation.
+    if (
+      latest?.status === "running" &&
+      latest.leaseUntil &&
+      latest.leaseActive
+    ) {
+      return "pending";
+    }
+
+    const state =
+      typeof inspection === "boolean"
+        ? inspection
+          ? "unknown"
+          : "missing"
+        : inspection;
+
+    if (state === "unknown") return "inspection-failed";
+    if (
+      state === "waiting" ||
+      state === "delayed" ||
+      state === "prioritized" ||
+      state === "waiting-children"
+    ) {
+      return "pending";
+    }
+
+    const code =
+      state === "failed"
+        ? "deep-worker-job-failed"
+        : state === "completed"
+          ? "deep-worker-job-completed-with-running-scan"
+          : state === "active"
+            ? "deep-worker-lease-expired"
+            : "deep-worker-job-missing";
+
+    if (
+      latest &&
+      (latest.status === "running" || latest.status === "retrying")
+    ) {
+      await tx
+        .update(scanAttempts)
+        .set({
+          status: "failed",
+          retryable: false,
+          errorCode: code,
+          completedAt: sql`clock_timestamp()`,
+          leaseUntil: null,
+        })
+        .where(eq(scanAttempts.id, latest.id));
+    }
+
+    const terminal = await tx
+      .update(scans)
+      .set({
+        status: "failed",
+        completedAt: sql`clock_timestamp()`,
+        summary: {
+          ...scan.summary,
+          deepError: { code },
+        },
+      })
+      .where(
+        and(
+          eq(scans.id, scanId),
+          eq(scans.scanMode, "verified_deep_audit"),
+          eq(scans.status, "running"),
+        ),
+      )
+      .returning({ id: scans.id });
+
+    return terminal.length === 1 ? "failed" : "pending";
+  });
+}
+
 export async function recoverOrphanedRunningScans(
   hasJob: ScheduledJobPresenceChecker,
   now = new Date(),
@@ -229,7 +363,7 @@ export async function recoverOrphanedRunningScans(
   const staleBefore = new Date(now.getTime() - staleAfterMs);
 
   const rows = await db
-    .select({ id: scans.id })
+    .select({ id: scans.id, mode: scans.scanMode })
     .from(scans)
     .where(
       and(
@@ -246,14 +380,23 @@ export async function recoverOrphanedRunningScans(
   let inspectionFailed = 0;
 
   for (const row of rows) {
-    let present: boolean;
+    let inspection: ScheduledJobState;
     try {
-      present = await hasJob(row.id);
+      inspection = await hasJob(row.id);
     } catch {
       inspectionFailed += 1;
       continue;
     }
 
+    if (row.mode === "verified_deep_audit") {
+      const outcome = await reconcileStaleDeepScan(row.id, inspection);
+      if (outcome === "failed") failed += 1;
+      if (outcome === "inspection-failed") inspectionFailed += 1;
+      continue;
+    }
+
+    const present =
+      typeof inspection === "boolean" ? inspection : inspection !== "missing";
     if (present) continue;
 
     const attemptCount = await getScanAttemptCount(row.id);

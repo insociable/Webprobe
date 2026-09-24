@@ -118,6 +118,9 @@ export async function analyzeAndPersistDeepObservations(input: {
       input.authorization.allowed && input.authorization.grantIdentity
         ? input.authorization.grantIdentity
         : null,
+    authorizationReason: input.authorization.allowed
+      ? null
+      : input.authorization.reason,
     signal: input.signal,
   });
   return runs;

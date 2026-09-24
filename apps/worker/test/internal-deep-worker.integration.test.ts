@@ -26,6 +26,7 @@ import { revalidateDeepAuditAuthorization } from "../src/scan-engine/deep-proof.
 import { persistDeepCheckRuns } from "../src/scan-engine/check-persistence.js";
 import { BudgetLedger } from "../src/scan-engine/budget-ledger.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
+import { parseRedisConnectionUrl } from "../src/redis-connection.js";
 
 const describeDatabase =
   process.env.RUN_DB_INTEGRATION === "1" ? describe : describe.skip;
@@ -187,18 +188,16 @@ describeDatabase("internal Deep worker lifecycle", () => {
         .update(deepAuditAuthorizations)
         .set({ generationId: null })
         .where(eq(deepAuditAuthorizations.siteId, f.siteId));
-      expect(
-        (
-          await runInternalDeepWorkerJob({
-            payload: f.payload,
-            attemptsMade: 0,
-            configuredAttempts: 3,
-            signal: new AbortController().signal,
-            env: enabled,
-            candidate,
-          })
-        ).status,
-      ).toBe("completed");
+      await expect(
+        runInternalDeepWorkerJob({
+          payload: f.payload,
+          attemptsMade: 0,
+          configuredAttempts: 3,
+          signal: new AbortController().signal,
+          env: enabled,
+          candidate,
+        }),
+      ).rejects.toThrow("deep-authorization-denied");
       expect(dns).not.toHaveBeenCalled();
       expect(requests).not.toHaveBeenCalled();
       const runs = await db
@@ -213,6 +212,30 @@ describeDatabase("internal Deep worker lifecycle", () => {
             run.skipReason === "authorization-unavailable",
         ),
       ).toBe(true);
+      const [scan] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, f.scanId));
+      expect(scan?.status).toBe("failed");
+      expect(scan?.summary).toMatchObject({
+        deepError: {
+          code: "deep-authorization-denied",
+          reason: "deep-grant-invalid",
+        },
+      });
+      const [attempt] = await db
+        .select({
+          status: scanAttempts.status,
+          retryable: scanAttempts.retryable,
+          errorCode: scanAttempts.errorCode,
+        })
+        .from(scanAttempts)
+        .where(eq(scanAttempts.scanId, f.scanId));
+      expect(attempt).toEqual({
+        status: "failed",
+        retryable: false,
+        errorCode: "deep-authorization-denied",
+      });
     } finally {
       await f.cleanup();
     }
@@ -608,12 +631,8 @@ const describeRedis =
 describeRedis("internal Deep BullMQ retry", () => {
   it("uses a new fenced token after a transient worker attempt", async () => {
     const f = await fixture();
-    const redis = new URL(process.env.REDIS_URL!);
     const connection = {
-      host: redis.hostname,
-      port: Number(redis.port || 6379),
-      password: redis.password || undefined,
-      db: Number(redis.pathname.slice(1) || 0),
+      ...parseRedisConnectionUrl(process.env.REDIS_URL),
       maxRetriesPerRequest: null,
     };
     const name = `internal-deep-${randomUUID()}`;

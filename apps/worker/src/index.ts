@@ -1,7 +1,6 @@
 import { config } from "dotenv";
 import { Queue, UnrecoverableError, Worker, type JobsOptions } from "bullmq";
 import pino from "pino";
-import { z } from "zod";
 import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
 import { startNotificationDeliveryCoordinator } from "./notification-delivery.js";
@@ -15,6 +14,7 @@ import {
   startPublicAuditRetentionCoordinator,
 } from "./public-audit-retention.js";
 import { processScanJobAttempt } from "./scan-processor.js";
+import { parseRedisConnectionUrl } from "./redis-connection.js";
 import {
   runInternalDeepWorkerJob,
   scanModeForWorkerJob,
@@ -32,13 +32,10 @@ config({ path: new URL("../../../.env", import.meta.url) });
 void getDatabase();
 
 const logger = pino({ name: "scanner-worker" });
-const redisUrl = new URL(z.string().url().parse(process.env.REDIS_URL));
+const redisConnection = parseRedisConnectionUrl(process.env.REDIS_URL);
 
 const connection = {
-  host: redisUrl.hostname,
-  port: Number(redisUrl.port || 6379),
-  username: redisUrl.username || undefined,
-  password: redisUrl.password || undefined,
+  ...redisConnection,
   maxRetriesPerRequest: null,
 };
 
@@ -225,8 +222,13 @@ const enqueueScan = async (payload: ScanJob) => {
   });
 };
 
+const inspectScanJob = async (scanId: string) => {
+  const job = await scanQueue.getJob(scanId);
+  return job ? await job.getState() : ("missing" as const);
+};
+
 const hasScanJob = async (scanId: string) =>
-  (await scanQueue.getJob(scanId)) !== undefined;
+  (await inspectScanJob(scanId)) !== "missing";
 
 const dispatchCoordinator = startScanDispatchCoordinator({
   logger,
@@ -236,7 +238,7 @@ const dispatchCoordinator = startScanDispatchCoordinator({
 
 const schedulerCoordinator = startScheduledScanCoordinator({
   logger,
-  hasJob: hasScanJob,
+  hasJob: inspectScanJob,
 });
 
 const notificationCoordinator = startNotificationDeliveryCoordinator({

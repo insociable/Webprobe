@@ -142,11 +142,13 @@ describeDatabase("V3 schema compatibility", () => {
         status: "running",
         scanMode: "verified_deep_audit",
       });
-      await runDeepAuditCandidate({
-        ...input,
-        scanId: deniedScanId,
-        resolveTxt: async () => [["wrong"]],
-      });
+      await expect(
+        runDeepAuditCandidate({
+          ...input,
+          scanId: deniedScanId,
+          resolveTxt: async () => [["wrong"]],
+        }),
+      ).rejects.toMatchObject({ code: "deep-authorization-denied" });
       const deniedRuns = await db
         .select()
         .from(scanCheckRuns)
@@ -160,15 +162,22 @@ describeDatabase("V3 schema compatibility", () => {
         ),
       ).toBe(true);
       expect(requests).toBe(1);
+      const [deniedScan] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, deniedScanId));
+      expect(deniedScan?.status).toBe("failed");
+      expect(deniedScan?.summary).toMatchObject({
+        deepError: {
+          code: "deep-authorization-denied",
+          reason: "deep-grant-invalid",
+        },
+      });
       const [grant] = await db
         .select({ revalidatedAt: deepAuditAuthorizations.revalidatedAt })
         .from(deepAuditAuthorizations)
         .where(eq(deepAuditAuthorizations.siteId, siteId));
       expect(grant?.revalidatedAt).toBeNull();
-      await db
-        .update(scans)
-        .set({ status: "completed" })
-        .where(eq(scans.id, deniedScanId));
       const limitedScanId = randomUUID();
       await db.insert(scans).values({
         id: limitedScanId,
