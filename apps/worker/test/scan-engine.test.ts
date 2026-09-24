@@ -185,8 +185,10 @@ describe("scope and authorization", () => {
     const deepGrant = {
       siteId: "site-1",
       proofType: "dns_txt" as const,
+      proofRecordName: "_agency-monitor.example.com",
+      proofTokenHash: "a".repeat(64),
       proofVerifiedAt: new Date("2026-09-22T00:00:00.000Z"),
-      revalidatedAt: new Date("2026-09-23T11:00:00.000Z"),
+      revalidatedAt: new Date("2026-09-23T11:59:00.000Z"),
       expiresAt: new Date("2026-09-24T00:00:00.000Z"),
       revokedAt: null,
     };
@@ -212,6 +214,16 @@ describe("scope and authorization", () => {
         ...base,
         mode: "verified_deep_audit",
         deepGrant: { ...deepGrant, revalidatedAt: null },
+      }),
+    ).toMatchObject({ reason: "deep-grant-invalid" });
+    expect(
+      authorizeScan({
+        ...base,
+        mode: "verified_deep_audit",
+        deepGrant: {
+          ...deepGrant,
+          revalidatedAt: new Date("2026-09-23T11:54:59.000Z"),
+        },
       }),
     ).toMatchObject({ reason: "deep-grant-invalid" });
   });
@@ -300,6 +312,12 @@ describe("check registry and evidence", () => {
         targetUrl: "https://example.com/",
         observations: {},
       }),
-    ).rejects.toThrow("authorization denied");
+    ).resolves.toMatchObject([
+      {
+        status: "skipped",
+        skipReason: "authorization-unavailable",
+        evidence: [],
+      },
+    ]);
   });
 });

@@ -76,4 +76,8 @@ export class CheckRegistry {
       check.modes.includes(mode),
     );
   }
+
+  listAll(): readonly CheckDefinition[] {
+    return [...this.checks.values()];
+  }
 }

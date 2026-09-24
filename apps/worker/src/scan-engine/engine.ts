@@ -18,10 +18,8 @@ export type CheckRun = {
 };
 
 function mayRun(check: CheckDefinition, profile: ScanProfile): string | null {
-  if (
-    !profile.allowedChecks.includes(check.id) ||
-    !check.modes.includes(profile.mode)
-  ) {
+  if (!check.modes.includes(profile.mode)) return "not-applicable";
+  if (!profile.allowedChecks.includes(check.id)) {
     return "profile-denied";
   }
   if (check.activity === "active_safe" && !profile.allowActiveSafe) {
@@ -49,24 +47,30 @@ export async function runChecks(input: {
   targetUrl: string;
   observations: Readonly<Record<string, unknown>>;
   now?: () => number;
+  signal?: AbortSignal;
 }): Promise<readonly CheckRun[]> {
   const now = input.now ?? Date.now;
-  if (!input.scope.allows(input.targetUrl).allowed) {
-    throw new Error("Scan target outside authorized scope");
-  }
-  if (
+  const scopeAllowed = input.scope.allows(input.targetUrl).allowed;
+  const authorizationAllowed = !(
     !input.authorization.allowed ||
     (input.profile.mode === "verified_deep_audit" &&
       input.authorization.level !== "deep") ||
     (input.profile.mode === "verified_monitoring" &&
       input.authorization.level === "public")
-  ) {
-    throw new Error("Scan authorization denied");
-  }
+  );
+  if (!scopeAllowed) input.ledger.markPartial("scope-denied");
+  if (!authorizationAllowed)
+    input.ledger.markPartial("authorization-unavailable");
   const runs: CheckRun[] = [];
-  for (const check of input.registry.list(input.profile.mode)) {
+  for (const check of input.registry.listAll()) {
     const startedAtMs = now();
-    let skipReason = mayRun(check, input.profile);
+    let skipReason = input.signal?.aborted
+      ? "scan-interrupted"
+      : !scopeAllowed
+        ? "scope-denied"
+        : !authorizationAllowed
+          ? "authorization-unavailable"
+          : mayRun(check, input.profile);
     const before = input.ledger.snapshot().used;
     if (!skipReason) {
       const time = input.ledger.checkTime();
