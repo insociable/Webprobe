@@ -69,6 +69,18 @@ export default async function DashboardPage() {
             Après vérification du domaine par DNS, activez le monitoring
             récurrent, comparez les scans dans le temps et recevez des alertes.
           </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="Types de scan">
+            <div className="am-panel-soft p-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8793ff]">Scan standard</p>
+              <p className="mt-2 text-sm font-semibold text-[#e5e9f2]">Contrôle rapide du site</p>
+              <p className="mt-1 text-xs leading-5 text-[#7f8a9f]">Pour le suivi courant, les changements et les alertes.</p>
+            </div>
+            <div className="am-panel-soft p-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#39c7ff]">Audit approfondi</p>
+              <p className="mt-2 text-sm font-semibold text-[#e5e9f2]">Analyse Deep d’un domaine vérifié</p>
+              <p className="mt-1 text-xs leading-5 text-[#7f8a9f]">Navigation bornée et contrôles techniques plus poussés.</p>
+            </div>
+          </div>
           <div className="mt-7 flex flex-wrap gap-3">
             <Link href="/sites" className="am-button-secondary">
               Voir mes sites →

@@ -38,7 +38,6 @@ export async function createGuardedBrowserSession(input: {
   const inScopeAndTime = (rawUrl: string): boolean => {
     if (input.signal?.aborted) return false;
     if (!scope.allows(rawUrl).allowed) {
-      ledger.markPartial("scope-denied");
       return false;
     }
     return ledger.checkNetwork().allowed;
@@ -84,7 +83,6 @@ export async function createGuardedBrowserSession(input: {
         try {
           url = new URL(request.url);
         } catch {
-          ledger.markPartial("scope-denied");
           return false;
         }
         if (url.protocol === "data:" || url.protocol === "blob:") return true;
@@ -94,7 +92,6 @@ export async function createGuardedBrowserSession(input: {
           !["GET", "HEAD"].includes(request.method.toUpperCase()) ||
           !inScopeAndTime(request.url)
         ) {
-          ledger.markPartial("scope-denied");
           return false;
         }
         return ledger.reserve("httpRequests", 1, url.hostname).allowed;

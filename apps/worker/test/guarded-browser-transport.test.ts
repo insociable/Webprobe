@@ -133,7 +133,7 @@ describe("candidate guarded browser transport", () => {
       ).toContain("403 Forbidden");
       expect(resolver).not.toHaveBeenCalled();
       expect(ledger.snapshot().used.httpRequests).toBe(2);
-      expect(ledger.snapshot().reasons).toContain("scope-denied");
+      expect(ledger.snapshot().reasons).not.toContain("scope-denied");
       expect(ledger.snapshot().reasons).toContain("budget-host-requests");
     } finally {
       await session.close();

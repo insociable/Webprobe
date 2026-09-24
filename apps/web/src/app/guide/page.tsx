@@ -26,7 +26,7 @@ const steps = [
   {
     number: "05",
     title: "Choisir le type de scan",
-    text: "Sur un domaine vérifié, utilisez « Lancer un scan » pour le monitoring standard ou « Lancer un scan approfondi » pour les contrôles V3 Deep. Aucune seconde vérification DNS n’est demandée.",
+    text: "Sur un domaine vérifié, utilisez « Lancer un scan » pour un contrôle standard rapide, ou « Lancer un scan approfondi » pour une analyse plus complète avec navigateur et contrôles techniques renforcés.",
   },
   {
     number: "06",

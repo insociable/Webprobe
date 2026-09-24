@@ -223,12 +223,6 @@ export default async function SitePage({
             />
           ) : null}
 
-          {monitoringState.key === "inactive" && canManage ? (
-            <a href="#monitoring-planning" className="am-button-secondary">
-              Activer le monitoring
-            </a>
-          ) : null}
-
           {history.site.status === "active" && canManage && !activeScan ? (
             <ManualScanButton organizationId={organizationId} siteId={siteId} />
           ) : null}
@@ -392,13 +386,18 @@ export default async function SitePage({
         id="monitoring-planning"
         className="scroll-mt-24 border-t border-[#242d40] pt-9"
       >
-        <div className="mb-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
-            Automatisation
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
-            Planning du scan
-          </h2>
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">Configuration récurrente</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Monitoring</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6f7b91]">
+              Planifiez les scans standards automatiques et les alertes. Les
+              audits approfondis restent des actions manuelles distinctes.
+            </p>
+          </div>
+          <span className="w-fit rounded-md border border-[#303a50] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#9aa6ba]">
+            {monitoringState.label}
+          </span>
         </div>
         <ScanSchedulePanel
           organizationId={organizationId}
