@@ -282,6 +282,8 @@ export const deepAuditAuthorizations = pgTable(
       .primaryKey()
       .references(() => sites.id, { onDelete: "cascade" }),
     proofType: text("proof_type").notNull(),
+    proofRecordName: text("proof_record_name"),
+    proofTokenHash: text("proof_token_hash"),
     proofVerifiedAt: timestamp("proof_verified_at", {
       withTimezone: true,
     }).notNull(),
@@ -294,6 +296,10 @@ export const deepAuditAuthorizations = pgTable(
     check(
       "deep_audit_expiry_after_proof",
       sql`${table.expiresAt} > ${table.proofVerifiedAt}`,
+    ),
+    check(
+      "deep_audit_proof_hash_valid",
+      sql`${table.proofTokenHash} is null or ${table.proofTokenHash} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -416,6 +422,10 @@ export const scanCheckRuns = pgTable(
     budgetUsed: jsonb("budget_used")
       .$type<Record<string, number>>()
       .default({})
+      .notNull(),
+    evidence: jsonb("evidence")
+      .$type<ReadonlyArray<Record<string, unknown>>>()
+      .default([])
       .notNull(),
     skipReason: text("skip_reason"),
   },

@@ -3,6 +3,8 @@ import type { ScanMode } from "./types.js";
 export type DeepAuditAuthorization = Readonly<{
   siteId: string;
   proofType: "dns_txt";
+  proofRecordName: string | null;
+  proofTokenHash: string | null;
   proofVerifiedAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
@@ -57,13 +59,16 @@ export function authorizeScan(input: {
     return { allowed: false, reason: "deep-grant-revoked" };
   }
   if (
+    !grant.proofRecordName ||
+    !/^[a-f0-9]{64}$/.test(grant.proofTokenHash ?? "") ||
     !Number.isFinite(grant.proofVerifiedAt.getTime()) ||
     !Number.isFinite(grant.expiresAt.getTime()) ||
     !grant.revalidatedAt ||
     !Number.isFinite(grant.revalidatedAt.getTime()) ||
     grant.proofVerifiedAt > input.now ||
     grant.revalidatedAt > input.now ||
-    grant.revalidatedAt < grant.proofVerifiedAt
+    grant.revalidatedAt < grant.proofVerifiedAt ||
+    input.now.getTime() - grant.revalidatedAt.getTime() > 5 * 60_000
   ) {
     return { allowed: false, reason: "deep-grant-invalid" };
   }
