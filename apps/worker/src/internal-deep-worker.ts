@@ -21,6 +21,10 @@ export function internalDeepWorkerEnabled(env: NodeJS.ProcessEnv): boolean {
   );
 }
 
+function unrecoverableDeepError(code: string) {
+  return Object.assign(new UnrecoverableError(code), { code });
+}
+
 export async function scanModeForWorkerJob(jobData: unknown) {
   const payload = ScanJobSchema.parse(jobData);
   const { db } = getDatabase();
@@ -181,7 +185,7 @@ export async function runInternalDeepWorkerJob(input: {
   candidate?: typeof runDeepAuditCandidate;
 }): Promise<DeepResult> {
   if (!internalDeepWorkerEnabled(input.env ?? process.env))
-    throw new UnrecoverableError("deep-engine-unavailable");
+    throw unrecoverableDeepError("deep-engine-unavailable");
   const runCandidate = input.candidate ?? runDeepAuditCandidate;
   let lease: DeepLease | undefined;
   const busyUntil = Date.now() + 35_000;
@@ -230,7 +234,7 @@ export async function runInternalDeepWorkerJob(input: {
     const terminal =
       !retryable || input.attemptsMade + 1 >= input.configuredAttempts;
     if (lease) await recordDeepFailure(lease, classified.code, terminal);
-    if (!retryable) throw new UnrecoverableError(classified.code);
+    if (!retryable) throw unrecoverableDeepError(classified.code);
     throw error;
   }
 }

@@ -8,7 +8,7 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import {
   cancelInvalidQueuedScheduledScans,
@@ -298,6 +298,95 @@ describeDatabase("scheduled scan coordinator persistence", () => {
       await deleteFixture(fixture.organizationId);
     }
   });
+
+  it.each([
+    ["failed", "stale-worker-job-failed"],
+    ["completed", "stale-worker-job-completed-with-running-scan"],
+  ] as const)(
+    "terminalizes a stale V2 scan when its retained BullMQ job is %s",
+    async (jobState, errorCode) => {
+      const { db } = getDatabase();
+      const now = new Date("2026-09-22T08:00:00.000Z");
+      const staleStartedAt = new Date("2026-09-22T07:30:00.000Z");
+      const fixture = await createFixture({
+        nextRunAt: new Date("2026-09-29T07:00:00.000Z"),
+      });
+
+      try {
+        const [scan] = await db
+          .insert(scans)
+          .values({
+            organizationId: fixture.organizationId,
+            siteId: fixture.siteId,
+            trigger: "manual",
+            status: "running",
+            startedAt: staleStartedAt,
+          })
+          .returning({ id: scans.id });
+        if (!scan) throw new Error("fixture V2 scan creation failed");
+
+        await db.insert(scanDispatches).values({
+          scanId: scan.id,
+          status: "dispatched",
+          dispatchedAt: staleStartedAt,
+        });
+        await db.insert(scanAttempts).values({
+          scanId: scan.id,
+          attemptNumber: 1,
+          status: "running",
+          startedAt: staleStartedAt,
+        });
+
+        const result = await recoverOrphanedRunningScans(
+          async () => jobState,
+          now,
+        );
+        expect(result).toEqual({
+          checked: 1,
+          recovered: 0,
+          failed: 1,
+          inspectionFailed: 0,
+        });
+
+        const [persisted] = await db
+          .select({ status: scans.status, summary: scans.summary })
+          .from(scans)
+          .where(eq(scans.id, scan.id));
+        expect(persisted?.status).toBe("failed");
+        expect(persisted?.summary).toMatchObject({
+          error: { code: errorCode },
+        });
+
+        const [attempt] = await db
+          .select({
+            status: scanAttempts.status,
+            retryable: scanAttempts.retryable,
+            errorCode: scanAttempts.errorCode,
+          })
+          .from(scanAttempts)
+          .where(eq(scanAttempts.scanId, scan.id));
+        expect(attempt).toEqual({
+          status: "failed",
+          retryable: false,
+          errorCode,
+        });
+
+        const [dispatch] = await db
+          .select({
+            status: scanDispatches.status,
+            lastErrorCode: scanDispatches.lastErrorCode,
+          })
+          .from(scanDispatches)
+          .where(eq(scanDispatches.scanId, scan.id));
+        expect(dispatch).toEqual({
+          status: "failed",
+          lastErrorCode: errorCode,
+        });
+      } finally {
+        await deleteFixture(fixture.organizationId);
+      }
+    },
+  );
 
   it("fails a repeatedly orphaned scan after the recovery budget is exhausted", async () => {
     const { db } = getDatabase();
@@ -606,6 +695,41 @@ describeDatabase("scheduled scan coordinator persistence", () => {
           .from(scanDispatches)
           .where(eq(scanDispatches.scanId, scan.id)),
       ).toHaveLength(0);
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("advances a batch-size-1 cursor past a clock_timestamp Deep row", async () => {
+    const { db } = getDatabase();
+    const fixture = await createFixture({
+      nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60_000),
+    });
+
+    try {
+      await db.insert(scans).values({
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        trigger: "manual",
+        scanMode: "verified_deep_audit",
+        status: "running",
+        startedAt: sql<Date>`clock_timestamp() - interval '30 minutes'`,
+        summary: { internalDeepWorker: true },
+      });
+
+      const result = await recoverOrphanedRunningScans(
+        async () => "waiting",
+        new Date(),
+        15 * 60_000,
+        1,
+      );
+
+      expect(result).toEqual({
+        checked: 1,
+        recovered: 0,
+        failed: 0,
+        inspectionFailed: 0,
+      });
     } finally {
       await deleteFixture(fixture.organizationId);
     }

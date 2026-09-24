@@ -6,18 +6,7 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gt,
-  isNotNull,
-  isNull,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
 import {
@@ -364,6 +353,100 @@ async function reconcileStaleDeepScan(
   });
 }
 
+async function reconcileStaleV2TerminalScan(
+  scanId: string,
+  state: "failed" | "completed",
+  now: Date,
+): Promise<"failed" | "pending"> {
+  const { db } = getDatabase();
+  const code =
+    state === "failed"
+      ? "stale-worker-job-failed"
+      : "stale-worker-job-completed-with-running-scan";
+
+  return db.transaction(async (tx) => {
+    const [scan] = await tx
+      .select({
+        id: scans.id,
+        status: scans.status,
+        mode: scans.scanMode,
+        summary: scans.summary,
+      })
+      .from(scans)
+      .where(eq(scans.id, scanId))
+      .for("update")
+      .limit(1);
+
+    if (
+      !scan ||
+      scan.status !== "running" ||
+      scan.mode === "verified_deep_audit"
+    ) {
+      return "pending";
+    }
+
+    const [latest] = await tx
+      .select({
+        id: scanAttempts.id,
+        status: scanAttempts.status,
+      })
+      .from(scanAttempts)
+      .where(eq(scanAttempts.scanId, scanId))
+      .orderBy(desc(scanAttempts.attemptNumber))
+      .for("update")
+      .limit(1);
+
+    if (
+      latest &&
+      (latest.status === "running" || latest.status === "retrying")
+    ) {
+      await tx
+        .update(scanAttempts)
+        .set({
+          status: "failed",
+          retryable: false,
+          errorCode: code,
+          completedAt: now,
+          leaseUntil: null,
+        })
+        .where(eq(scanAttempts.id, latest.id));
+    }
+
+    const terminal = await tx
+      .update(scans)
+      .set({
+        status: "failed",
+        completedAt: now,
+        summary: {
+          ...scan.summary,
+          error: { code },
+        },
+      })
+      .where(
+        and(
+          eq(scans.id, scanId),
+          eq(scans.status, "running"),
+          sql`${scans.scanMode} <> 'verified_deep_audit'`,
+        ),
+      )
+      .returning({ id: scans.id });
+
+    if (terminal.length === 1) {
+      await tx
+        .update(scanDispatches)
+        .set({
+          status: "failed",
+          leaseUntil: null,
+          lastErrorCode: code,
+          updatedAt: now,
+        })
+        .where(eq(scanDispatches.scanId, scanId));
+    }
+
+    return terminal.length === 1 ? "failed" : "pending";
+  });
+}
+
 export async function recoverOrphanedRunningScans(
   hasJob: ScheduledJobPresenceChecker,
   now = new Date(),
@@ -382,14 +465,11 @@ export async function recoverOrphanedRunningScans(
   let recovered = 0;
   let failed = 0;
   let inspectionFailed = 0;
-  let cursor: { startedAt: Date; id: string } | undefined;
+  let cursor: { startedAt: string; id: string } | undefined;
 
   while (true) {
     const afterCursor = cursor
-      ? or(
-          gt(scans.startedAt, cursor.startedAt),
-          and(eq(scans.startedAt, cursor.startedAt), gt(scans.id, cursor.id)),
-        )
+      ? sql`(${scans.startedAt}, ${scans.id}) > (${cursor.startedAt}::timestamptz, ${cursor.id}::uuid)`
       : undefined;
 
     const rows = await db
@@ -397,6 +477,7 @@ export async function recoverOrphanedRunningScans(
         id: scans.id,
         mode: scans.scanMode,
         startedAt: scans.startedAt,
+        startedAtCursor: sql<string>`to_char(${scans.startedAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       })
       .from(scans)
       .where(
@@ -426,6 +507,16 @@ export async function recoverOrphanedRunningScans(
         const outcome = await reconcileStaleDeepScan(row.id, inspection);
         if (outcome === "failed") failed += 1;
         if (outcome === "inspection-failed") inspectionFailed += 1;
+        continue;
+      }
+
+      if (inspection === "failed" || inspection === "completed") {
+        const outcome = await reconcileStaleV2TerminalScan(
+          row.id,
+          inspection,
+          now,
+        );
+        if (outcome === "failed") failed += 1;
         continue;
       }
 
@@ -506,10 +597,10 @@ export async function recoverOrphanedRunningScans(
     }
 
     const last = rows.at(-1);
-    if (!last?.startedAt) {
+    if (!last?.startedAt || !last.startedAtCursor) {
       throw new Error("stale recovery cursor lost its started_at");
     }
-    cursor = { startedAt: last.startedAt, id: last.id };
+    cursor = { startedAt: last.startedAtCursor, id: last.id };
     if (rows.length < batchSize) break;
   }
 

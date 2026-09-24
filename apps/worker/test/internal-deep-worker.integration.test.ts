@@ -152,7 +152,10 @@ describeDatabase("internal Deep worker lifecycle", () => {
           signal: new AbortController().signal,
           env: {},
         }),
-      ).rejects.toThrow("deep-engine-unavailable");
+      ).rejects.toMatchObject({
+        message: "deep-engine-unavailable",
+        code: "deep-engine-unavailable",
+      });
       expect(
         await db
           .select()
