@@ -52,12 +52,15 @@ export type BrowserRuntimeOptions = {
   /** Internal V3 guard. Applied at both the browser route and proxy boundary. */
   networkGuard?: {
     allowPage: () => boolean;
-    allowRequest: (request: BrowserRequestPolicyInput) => boolean;
-    allowProxyTarget: (url: URL) => boolean;
-    allowProxyConnection: (url: URL) => boolean;
+    allowRequest: (
+      request: BrowserRequestPolicyInput,
+    ) => boolean | Promise<boolean>;
+    allowProxyTarget: (url: URL) => boolean | Promise<boolean>;
+    allowProxyConnection: (url: URL) => boolean | Promise<boolean>;
     accountProxyBytes: (bytes: number) => boolean;
     maxTransferredBytes: number;
     maxLifetimeMs: number;
+    signal?: AbortSignal;
   };
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
 };
@@ -163,6 +166,8 @@ async function closeQuietly(
 export async function createIsolatedBrowserSession(
   options: BrowserRuntimeOptions = {},
 ): Promise<IsolatedBrowserSession> {
+  if (options.networkGuard?.signal?.aborted)
+    throw new Error("Browser session aborted");
   const resolver = options.resolver ?? defaultDnsResolver;
   const scanMode = options.scanMode ?? "verified_monitoring";
   const navigationTimeoutMs = boundedNavigationTimeout(
@@ -186,6 +191,12 @@ export async function createIsolatedBrowserSession(
   let proxy: SafeBrowserProxy | undefined;
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
+  const onAbort = () => {
+    void closeQuietly(context, browser, proxy);
+  };
+  options.networkGuard?.signal?.addEventListener("abort", onAbort, {
+    once: true,
+  });
 
   try {
     proxy = await startSafeBrowserProxy({
@@ -197,6 +208,7 @@ export async function createIsolatedBrowserSession(
             accountBytes: options.networkGuard.accountProxyBytes,
             maxTotalTransferredBytes: options.networkGuard.maxTransferredBytes,
             maxLifetimeMs: options.networkGuard.maxLifetimeMs,
+            signal: options.networkGuard.signal,
           }
         : {}),
       connectTimeoutMs: Math.min(navigationTimeoutMs, 10_000),
@@ -209,6 +221,8 @@ export async function createIsolatedBrowserSession(
         : {}),
       allowOptions: scanMode !== "public_audit",
     });
+    if (options.networkGuard?.signal?.aborted)
+      throw new Error("Browser session aborted");
     browser = await launchBrowser({
       headless: true,
       chromiumSandbox: true,
@@ -219,6 +233,8 @@ export async function createIsolatedBrowserSession(
       },
       args: [...chromiumSafetyArgs],
     });
+    if (options.networkGuard?.signal?.aborted)
+      throw new Error("Browser session aborted");
 
     context = await browser.newContext({
       acceptDownloads: false,
@@ -227,6 +243,8 @@ export async function createIsolatedBrowserSession(
       serviceWorkers: "block",
       userAgent: browserUserAgent(),
     });
+    if (options.networkGuard?.signal?.aborted)
+      throw new Error("Browser session aborted");
     context.setDefaultNavigationTimeout(navigationTimeoutMs);
     context.setDefaultTimeout(navigationTimeoutMs);
 
@@ -274,6 +292,10 @@ export async function createIsolatedBrowserSession(
     });
 
     await context.route("**/*", async (route) => {
+      if (options.networkGuard?.signal?.aborted) {
+        await route.abort("blockedbyclient");
+        return;
+      }
       const request = route.request();
       if (!isAllowedBrowserRequest(request.url(), request.method(), scanMode)) {
         await route.abort("blockedbyclient");
@@ -294,7 +316,7 @@ export async function createIsolatedBrowserSession(
       if (options.networkGuard) {
         let allowed = false;
         try {
-          allowed = options.networkGuard.allowRequest(requestInput);
+          allowed = await options.networkGuard.allowRequest(requestInput);
         } catch {
           allowed = false;
         }
@@ -317,12 +339,16 @@ export async function createIsolatedBrowserSession(
         return;
       }
 
-      await route.continue();
+      if (options.networkGuard?.signal?.aborted)
+        await route.abort("blockedbyclient");
+      else await route.continue();
     });
 
     await context.routeWebSocket(/.*/, (webSocket) => {
       webSocket.close();
     });
+    if (options.networkGuard?.signal?.aborted)
+      throw new Error("Browser session aborted");
     const sessionProxy = proxy;
     const sessionBrowser = browser;
     const sessionContext = context;
@@ -339,10 +365,12 @@ export async function createIsolatedBrowserSession(
         byHostname: Object.fromEntries(requestCountByHostname),
       }),
       async close(): Promise<void> {
+        options.networkGuard?.signal?.removeEventListener("abort", onAbort);
         await closeQuietly(sessionContext, sessionBrowser, sessionProxy);
       },
     };
   } catch (error) {
+    options.networkGuard?.signal?.removeEventListener("abort", onAbort);
     await closeQuietly(context, browser, proxy);
     throw error;
   }

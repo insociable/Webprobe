@@ -25,6 +25,8 @@ function fixture(
     scope: new ScopeGuard("https://example.com/"),
     ledger: new BudgetLedger(profile.budget, Date.now()),
     transport: { resolver, requester },
+    signal: new AbortController().signal,
+    beforeNetwork: async () => undefined,
     ...overrides,
   };
 }

@@ -20,6 +20,12 @@ import {
 } from "./guarded-http-transport.js";
 import { resolveScanProfile } from "./profiles.js";
 import { ScopeGuard } from "./scope-guard.js";
+import {
+  claimDeepLease,
+  monitorDeepLease,
+  releaseDeepLease,
+} from "./deep-lease.js";
+import { throwIfAborted } from "./abort.js";
 import type { CoverageReason, ScanProfile } from "./types.js";
 
 const candidateChecks = new Set([
@@ -99,132 +105,160 @@ export async function runDeepAuditCandidate(input: {
   resolver?: DnsResolver;
   requester?: HttpRequester;
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
+  signal?: AbortSignal;
 }): Promise<void> {
   const profile = checkedProfile(
     input.profile ?? resolveScanProfile("verified_deep_audit"),
   );
-  const { db } = getDatabase();
-  const [scan] = await db
-    .select({ status: scans.status, mode: scans.scanMode })
-    .from(scans)
-    .where(
-      and(
-        eq(scans.id, input.scanId),
-        eq(scans.organizationId, input.organizationId),
-        eq(scans.siteId, input.siteId),
-      ),
-    )
-    .limit(1);
-  if (
-    !scan ||
-    scan.status !== "running" ||
-    scan.mode !== "verified_deep_audit"
-  ) {
-    throw new Error("Deep scan is not running for this site");
-  }
-  const prior = await db
-    .select({ id: scanCheckRuns.id })
-    .from(scanCheckRuns)
-    .where(eq(scanCheckRuns.scanId, input.scanId))
-    .limit(1);
-  if (prior.length) throw new Error("Check runs already persisted");
-  const [site] = await db
-    .select({ canonicalUrl: sites.canonicalUrl })
-    .from(sites)
-    .where(
-      and(
-        eq(sites.id, input.siteId),
-        eq(sites.organizationId, input.organizationId),
-      ),
-    )
-    .limit(1);
-  if (
-    !site ||
-    new URL(input.targetUrl).toString() !==
-      new URL(site.canonicalUrl).toString()
-  ) {
-    throw new Error("Deep scan target differs from the canonical site URL");
-  }
-
-  const scope = new ScopeGuard(site.canonicalUrl);
-  const ledger = new BudgetLedger(profile.budget, Date.now());
-  const authorization = await revalidateDeepAuditAuthorization({
-    siteId: input.siteId,
-    organizationId: input.organizationId,
-    ...(input.resolveTxt ? { resolveTxt: input.resolveTxt } : {}),
-  });
-  const observations: DeepObservations = {};
-  const observationFailures: Record<string, string> = {};
-  const needsHttp = profile.allowedChecks.includes("deep-http-observation");
-  const needsBrowser = profile.allowedChecks.includes(
-    "deep-browser-observation",
-  );
-
-  if (authorization.allowed && (needsHttp || needsBrowser)) {
-    if (needsHttp) {
-      try {
-        observations.http = await probeGuardedHttpTarget({
-          targetUrl: site.canonicalUrl,
-          profile,
-          authorization,
-          scope,
-          ledger,
-          transport: {
-            ...(input.resolver ? { resolver: input.resolver } : {}),
-            ...(input.requester ? { requester: input.requester } : {}),
-          },
-        });
-      } catch (error) {
-        const reason = failureReason(error, ledger);
-        ledger.markPartial(reason);
-        observationFailures.http = reason;
-        if (needsBrowser) observationFailures.browser = reason;
-      }
-    }
+  throwIfAborted(input.signal);
+  const lease = await claimDeepLease(input);
+  const monitor = monitorDeepLease(lease, input.signal);
+  try {
+    await monitor.assertCurrent();
+    const { db } = getDatabase();
+    const [scan] = await db
+      .select({ status: scans.status, mode: scans.scanMode })
+      .from(scans)
+      .where(
+        and(
+          eq(scans.id, input.scanId),
+          eq(scans.organizationId, input.organizationId),
+          eq(scans.siteId, input.siteId),
+        ),
+      )
+      .limit(1);
     if (
-      needsBrowser &&
-      (!needsHttp || observations.http) &&
-      ledger.checkNetwork().allowed
+      !scan ||
+      scan.status !== "running" ||
+      scan.mode !== "verified_deep_audit"
     ) {
-      try {
-        observations.browser = await observeGuardedBrowserTarget({
-          targetUrl: site.canonicalUrl,
-          profile,
-          authorization,
-          scope,
-          ledger,
-          ...(input.resolver ? { resolver: input.resolver } : {}),
-          ...(input.launchBrowser
-            ? { launchBrowser: input.launchBrowser }
-            : {}),
-        });
-      } catch (error) {
-        const reason = failureReason(error, ledger);
-        ledger.markPartial(reason);
-        observationFailures.browser = reason;
-      }
-    } else if (
-      needsBrowser &&
-      !observationFailures.browser &&
-      !observations.browser
-    ) {
-      observationFailures.browser = failureReason(
-        new Error("Network budget unavailable"),
-        ledger,
-      );
+      throw new Error("Deep scan is not running for this site");
     }
-  }
+    const prior = await db
+      .select({ id: scanCheckRuns.id })
+      .from(scanCheckRuns)
+      .where(eq(scanCheckRuns.scanId, input.scanId))
+      .limit(1);
+    if (prior.length) throw new Error("Check runs already persisted");
+    const [site] = await db
+      .select({ canonicalUrl: sites.canonicalUrl })
+      .from(sites)
+      .where(
+        and(
+          eq(sites.id, input.siteId),
+          eq(sites.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1);
+    if (
+      !site ||
+      new URL(input.targetUrl).toString() !==
+        new URL(site.canonicalUrl).toString()
+    ) {
+      throw new Error("Deep scan target differs from the canonical site URL");
+    }
 
-  await analyzeAndPersistDeepObservations({
-    scanId: input.scanId,
-    organizationId: input.organizationId,
-    siteId: input.siteId,
-    targetUrl: site.canonicalUrl,
-    profile,
-    authorization,
-    scope,
-    ledger,
-    observations,
-    observationFailures,
-  });
+    const scope = new ScopeGuard(site.canonicalUrl);
+    const ledger = new BudgetLedger(profile.budget, Date.now());
+    await monitor.assertCurrent();
+    const authorization = await revalidateDeepAuditAuthorization({
+      siteId: input.siteId,
+      organizationId: input.organizationId,
+      ...(input.resolveTxt ? { resolveTxt: input.resolveTxt } : {}),
+      signal: monitor.signal,
+    });
+    if (authorization.allowed && !authorization.grantIdentity)
+      throw new Error("Deep grant identity missing");
+    if (authorization.allowed && authorization.grantIdentity) {
+      if (authorization.grantIdentity.canonicalUrl !== site.canonicalUrl)
+        throw new Error("Deep canonical URL changed during validation");
+      monitor.setGrant(authorization.grantIdentity);
+    }
+    await monitor.assertCurrent();
+    const observations: DeepObservations = {};
+    const observationFailures: Record<string, string> = {};
+    const needsHttp = profile.allowedChecks.includes("deep-http-observation");
+    const needsBrowser = profile.allowedChecks.includes(
+      "deep-browser-observation",
+    );
+
+    if (authorization.allowed && (needsHttp || needsBrowser)) {
+      if (needsHttp) {
+        try {
+          observations.http = await probeGuardedHttpTarget({
+            targetUrl: site.canonicalUrl,
+            profile,
+            authorization,
+            scope,
+            ledger,
+            signal: monitor.signal,
+            beforeNetwork: monitor.assertCurrent,
+            transport: {
+              ...(input.resolver ? { resolver: input.resolver } : {}),
+              ...(input.requester ? { requester: input.requester } : {}),
+            },
+          });
+        } catch (error) {
+          throwIfAborted(monitor.signal);
+          const reason = failureReason(error, ledger);
+          ledger.markPartial(reason);
+          observationFailures.http = reason;
+          if (needsBrowser) observationFailures.browser = reason;
+        }
+      }
+      if (
+        needsBrowser &&
+        (!needsHttp || observations.http) &&
+        ledger.checkNetwork().allowed
+      ) {
+        try {
+          observations.browser = await observeGuardedBrowserTarget({
+            targetUrl: site.canonicalUrl,
+            profile,
+            authorization,
+            scope,
+            ledger,
+            signal: monitor.signal,
+            beforeNetwork: monitor.assertCurrent,
+            ...(input.resolver ? { resolver: input.resolver } : {}),
+            ...(input.launchBrowser
+              ? { launchBrowser: input.launchBrowser }
+              : {}),
+          });
+        } catch (error) {
+          throwIfAborted(monitor.signal);
+          const reason = failureReason(error, ledger);
+          ledger.markPartial(reason);
+          observationFailures.browser = reason;
+        }
+      } else if (
+        needsBrowser &&
+        !observationFailures.browser &&
+        !observations.browser
+      ) {
+        observationFailures.browser = failureReason(
+          new Error("Network budget unavailable"),
+          ledger,
+        );
+      }
+    }
+
+    await analyzeAndPersistDeepObservations({
+      scanId: input.scanId,
+      organizationId: input.organizationId,
+      siteId: input.siteId,
+      targetUrl: site.canonicalUrl,
+      profile,
+      authorization,
+      scope,
+      ledger,
+      observations,
+      observationFailures,
+      lease,
+      signal: monitor.signal,
+    });
+  } finally {
+    monitor.stop();
+    await releaseDeepLease(lease);
+  }
 }

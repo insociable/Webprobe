@@ -35,8 +35,9 @@ export type SafeProxyTarget = {
 export type SafeBrowserProxyOptions = {
   resolver?: DnsResolver;
   /** V3 defense at the proxy boundary, before DNS resolution or a TCP connect. */
-  allowTarget?: (url: URL) => boolean;
-  stillAllowed?: (url: URL) => boolean;
+  allowTarget?: (url: URL) => boolean | Promise<boolean>;
+  stillAllowed?: (url: URL) => boolean | Promise<boolean>;
+  signal?: AbortSignal;
   /** V3 shared byte ledger. Returning false closes the connection before forwarding. */
   accountBytes?: (bytes: number) => boolean;
   maxLifetimeMs?: number;
@@ -58,6 +59,27 @@ export type SafeBrowserProxy = {
   port: number;
   close(): Promise<void>;
 };
+
+async function abortableProxyResolution<T>(
+  promise: Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) throw new Error("Proxy aborted");
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error("Proxy aborted"));
+        signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) onAbort();
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
 
 function addressFamily(address: string): 4 | 6 {
   return address.includes(":") ? 6 : 4;
@@ -170,6 +192,7 @@ async function handleHttpRequest(
     allowTarget: SafeBrowserProxyOptions["allowTarget"];
     stillAllowed: SafeBrowserProxyOptions["stillAllowed"];
     accountBytes: SafeBrowserProxyOptions["accountBytes"];
+    signal?: AbortSignal;
   } & Required<
     Pick<
       SafeBrowserProxyOptions,
@@ -202,7 +225,12 @@ async function handleHttpRequest(
 
   if (options.allowTarget) {
     try {
-      if (!options.allowTarget(new URL(rawUrl)))
+      if (
+        !(await abortableProxyResolution(
+          Promise.resolve(options.allowTarget(new URL(rawUrl))),
+          options.signal,
+        ))
+      )
         throw new Error("Out of scope");
     } catch {
       request.resume();
@@ -213,7 +241,10 @@ async function handleHttpRequest(
 
   let target: SafeProxyTarget;
   try {
-    target = await resolveSafeProxyTarget(rawUrl, options.resolver);
+    target = await abortableProxyResolution(
+      resolveSafeProxyTarget(rawUrl, options.resolver),
+      options.signal,
+    );
   } catch {
     request.resume();
     endHttpError(response, 403, "Unsafe proxy target");
@@ -225,7 +256,13 @@ async function handleHttpRequest(
     endHttpError(response, 400, "HTTPS must use CONNECT");
     return;
   }
-  if (options.stillAllowed && !options.stillAllowed(target.url)) {
+  if (
+    options.stillAllowed &&
+    !(await abortableProxyResolution(
+      Promise.resolve(options.stillAllowed(target.url)),
+      options.signal,
+    ))
+  ) {
     request.resume();
     endHttpError(response, 403, "Proxy target no longer allowed");
     return;
@@ -359,6 +396,7 @@ async function handleConnect(
     allowTarget: SafeBrowserProxyOptions["allowTarget"];
     stillAllowed: SafeBrowserProxyOptions["stillAllowed"];
     accountBytes: SafeBrowserProxyOptions["accountBytes"];
+    signal?: AbortSignal;
   } & Required<
     Pick<
       SafeBrowserProxyOptions,
@@ -372,7 +410,14 @@ async function handleConnect(
   const authority = request.url ?? "";
   if (options.allowTarget) {
     try {
-      if (!options.allowTarget(new URL(`https://${authority}/`))) {
+      if (
+        !(await abortableProxyResolution(
+          Promise.resolve(
+            options.allowTarget(new URL(`https://${authority}/`)),
+          ),
+          options.signal,
+        ))
+      ) {
         throw new Error("Out of scope");
       }
     } catch {
@@ -382,7 +427,10 @@ async function handleConnect(
   }
   let target: SafeProxyTarget;
   try {
-    target = await resolveSafeConnectTarget(authority, options.resolver);
+    target = await abortableProxyResolution(
+      resolveSafeConnectTarget(authority, options.resolver),
+      options.signal,
+    );
   } catch {
     endConnectError(clientSocket, 403, "Forbidden");
     return;
@@ -392,7 +440,13 @@ async function handleConnect(
     endConnectError(clientSocket, 403, "Forbidden");
     return;
   }
-  if (options.stillAllowed && !options.stillAllowed(target.url)) {
+  if (
+    options.stillAllowed &&
+    !(await abortableProxyResolution(
+      Promise.resolve(options.stillAllowed(target.url)),
+      options.signal,
+    ))
+  ) {
     endConnectError(clientSocket, 403, "Forbidden");
     return;
   }
@@ -491,11 +545,13 @@ async function handleConnect(
 export async function startSafeBrowserProxy(
   options: SafeBrowserProxyOptions = {},
 ): Promise<SafeBrowserProxy> {
+  if (options.signal?.aborted) throw new Error("Safe browser proxy aborted");
   const resolvedOptions = {
     resolver: options.resolver ?? defaultDnsResolver,
     allowTarget: options.allowTarget,
     stillAllowed: options.stillAllowed,
     accountBytes: options.accountBytes,
+    ...(options.signal ? { signal: options.signal } : {}),
     maxLifetimeMs: options.maxLifetimeMs,
     connectTimeoutMs: options.connectTimeoutMs ?? 10_000,
     maxConnections: options.maxConnections ?? 64,
@@ -512,6 +568,7 @@ export async function startSafeBrowserProxy(
   };
   let transferredBytes = 0;
   const consumeBytes = (bytes: number) => {
+    if (options.signal?.aborted) return false;
     if (bytes === 0) return true;
     if (transferredBytes + bytes > resolvedOptions.maxTotalTransferredBytes)
       return false;
@@ -523,6 +580,7 @@ export async function startSafeBrowserProxy(
   let requestCount = 0;
   const requestCountByHostname = new Map<string, number>();
   const consumeRequest = (hostname: string) => {
+    if (options.signal?.aborted) return false;
     const normalizedHostname = hostname.toLowerCase().replace(/\.$/, "");
     const nextTotal = requestCount + 1;
     const nextForHostname =
@@ -542,6 +600,10 @@ export async function startSafeBrowserProxy(
   let lifetimeTimer: NodeJS.Timeout | undefined;
 
   const server = http.createServer((request, response) => {
+    if (options.signal?.aborted) {
+      endHttpError(response, 403, "Proxy aborted");
+      return;
+    }
     void handleHttpRequest(
       request,
       response,
@@ -559,10 +621,18 @@ export async function startSafeBrowserProxy(
   server.keepAliveTimeout = 1_000;
 
   server.on("connection", (socket) => {
+    if (options.signal?.aborted) {
+      socket.destroy();
+      return;
+    }
     clientSockets.add(socket);
     socket.once("close", () => clientSockets.delete(socket));
   });
   server.on("connect", (request, socket, head) => {
+    if (options.signal?.aborted) {
+      socket.destroy();
+      return;
+    }
     void handleConnect(
       request,
       socket,
@@ -609,10 +679,19 @@ export async function startSafeBrowserProxy(
     lifetimeTimer.unref();
   }
 
+  const onAbort = () => {
+    for (const socket of upstreamSockets) socket.destroy();
+    for (const socket of clientSockets) socket.destroy();
+    server.close();
+  };
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  if (options.signal?.aborted) onAbort();
+
   return {
     url: `http://127.0.0.1:${address.port}`,
     port: address.port,
     async close(): Promise<void> {
+      options.signal?.removeEventListener("abort", onAbort);
       if (lifetimeTimer) clearTimeout(lifetimeTimer);
       for (const socket of upstreamSockets) {
         socket.destroy();

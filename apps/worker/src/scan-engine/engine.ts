@@ -4,6 +4,7 @@ import { type CheckDefinition, CheckRegistry } from "./check-registry.js";
 import { createEvidence, type CheckEvidence } from "./evidence.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { ScanProfile } from "./types.js";
+import { abortable } from "./abort.js";
 
 export type CheckRun = {
   checkId: string;
@@ -98,10 +99,16 @@ export async function runChecks(input: {
     if (!skipReason) {
       const controller = new AbortController();
       let timer: NodeJS.Timeout | undefined;
+      const onAbort = () => controller.abort();
+      input.signal?.addEventListener("abort", onAbort, { once: true });
+      if (input.signal?.aborted) onAbort();
       try {
         evidence = (
           await Promise.race([
-            check.analyze(input.observations, controller.signal),
+            abortable(
+              check.analyze(input.observations, controller.signal),
+              input.signal,
+            ),
             new Promise<never>((_, reject) => {
               timer = setTimeout(() => {
                 controller.abort();
@@ -119,6 +126,7 @@ export async function runChecks(input: {
           throw new Error("Check evidence identity mismatch");
         }
       } catch (error) {
+        if (input.signal?.aborted) throw error;
         status = "failed";
         skipReason =
           error instanceof Error && error.message === "check-timeout"
@@ -126,6 +134,7 @@ export async function runChecks(input: {
             : "check-failed";
       } finally {
         if (timer) clearTimeout(timer);
+        input.signal?.removeEventListener("abort", onAbort);
       }
     }
     const after = input.ledger.snapshot().used;

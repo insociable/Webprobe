@@ -1,8 +1,9 @@
-import { scanCheckRuns, scans } from "@agency-saas/db";
-import { and, eq } from "drizzle-orm";
+import { scanAttempts, scanCheckRuns, scans } from "@agency-saas/db";
+import { and, eq, sql } from "drizzle-orm";
 import { getDatabase } from "../database.js";
 import { BudgetLedger } from "./budget-ledger.js";
 import type { CheckRun } from "./engine.js";
+import type { DeepLease } from "./deep-lease.js";
 
 /** Persists one candidate Deep Audit attempt atomically, without touching V2 results. */
 export async function persistDeepCheckRuns(input: {
@@ -11,7 +12,10 @@ export async function persistDeepCheckRuns(input: {
   siteId: string;
   runs: readonly CheckRun[];
   ledger: BudgetLedger;
+  lease: DeepLease;
+  signal?: AbortSignal;
 }): Promise<void> {
+  if (input.signal?.aborted) throw new Error("Deep execution aborted");
   if (input.runs.length === 0) throw new Error("No check runs to persist");
   const identities = input.runs.map(
     (run) => `${run.checkId}\0${run.checkVersion}`,
@@ -63,6 +67,21 @@ export async function persistDeepCheckRuns(input: {
     ) {
       throw new Error("Deep scan is not running for this site");
     }
+    const [attempt] = await tx
+      .select({ id: scanAttempts.id })
+      .from(scanAttempts)
+      .where(
+        and(
+          eq(scanAttempts.id, input.lease.attemptId),
+          eq(scanAttempts.scanId, input.scanId),
+          eq(scanAttempts.leaseToken, input.lease.token),
+          eq(scanAttempts.status, "running"),
+          sql`${scanAttempts.leaseUntil} > clock_timestamp()`,
+        ),
+      )
+      .limit(1);
+    if (!attempt || input.signal?.aborted)
+      throw new Error("Deep execution lease lost");
     const prior = await tx
       .select({ id: scanCheckRuns.id })
       .from(scanCheckRuns)
@@ -105,5 +124,25 @@ export async function persistDeepCheckRuns(input: {
         },
       })
       .where(eq(scans.id, input.scanId));
+    const [completed] = await tx
+      .update(scanAttempts)
+      .set({
+        status: "completed",
+        retryable: false,
+        errorCode: null,
+        completedAt: sql`clock_timestamp()`,
+        leaseUntil: null,
+      })
+      .where(
+        and(
+          eq(scanAttempts.id, input.lease.attemptId),
+          eq(scanAttempts.leaseToken, input.lease.token),
+          eq(scanAttempts.status, "running"),
+          sql`${scanAttempts.leaseUntil} > clock_timestamp()`,
+        ),
+      )
+      .returning({ id: scanAttempts.id });
+    if (!completed || input.signal?.aborted)
+      throw new Error("Deep execution lease lost");
   });
 }

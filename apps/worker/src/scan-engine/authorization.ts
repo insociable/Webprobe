@@ -12,7 +12,17 @@ export type DeepAuditAuthorization = Readonly<{
 }>;
 
 export type AuthorizationDecision =
-  | { allowed: true; level: "public" | "verified" | "deep" }
+  | {
+      allowed: true;
+      level: "public" | "verified" | "deep";
+      grantIdentity?: {
+        generationId: string | null;
+        tokenHash: string;
+        verifiedAt: Date;
+        canonicalUrl: string;
+        siteVerifiedAt: Date;
+      };
+    }
   | {
       allowed: false;
       reason:

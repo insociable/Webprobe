@@ -69,6 +69,8 @@ describe("candidate guarded browser transport", () => {
       ledger,
       resolver,
       launchBrowser: async () => fakeBrowser,
+      signal: new AbortController().signal,
+      beforeNetwork: async () => undefined,
     });
     const invoke = async (
       url: string,

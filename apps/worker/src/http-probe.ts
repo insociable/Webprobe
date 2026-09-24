@@ -66,6 +66,7 @@ export type HttpRequester = (
   target: ValidatedHttpTarget,
   timeoutMs: number,
   accountTransferredBytes?: (bytes: number) => void,
+  signal?: AbortSignal,
 ) => Promise<RawProbeResponse>;
 const reportHeaderNames = [
   "cache-control",
@@ -163,6 +164,7 @@ export const requestPinnedTarget: HttpRequester = async (
   target,
   timeoutMs,
   accountTransferredBytes,
+  signal,
 ) => {
   const transport = target.url.protocol === "https:" ? https : http;
   const startedAt = performance.now();
@@ -191,6 +193,7 @@ export const requestPinnedTarget: HttpRequester = async (
       target.url,
       {
         method: "GET",
+        ...(signal ? { signal } : {}),
         lookup: pinnedLookup(target),
         headers: {
           accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
@@ -475,12 +478,13 @@ function networkFailure(
   };
 }
 export type HttpProbeOptions = {
+  signal?: AbortSignal;
   resolver?: DnsResolver;
   requester?: HttpRequester;
   timeoutMs?: number;
   maxRedirects?: number;
-  beforeRequest?: (url: URL) => void;
-  beforeConnect?: (target: ValidatedHttpTarget) => number;
+  beforeRequest?: (url: URL) => void | Promise<void>;
+  beforeConnect?: (target: ValidatedHttpTarget) => number | Promise<number>;
   allowRedirect?: (from: URL, to: URL) => boolean;
   accountTransferredBytes?: (bytes: number) => void;
   requireTransferAccounting?: boolean;
@@ -499,21 +503,29 @@ export async function probeHttpTarget(
   let totalDurationMs = 0;
 
   while (true) {
+    if (options.signal?.aborted) throw new Error("HTTP probe aborted");
     // The guarded V3 caller checks authorization, scope and budget here,
     // before DNS resolution or any network request. V2 callers are unchanged.
-    if (options.beforeRequest) options.beforeRequest(new URL(currentUrl));
+    if (options.beforeRequest) await options.beforeRequest(new URL(currentUrl));
     const target = await assertPublicHttpUrl(currentUrl, resolver);
-    const requestTimeoutMs = options.beforeConnect?.(target) ?? timeoutMs;
+    if (options.signal?.aborted) throw new Error("HTTP probe aborted");
+    const requestTimeoutMs =
+      (await options.beforeConnect?.(target)) ?? timeoutMs;
 
     let response: RawProbeResponse;
     let accountingReported = false;
     let accountedBytes = 0;
     try {
-      response = await requester(target, requestTimeoutMs, (bytes) => {
-        accountingReported = true;
-        accountedBytes += bytes;
-        options.accountTransferredBytes?.(bytes);
-      });
+      response = await requester(
+        target,
+        requestTimeoutMs,
+        (bytes) => {
+          accountingReported = true;
+          accountedBytes += bytes;
+          options.accountTransferredBytes?.(bytes);
+        },
+        options.signal,
+      );
       if (options.requireTransferAccounting) {
         if (!accountingReported) {
           throw new Error("HTTP requester omitted transfer accounting");

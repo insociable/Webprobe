@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BudgetLedger } from "../src/scan-engine/budget-ledger.js";
+import { CheckRegistry } from "../src/scan-engine/check-registry.js";
 import { createDeepCheckRegistry } from "../src/scan-engine/deep-checks.js";
 import { runChecks } from "../src/scan-engine/engine.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
@@ -103,5 +104,48 @@ describe("deep check registry", () => {
       ),
     ).toBe(true);
     expect(runs.every((run) => run.evidence.length === 0)).toBe(true);
+  });
+  it("aborts an analysis already in progress", async () => {
+    const controller = new AbortController();
+    const registry = new CheckRegistry();
+    let entered!: () => void;
+    let analysisSignal: AbortSignal | undefined;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    registry.register({
+      id: "deep-slow-analysis",
+      version: "1.0.0",
+      category: "test",
+      authorization: "deep",
+      activity: "passive",
+      modes: ["verified_deep_audit"],
+      budget: {},
+      timeoutMs: 10_000,
+      remediation: null,
+      async analyze(_observations, signal) {
+        analysisSignal = signal;
+        entered();
+        return new Promise<never>(() => undefined);
+      },
+    });
+    const profile = {
+      ...resolveScanProfile("verified_deep_audit"),
+      allowedChecks: ["deep-slow-analysis"],
+    };
+    const running = runChecks({
+      profile,
+      registry,
+      ledger: new BudgetLedger(profile.budget, Date.now()),
+      scope: new ScopeGuard("https://example.com/"),
+      authorization: { allowed: true, level: "deep" },
+      targetUrl: "https://example.com/",
+      observations: {},
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort();
+    await expect(running).rejects.toThrow("aborted");
+    expect(analysisSignal?.aborted).toBe(true);
   });
 });

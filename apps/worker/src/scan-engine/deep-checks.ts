@@ -7,6 +7,7 @@ import { persistDeepCheckRuns } from "./check-persistence.js";
 import { runChecks, type CheckRun } from "./engine.js";
 import { createEvidence } from "./evidence.js";
 import { ScopeGuard } from "./scope-guard.js";
+import type { DeepLease } from "./deep-lease.js";
 import type { ScanProfile } from "./types.js";
 
 export type DeepObservations = {
@@ -90,6 +91,8 @@ export async function analyzeAndPersistDeepObservations(input: {
   ledger: BudgetLedger;
   observations: DeepObservations;
   observationFailures?: Readonly<Record<string, string>>;
+  lease: DeepLease;
+  signal: AbortSignal;
 }): Promise<readonly CheckRun[]> {
   if (input.profile.mode !== "verified_deep_audit") {
     throw new Error("Deep check profile required");
@@ -102,12 +105,15 @@ export async function analyzeAndPersistDeepObservations(input: {
       ? { observationFailures: input.observationFailures }
       : {}),
   });
+  if (input.signal.aborted) throw new Error("Deep execution aborted");
   await persistDeepCheckRuns({
     scanId: input.scanId,
     organizationId: input.organizationId,
     siteId: input.siteId,
     runs,
     ledger: input.ledger,
+    lease: input.lease,
+    signal: input.signal,
   });
   return runs;
 }
