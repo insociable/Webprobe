@@ -146,7 +146,7 @@ export async function revalidateDeepAuditAuthorization(input: {
       .limit(1);
     if (input.signal?.aborted) throw abortError();
     const [clock] = await tx
-      .select({ now: sql<Date>`clock_timestamp()` })
+      .select({ now: sql<Date>`clock_timestamp()`.mapWith(sites.createdAt) })
       .from(sites)
       .where(eq(sites.id, input.siteId))
       .limit(1);

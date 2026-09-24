@@ -99,7 +99,7 @@ async function databaseNow(
   siteId: string,
 ) {
   const [clock] = await tx
-    .select({ now: sql<Date>`clock_timestamp()` })
+    .select({ now: sql<Date>`clock_timestamp()`.mapWith(sites.createdAt) })
     .from(sites)
     .where(eq(sites.id, siteId))
     .limit(1);

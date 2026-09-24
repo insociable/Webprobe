@@ -82,7 +82,7 @@ export async function claimDeepLease(input: {
       .limit(1);
     if (prior.length) throw new DeepLeaseError("Check runs already persisted");
     const [clock] = await tx
-      .select({ now: sql<Date>`clock_timestamp()` })
+      .select({ now: sql<Date>`clock_timestamp()`.mapWith(scans.queuedAt) })
       .from(scans)
       .where(eq(scans.id, input.scanId))
       .limit(1);
@@ -172,7 +172,7 @@ export async function assertDeepLease(
       proofVerifiedAt: deepAuditAuthorizations.proofVerifiedAt,
       expiresAt: deepAuditAuthorizations.expiresAt,
       revokedAt: deepAuditAuthorizations.revokedAt,
-      now: sql<Date>`clock_timestamp()`,
+      now: sql<Date>`clock_timestamp()`.mapWith(scans.queuedAt),
     })
     .from(scans)
     .innerJoin(scanAttempts, eq(scanAttempts.scanId, scans.id))
