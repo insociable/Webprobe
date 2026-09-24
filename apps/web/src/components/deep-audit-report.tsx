@@ -279,10 +279,10 @@ export function DeepAuditReport({
               };
               return (
                 <div key={reason}>
-                  <p className="text-sm font-medium text-amber-100/90">
+                  <p className="text-sm font-medium text-amber-100 opacity-90">
                     {copy.title}
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-amber-100/60">
+                  <p className="mt-1 text-sm leading-6 text-amber-100 opacity-70">
                     {copy.detail}
                   </p>
                 </div>
@@ -292,7 +292,7 @@ export function DeepAuditReport({
         </div>
       ) : status === "completed" ? (
         <div className="mt-5 border-l-2 border-emerald-300/60 bg-emerald-200/[0.04] p-4">
-          <p className="text-sm text-emerald-100/75">
+          <p className="text-sm text-emerald-100 opacity-75">
             Tous les contrôles prévus ont été exécutés dans le périmètre et les
             budgets autorisés.
           </p>
@@ -303,9 +303,9 @@ export function DeepAuditReport({
         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
           Ce qui a été analysé
         </p>
-        <div className="mt-4 space-y-6">
+        <div className="mt-4 grid gap-5 lg:grid-cols-2">
           {checkRuns.length === 0 ? (
-            <div className="border-l-2 border-[#46557a] bg-[#0d121d] p-6">
+            <div className="border-l-2 border-[#46557a] bg-[#0d121d] p-6 lg:col-span-2">
               <p className="text-white/55">
                 {status === "queued" || status === "running"
                   ? "Les résultats apparaîtront ici au fur et à mesure de l’analyse."
@@ -316,7 +316,7 @@ export function DeepAuditReport({
             [...groups.entries()].map(([category, runs]) => (
               <section key={category}>
                 <h3 className="text-lg font-semibold">{category}</h3>
-                <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <div className="mt-3 grid gap-4">
                   {runs.map((run) => {
                     const presentation = presentationFor(run.checkId);
                     const highlights = evidenceHighlights(run);
@@ -375,7 +375,7 @@ export function DeepAuditReport({
                         ) : null}
 
                         {skipCopy ? (
-                          <p className="mt-4 text-sm leading-6 text-amber-100/65">
+                          <p className="mt-4 text-sm leading-6 text-amber-100 opacity-70">
                             {skipCopy.detail}
                           </p>
                         ) : null}
@@ -448,7 +448,7 @@ export function DeepAuditReport({
                             })}
                           </div>
                         ) : run.status === "completed" ? (
-                          <p className="mt-4 text-sm text-emerald-100/65">
+                          <p className="mt-4 text-sm text-emerald-100 opacity-75">
                             Aucun point nécessitant une action n’a été relevé
                             par ce contrôle.
                           </p>
