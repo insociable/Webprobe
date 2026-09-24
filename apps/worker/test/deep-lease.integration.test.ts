@@ -194,9 +194,7 @@ describeDatabase("Deep execution lease on PostgreSQL", () => {
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, f.scanId));
       expect(runs).toHaveLength(2);
-      await expect(runDeepAuditCandidate(input)).rejects.toThrow(
-        "already persisted",
-      );
+      await expect(runDeepAuditCandidate(input)).rejects.toThrow("not running");
       expect(requests).toHaveBeenCalledOnce();
     } finally {
       finishDns?.();

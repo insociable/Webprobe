@@ -126,9 +126,7 @@ describeDatabase("V3 schema compatibility", () => {
         completedChecks: 2,
         partial: false,
       });
-      await expect(runDeepAuditCandidate(input)).rejects.toThrow(
-        "already persisted",
-      );
+      await expect(runDeepAuditCandidate(input)).rejects.toThrow("not running");
       expect(requests).toBe(1);
       await db
         .update(scans)

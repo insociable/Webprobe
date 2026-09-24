@@ -110,9 +110,14 @@ export async function analyzeAndPersistDeepObservations(input: {
     scanId: input.scanId,
     organizationId: input.organizationId,
     siteId: input.siteId,
+    targetUrl: input.targetUrl,
     runs,
     ledger: input.ledger,
     lease: input.lease,
+    grantIdentity:
+      input.authorization.allowed && input.authorization.grantIdentity
+        ? input.authorization.grantIdentity
+        : null,
     signal: input.signal,
   });
   return runs;
