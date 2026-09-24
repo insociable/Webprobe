@@ -1,62 +1,65 @@
-# Public Audit — security model
+# Audit public — modèle de sécurité
 
-## Scope
+## Périmètre
 
-Public Audit is the one-shot, tenant-scoped audit mode for a public HTTP(S) site that has not yet been verified by DNS TXT. It is intentionally separate from Verified Monitoring.
+`public_audit` est le mode d'audit ponctuel d'un site HTTP(S) public. Il est distinct du monitoring vérifié.
 
-The persisted scan mode is authoritative:
+Les modes persistés sont notamment :
 
-- `public_audit`: one-shot public observation; allowed for `pending_verification` or verified active sites.
-- `verified_monitoring`: monitoring mode; requires an active site with a successful ownership verification.
+- `public_audit` : observation ponctuelle d'un site public ;
+- `verified_monitoring` : monitoring d'un site actif dont la propriété a été vérifiée ;
+- `verified_deep_audit` : Audit approfondi avec cycle de vie dédié.
 
-The trigger (`manual` or `scheduled`) is independent from the mode. A scheduled scan is always `verified_monitoring`.
+Le mode persisté en PostgreSQL fait foi. Une charge utile issue du navigateur ou de BullMQ ne peut pas élever le mode du scan.
 
-## Trust boundary and enforcement
+## Politique réseau et navigateur
 
-The browser/client payload is not trusted to choose or escalate the scan mode. The mode is persisted in PostgreSQL and re-read by the dispatch and worker persistence layers before execution.
+L'Audit public est passif et borné :
 
-A Public Audit cannot become Verified Monitoring by changing a queue/job payload. Scheduled dispatches with a Public Audit mode are rejected.
+- déclenchement manuel ;
+- profil serveur limité ;
+- méthodes HTTP compatibles avec une observation non destructive ;
+- WebSockets bloqués ;
+- téléchargements et service workers désactivés dans le parcours concerné ;
+- Chromium forcé par le proxy sûr ;
+- destinations privées, loopback, link-local et non publiques refusées ;
+- redirections revalidées ;
+- changement d'origine d'exploration non accordé automatiquement.
 
-Tenant isolation remains unchanged: creating, reading and mutating scans requires the caller to be a member of the organization that owns the site.
+## Exploration et robots.txt
 
-## Browser and network policy
+L'Audit public respecte `robots.txt` pour l'exploration.
 
-Public Audit is deliberately passive:
+Les URL interdites par la politique robots sont enregistrées dans la couverture mais ne sont pas visitées. Si la politique ne peut pas être récupérée de façon sûre, l'exploration profonde s'arrête plutôt que de supposer une autorisation.
 
-- manual trigger only;
-- server-side profile capped at 15 pages and a 20 second navigation timeout;
-- HTTP browser requests limited to `GET` and `HEAD`;
-- WebSocket connections are blocked;
-- downloads and service workers are disabled;
-- Chromium is forced through the local safe proxy;
-- private, loopback, link-local and otherwise non-public targets are rejected by the SSRF controls;
-- redirects are revalidated and a third-party redirect does not become a crawl origin;
-- an initial canonical shift is accepted only for the same host family, including the conservative `example.com` ↔ `www.example.com` case.
+La couverture doit alors être présentée comme partielle.
 
-## Crawl and robots.txt
+## Quotas
 
-Public Audit respects `robots.txt` for deep crawling. The scanner uses the `AgencyMonitor` user-agent rules when present and otherwise falls back to the wildcard group.
+L'Audit public est exclu du planificateur de monitoring.
 
-Disallowed URLs are recorded as unvisited coverage entries and are not navigated. If robots policy cannot be read safely, deep crawling stops rather than guessing. In both cases the crawl analyser is marked partial so reports do not imply full coverage.
+Les quotas serveur comprennent notamment :
 
-## Quotas and scheduling
+- demandes par utilisateur et par heure ;
+- concurrence par utilisateur ;
+- cooldown par hostname.
 
-Public Audit is excluded from the scheduler. Rate limits and domain cooldowns are enforced server-side when the audit is created. The dispatch layer revalidates the persisted scan mode and site state before enqueueing work.
+Ils sont configurables avec les variables `PUBLIC_AUDIT_*` documentées dans `.env.example`.
 
-A scheduled scan with `scan_mode = public_audit` is invalid and is cancelled rather than executed.
+## Rapports et notifications
 
-## Reports and notifications
+Un Audit public sur un site non vérifié reste privé dans l'application.
 
-A Public Audit on an unverified site remains private. Public report sharing is not enabled for an unverified Public Audit.
+Il ne participe pas aux notifications de dégradation/récupération du monitoring. Les baselines de monitoring vérifié sont sélectionnées parmi les scans `verified_monitoring`, afin qu'un ancien Audit public ne crée pas de faux changement de référence.
 
-Public Audit also does not participate in monitoring incident/recovery notifications. Baselines for Verified Monitoring are selected only from previous `verified_monitoring` scans, so an earlier Public Audit cannot create false new/resolved alerts after ownership verification.
+## Passage au monitoring vérifié
 
-## Transition to Verified Monitoring
+La vérification DNS du site fait évoluer son état sans réécrire l'historique.
 
-DNS TXT verification updates the site from `pending_verification` to `active`; it does not rewrite historical scans. Existing Public Audits keep `scan_mode = public_audit`.
+Les anciens scans conservent leur `scan_mode`. Les futurs scans de monitoring utilisent `verified_monitoring` et exigent que le site reste actif et vérifié.
 
-Future manual or scheduled monitoring scans use `verified_monitoring` and require the site to remain active and verified.
+## Refus par défaut
 
-## Fail-closed expectations
+L'Audit public doit être refusé ou annulé lorsqu'une couche ne peut plus confirmer le mode, le périmètre, l'état du site, la cible, les contraintes réseau ou la politique navigateur.
 
-The Public Audit path should be considered invalid if any layer disagrees about authorization, scan mode, target identity, site state, schedule state, public-network eligibility or browser policy. Such work must be rejected or cancelled rather than silently promoted to Verified Monitoring.
+Il ne doit jamais être promu silencieusement vers un mode plus permissif.

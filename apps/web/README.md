@@ -1,34 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Application Web WebProbe
 
-## Getting Started
+`apps/web` contient l'interface Web et les routes serveur de WebProbe.
 
-First, run the development server:
+## Technologies
+
+L'application utilise Next.js, React et TypeScript dans le monorepo pnpm.
+
+## Responsabilités
+
+Elle gère notamment :
+
+- authentification et sessions ;
+- organisations et sites ;
+- vérification de propriété ;
+- création des scans ;
+- consultation de l'historique et des rapports ;
+- gestion des grants Deep ;
+- rapports partageables ;
+- endpoints de santé et de disponibilité.
+
+L'exécution des scans elle-même est déléguée à `apps/worker`.
+
+## Développement
+
+Depuis la racine du dépôt :
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+pnpm infra:up
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+L'application locale est accessible par défaut sur `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Pour lancer uniquement l'application Web :
 
-## Learn More
+```bash
+pnpm --filter web dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Construction
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm --filter web build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+La construction globale du monorepo reste disponible avec `pnpm build`.
 
-## Deploy on Vercel
+## Configuration
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Les variables importantes comprennent notamment `DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`, les variables SMTP, `SCAN_ARTIFACTS_DIR`, `REPORT_PUBLIC_BASE_URL` et `REPORT_TOKEN_SECRET`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Utiliser le fichier `.env.example` de la racine comme référence. Aucun secret réel ne doit être versionné.
+
+## Documentation
+
+Voir le `README.md` racine, `SECURITY.md` et `docs/operations/production.md`.
