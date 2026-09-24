@@ -340,7 +340,7 @@ describeDatabase("Deep execution lease on PostgreSQL", () => {
           ],
           requester: requests,
         });
-        if (change === "pause" || change === "deactivate")
+        if (change === "pause" || change === "deactivate" || change === "url")
           await expect(running).rejects.toThrow();
         else await running;
         expect(requests).not.toHaveBeenCalled();

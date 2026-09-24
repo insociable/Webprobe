@@ -187,6 +187,7 @@ describe("scope and authorization", () => {
       proofType: "dns_txt" as const,
       proofRecordName: "_agency-monitor.example.com",
       proofTokenHash: "a".repeat(64),
+      generationId: "11111111-1111-4111-8111-111111111111",
       proofVerifiedAt: new Date("2026-09-22T00:00:00.000Z"),
       revalidatedAt: new Date("2026-09-23T11:59:00.000Z"),
       expiresAt: new Date("2026-09-24T00:00:00.000Z"),
@@ -209,6 +210,13 @@ describe("scope and authorization", () => {
         deepGrant: { ...deepGrant, expiresAt: now },
       }),
     ).toMatchObject({ reason: "deep-grant-expired" });
+    expect(
+      authorizeScan({
+        ...base,
+        mode: "verified_deep_audit",
+        deepGrant: { ...deepGrant, generationId: null },
+      }),
+    ).toMatchObject({ reason: "deep-grant-invalid" });
     expect(
       authorizeScan({
         ...base,

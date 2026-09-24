@@ -55,6 +55,7 @@ describeDatabase("V3 schema compatibility", () => {
         proofType: "dns_txt",
         proofRecordName: "_agency-monitor.deep.example.test",
         proofTokenHash: createHash("sha256").update(token).digest("hex"),
+        generationId: randomUUID(),
         proofVerifiedAt: now,
         expiresAt: new Date(now.getTime() + 60_000),
       });

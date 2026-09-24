@@ -145,6 +145,7 @@ export async function persistDeepCheckRuns(input: {
         grant.proofType !== "dns_txt" ||
         grant.proofRecordName !== expectedDeepProofRecord(site.canonicalUrl) ||
         grant.proofTokenHash !== input.grantIdentity.tokenHash ||
+        !grant.generationId ||
         grant.generationId !== input.grantIdentity.generationId ||
         grant.proofVerifiedAt.getTime() !==
           input.grantIdentity.verifiedAt.getTime() ||

@@ -24,7 +24,7 @@ export type DeepLease = Readonly<{
 }>;
 
 export type DeepGrantIdentity = Readonly<{
-  generationId: string | null;
+  generationId: string;
   tokenHash: string;
   verifiedAt: Date;
   canonicalUrl: string;
@@ -217,6 +217,7 @@ export async function assertDeepLease(
       row.proofType !== "dns_txt" ||
       row.recordName !== expectedDeepProofRecord(row.canonicalUrl) ||
       row.tokenHash !== grant.tokenHash ||
+      !row.generationId ||
       row.generationId !== grant.generationId ||
       row.proofVerifiedAt?.getTime() !== grant.verifiedAt.getTime() ||
       !row.expiresAt ||

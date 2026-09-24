@@ -8,7 +8,7 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Queue, Worker } from "bullmq";
 import type { ScanJob } from "@agency-saas/contracts";
 import type { Browser, BrowserContext, Page, Response } from "playwright";
@@ -41,6 +41,7 @@ async function fixture() {
   const organizationId = randomUUID();
   const siteId = randomUUID();
   const scanId = randomUUID();
+  const generationId = randomUUID();
   const now = new Date();
   await db
     .insert(organizations)
@@ -67,6 +68,7 @@ async function fixture() {
     proofType: "dns_txt",
     proofRecordName: "_agency-monitor.deep.example.test",
     proofTokenHash: createHash("sha256").update(proof).digest("hex"),
+    generationId,
     proofVerifiedAt: now,
     expiresAt: new Date(now.getTime() + 60_000),
   });
@@ -160,6 +162,57 @@ describeDatabase("internal Deep worker lifecycle", () => {
         .from(scans)
         .where(eq(scans.id, f.scanId));
       expect(scan?.status).toBe("queued");
+    } finally {
+      await f.cleanup();
+    }
+  });
+
+  it("fails closed without DNS or HTTP when a grant has no generation", async () => {
+    const f = await fixture();
+    const { db } = getDatabase();
+    const dns = vi.fn(async () => [[proof]]);
+    const requests = vi.fn(async () => {
+      throw new Error("HTTP must not start");
+    });
+    const candidate: typeof runDeepAuditCandidate = (input) =>
+      runDeepAuditCandidate({
+        ...input,
+        resolveTxt: dns,
+        resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+        requester: requests,
+        launchBrowser: async () => fakeBrowser(),
+      });
+    try {
+      await db
+        .update(deepAuditAuthorizations)
+        .set({ generationId: null })
+        .where(eq(deepAuditAuthorizations.siteId, f.siteId));
+      expect(
+        (
+          await runInternalDeepWorkerJob({
+            payload: f.payload,
+            attemptsMade: 0,
+            configuredAttempts: 3,
+            signal: new AbortController().signal,
+            env: enabled,
+            candidate,
+          })
+        ).status,
+      ).toBe("completed");
+      expect(dns).not.toHaveBeenCalled();
+      expect(requests).not.toHaveBeenCalled();
+      const runs = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(eq(scanCheckRuns.scanId, f.scanId));
+      expect(runs).toHaveLength(2);
+      expect(
+        runs.every(
+          (run) =>
+            run.status === "skipped" &&
+            run.skipReason === "authorization-unavailable",
+        ),
+      ).toBe(true);
     } finally {
       await f.cleanup();
     }
@@ -619,7 +672,8 @@ describeRedis("internal Deep BullMQ retry", () => {
       const attempts = await db
         .select()
         .from(scanAttempts)
-        .where(eq(scanAttempts.scanId, f.scanId));
+        .where(eq(scanAttempts.scanId, f.scanId))
+        .orderBy(asc(scanAttempts.attemptNumber));
       expect(attempts).toHaveLength(2);
       expect(attempts[0]?.leaseToken).not.toBe(attempts[1]?.leaseToken);
       expect(attempts[0]?.status).toBe("retrying");

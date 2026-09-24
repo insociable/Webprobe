@@ -79,6 +79,7 @@ export async function revalidateDeepAuditAuthorization(input: {
   }
   if (
     grant.proofType !== "dns_txt" ||
+    !grant.generationId ||
     grant.proofRecordName !== recordName ||
     !/^[a-f0-9]{64}$/.test(grant.proofTokenHash ?? "")
   ) {
@@ -175,6 +176,7 @@ export async function revalidateDeepAuditAuthorization(input: {
       currentGrant.proofRecordName !==
         expectedDeepProofRecord(currentSite.canonicalUrl) ||
       currentGrant.proofTokenHash !== grant.proofTokenHash ||
+      !currentGrant.generationId ||
       currentGrant.generationId !== grant.generationId ||
       currentGrant.proofVerifiedAt.getTime() !==
         grant.proofVerifiedAt.getTime() ||
@@ -188,7 +190,7 @@ export async function revalidateDeepAuditAuthorization(input: {
       .where(eq(deepAuditAuthorizations.siteId, input.siteId))
       .returning();
     if (input.signal?.aborted) throw abortError();
-    if (!updated)
+    if (!updated || !updated.generationId)
       return { allowed: false, reason: "deep-grant-invalid" } as const;
     const decision = authorizeScan({
       mode: "verified_deep_audit",

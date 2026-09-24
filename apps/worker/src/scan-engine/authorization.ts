@@ -5,6 +5,7 @@ export type DeepAuditAuthorization = Readonly<{
   proofType: "dns_txt";
   proofRecordName: string | null;
   proofTokenHash: string | null;
+  generationId: string | null;
   proofVerifiedAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
@@ -16,7 +17,7 @@ export type AuthorizationDecision =
       allowed: true;
       level: "public" | "verified" | "deep";
       grantIdentity?: {
-        generationId: string | null;
+        generationId: string;
         tokenHash: string;
         verifiedAt: Date;
         canonicalUrl: string;
@@ -69,6 +70,7 @@ export function authorizeScan(input: {
     return { allowed: false, reason: "deep-grant-revoked" };
   }
   if (
+    !grant.generationId ||
     !grant.proofRecordName ||
     !/^[a-f0-9]{64}$/.test(grant.proofTokenHash ?? "") ||
     !Number.isFinite(grant.proofVerifiedAt.getTime()) ||
