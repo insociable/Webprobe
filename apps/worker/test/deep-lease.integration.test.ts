@@ -10,6 +10,7 @@ import {
 } from "@agency-saas/db";
 import { eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
+import { beginScanAttempt } from "../src/scan-retry.js";
 import {
   assertDeepLease,
   claimDeepLease,
@@ -122,6 +123,14 @@ describeDatabase("Deep execution lease on PostgreSQL", () => {
       if (!winner || winner.status !== "fulfilled")
         throw new Error("No winner");
       const first = winner.value;
+      await expect(beginScanAttempt(f.scanId)).rejects.toMatchObject({
+        code: "deep-engine-unavailable",
+      });
+      const [stillRunning] = await db
+        .select()
+        .from(scanAttempts)
+        .where(eq(scanAttempts.id, first.attemptId));
+      expect(stillRunning?.status).toBe("running");
       await renewDeepLease(first);
       await expect(claimDeepLease(f)).rejects.toThrow("active");
       await db

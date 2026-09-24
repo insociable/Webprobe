@@ -95,7 +95,7 @@ export async function beginScanAttempt(
 
   return db.transaction(async (tx) => {
     const [scan] = await tx
-      .select({ id: scans.id })
+      .select({ id: scans.id, mode: scans.scanMode })
       .from(scans)
       .where(eq(scans.id, scanId))
       .limit(1)
@@ -103,6 +103,12 @@ export async function beginScanAttempt(
 
     if (!scan) {
       throw new Error("Cannot start attempt for missing scan");
+    }
+    if (scan.mode === "verified_deep_audit") {
+      throw new ScanContextError(
+        "Deep attempts require the fenced lease lifecycle",
+        "deep-engine-unavailable",
+      );
     }
 
     const [latest] = await tx

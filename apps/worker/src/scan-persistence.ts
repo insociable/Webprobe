@@ -631,6 +631,7 @@ export async function persistScanFailureForJob(
         eq(scans.id, payload.scanId),
         eq(scans.organizationId, payload.organizationId),
         eq(scans.siteId, payload.siteId),
+        ne(scans.scanMode, "verified_deep_audit"),
         inArray(scans.status, ["running", "queued", "failed"]),
       ),
     );

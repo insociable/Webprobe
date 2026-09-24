@@ -24,6 +24,7 @@ import {
   claimDeepLease,
   monitorDeepLease,
   releaseDeepLease,
+  type DeepLease,
 } from "./deep-lease.js";
 import { throwIfAborted } from "./abort.js";
 import type { CoverageReason, ScanProfile } from "./types.js";
@@ -93,7 +94,7 @@ function failureReason(error: unknown, ledger: BudgetLedger): CoverageReason {
   return "transport-failed";
 }
 
-/** Candidate lifecycle only. Production dispatch and worker execution still reject Deep Audit. */
+/** Guarded Deep lifecycle. Only the internal worker gate may route queue jobs here. */
 export async function runDeepAuditCandidate(input: {
   scanId: string;
   organizationId: string;
@@ -106,6 +107,7 @@ export async function runDeepAuditCandidate(input: {
   requester?: HttpRequester;
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
   signal?: AbortSignal;
+  onLeaseClaimed?: (lease: DeepLease) => void;
 }): Promise<void> {
   const profile = checkedProfile(
     input.profile ?? resolveScanProfile("verified_deep_audit"),
@@ -114,6 +116,7 @@ export async function runDeepAuditCandidate(input: {
   const lease = await claimDeepLease(input);
   const monitor = monitorDeepLease(lease, input.signal);
   try {
+    input.onLeaseClaimed?.(lease);
     await monitor.assertCurrent();
     const { db } = getDatabase();
     const [scan] = await db

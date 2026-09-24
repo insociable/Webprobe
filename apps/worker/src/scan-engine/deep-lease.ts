@@ -45,6 +45,13 @@ export class DeepLeaseError extends Error {
   }
 }
 
+export class DeepLeaseBusyError extends DeepLeaseError {
+  constructor(message = "Deep execution lease is active or ambiguous") {
+    super(message);
+    this.name = "DeepLeaseBusyError";
+  }
+}
+
 /** The scan row serializes competing claims; the attempt token fences stale writers. */
 export async function claimDeepLease(input: {
   scanId: string;
@@ -96,7 +103,7 @@ export async function claimDeepLease(input: {
     if (latest?.status === "running") {
       // Null denotes a legacy, unfenced attempt. Never steal it.
       if (!latest.leaseUntil || latest.leaseUntil > clock.now)
-        throw new DeepLeaseError("Deep execution lease is active or ambiguous");
+        throw new DeepLeaseBusyError();
       const [expired] = await tx
         .update(scanAttempts)
         .set({
@@ -115,7 +122,7 @@ export async function claimDeepLease(input: {
         )
         .returning({ id: scanAttempts.id });
       if (!expired)
-        throw new DeepLeaseError("Deep lease was renewed concurrently");
+        throw new DeepLeaseBusyError("Deep lease was renewed concurrently");
     }
     if (
       latest?.status === "completed" ||

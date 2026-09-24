@@ -16,6 +16,10 @@ import {
 } from "./public-audit-retention.js";
 import { processScanJobAttempt } from "./scan-processor.js";
 import {
+  runInternalDeepWorkerJob,
+  scanModeForWorkerJob,
+} from "./internal-deep-worker.js";
+import {
   beginScanAttempt,
   classifyScanError,
   completeScanAttempt,
@@ -65,9 +69,30 @@ const scanJobOptions: JobsOptions = {
   },
 };
 
+const activeDeepJobs = new Set<AbortController>();
+
 const worker = new Worker<ScanJob>(
   SCAN_QUEUE_NAME,
   async (job) => {
+    // Route by the database mode before beginScanAttempt: the V2 attempt writer
+    // does not understand Deep lease tokens and must never touch a Deep job.
+    const route = await scanModeForWorkerJob(job.data);
+    if (route.mode === "verified_deep_audit") {
+      const controller = new AbortController();
+      activeDeepJobs.add(controller);
+      try {
+        const result = await runInternalDeepWorkerJob({
+          payload: route.payload,
+          attemptsMade: job.attemptsMade,
+          configuredAttempts: job.opts.attempts ?? 1,
+          signal: controller.signal,
+        });
+        logger.info({ jobId: job.id, ...result }, "internal Deep job finished");
+        return result;
+      } finally {
+        activeDeepJobs.delete(controller);
+      }
+    }
     let attempt: Awaited<ReturnType<typeof beginScanAttempt>> | undefined;
 
     try {
@@ -236,6 +261,7 @@ const publicAuditRetentionCoordinator = startPublicAuditRetentionCoordinator({
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
+  for (const controller of activeDeepJobs) controller.abort();
   await observabilityCoordinator.stop();
   await publicAuditRetentionCoordinator.stop();
   await schedulerCoordinator.stop();
