@@ -34,13 +34,6 @@ function safeMetaContent(name: string, rawContent: string): string {
   return rawContent.slice(0, 512);
 }
 
-function safeMetaContent(name: string, rawContent: string): string {
-  if (/^refresh$/i.test(name)) {
-    return /^\s*(\d+(?:\.\d+)?)/.exec(rawContent)?.[1] ?? "present";
-  }
-  return rawContent.slice(0, 512);
-}
-
 async function boundedDomObservation<T>(
   evaluation: Promise<T>,
   signal: AbortSignal | undefined,
