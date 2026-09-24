@@ -290,7 +290,7 @@ export const deepAuditAuthorizations = pgTable(
     revalidatedAt: timestamp("revalidated_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    generationId: uuid("generation_id"),
+    generationId: uuid("generation_id").notNull(),
   },
   (table) => [
     check("deep_audit_proof_type_dns", sql`${table.proofType} = 'dns_txt'`),

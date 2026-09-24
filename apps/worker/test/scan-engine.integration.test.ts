@@ -265,6 +265,7 @@ describeDatabase("V3 schema compatibility", () => {
       await db.insert(deepAuditAuthorizations).values({
         siteId: deepSiteId,
         proofType: "dns_txt",
+        generationId: randomUUID(),
         proofVerifiedAt: now,
         revalidatedAt: now,
         expiresAt: new Date(now.getTime() + 60_000),

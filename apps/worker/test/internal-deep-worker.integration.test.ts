@@ -8,7 +8,7 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { Queue, Worker } from "bullmq";
 import type { ScanJob } from "@agency-saas/contracts";
 import type { Browser, BrowserContext, Page, Response } from "playwright";
@@ -77,6 +77,7 @@ async function fixture() {
     organizationId,
     siteId,
     scanId,
+    generationId,
     payload: {
       scanId,
       organizationId,
@@ -168,74 +169,34 @@ describeDatabase("internal Deep worker lifecycle", () => {
     }
   });
 
-  it("fails closed without DNS or HTTP when a grant has no generation", async () => {
+  it("rejects a NULL grant generation at the PostgreSQL boundary", async () => {
     const f = await fixture();
     const { db } = getDatabase();
-    const dns = vi.fn(async () => [[proof]]);
-    const requests = vi.fn(async () => {
-      throw new Error("HTTP must not start");
-    });
-    const candidate: typeof runDeepAuditCandidate = (input) =>
-      runDeepAuditCandidate({
-        ...input,
-        resolveTxt: dns,
-        resolver: async () => [{ address: "93.184.216.34", family: 4 }],
-        requester: requests,
-        launchBrowser: async () => fakeBrowser(),
-      });
     try {
-      await db
-        .update(deepAuditAuthorizations)
-        .set({ generationId: null })
-        .where(eq(deepAuditAuthorizations.siteId, f.siteId));
       await expect(
-        runInternalDeepWorkerJob({
-          payload: f.payload,
-          attemptsMade: 0,
-          configuredAttempts: 3,
-          signal: new AbortController().signal,
-          env: enabled,
-          candidate,
-        }),
-      ).rejects.toThrow("deep-authorization-denied");
-      expect(dns).not.toHaveBeenCalled();
-      expect(requests).not.toHaveBeenCalled();
-      const runs = await db
-        .select()
-        .from(scanCheckRuns)
-        .where(eq(scanCheckRuns.scanId, f.scanId));
-      expect(runs).toHaveLength(2);
+        db
+          .update(deepAuditAuthorizations)
+          .set({ generationId: sql`NULL` })
+          .where(eq(deepAuditAuthorizations.siteId, f.siteId)),
+      ).rejects.toThrow();
+
+      const [grant] = await db
+        .select({ generationId: deepAuditAuthorizations.generationId })
+        .from(deepAuditAuthorizations)
+        .where(eq(deepAuditAuthorizations.siteId, f.siteId));
+      expect(grant?.generationId).toBe(f.generationId);
+
       expect(
-        runs.every(
-          (run) =>
-            run.status === "skipped" &&
-            run.skipReason === "authorization-unavailable",
-        ),
-      ).toBe(true);
+        await db
+          .select()
+          .from(scanAttempts)
+          .where(eq(scanAttempts.scanId, f.scanId)),
+      ).toHaveLength(0);
       const [scan] = await db
-        .select({ status: scans.status, summary: scans.summary })
+        .select()
         .from(scans)
         .where(eq(scans.id, f.scanId));
-      expect(scan?.status).toBe("failed");
-      expect(scan?.summary).toMatchObject({
-        deepError: {
-          code: "deep-authorization-denied",
-          reason: "deep-grant-invalid",
-        },
-      });
-      const [attempt] = await db
-        .select({
-          status: scanAttempts.status,
-          retryable: scanAttempts.retryable,
-          errorCode: scanAttempts.errorCode,
-        })
-        .from(scanAttempts)
-        .where(eq(scanAttempts.scanId, f.scanId));
-      expect(attempt).toEqual({
-        status: "failed",
-        retryable: false,
-        errorCode: "deep-authorization-denied",
-      });
+      expect(scan?.status).toBe("queued");
     } finally {
       await f.cleanup();
     }
