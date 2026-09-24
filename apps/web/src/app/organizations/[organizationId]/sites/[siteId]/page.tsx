@@ -123,6 +123,62 @@ export default async function SitePage({
     scheduleEnabled: scheduleState?.schedule?.enabled ?? false,
   });
 
+  const scanRows = history.scans.map((scan, index) => {
+    const count = findingCount(scan.summary);
+    const isActive = scan.status === "queued" || scan.status === "running";
+
+    return (
+      <Link
+        key={scan.id}
+        href={
+          "/organizations/" +
+          organizationId +
+          "/sites/" +
+          siteId +
+          "/scans/" +
+          scan.id
+        }
+        className="group grid gap-4 border-b border-[#242d40] px-1 py-5 transition last:border-b-0 hover:bg-[#0d121d] sm:grid-cols-[42px_1fr_150px_120px_auto] sm:items-center sm:px-4"
+      >
+        <span className="font-mono text-sm text-[#56627a]">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <div>
+          <p className="font-medium text-[#e2e7f1]">
+            {scan.scanMode === "public_audit"
+              ? "Audit public"
+              : scan.scanMode === "verified_deep_audit"
+                ? "Audit approfondi"
+                : scan.trigger === "manual"
+                  ? "Monitoring manuel"
+                  : "Monitoring planifié"}
+          </p>
+          <p className="mt-1 text-base text-[#68758c]">
+            {formatDate(scan.queuedAt)}
+          </p>
+        </div>
+        <div className="text-base text-[#8d98ad]">
+          {count === null
+            ? "Résultat en attente"
+            : count + " finding" + (count > 1 ? "s" : "")}
+        </div>
+        <span className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-[#9aa6ba]">
+          {isActive ? (
+            <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+          ) : null}
+          {scanStatusLabels[scan.status]}
+        </span>
+        <span className="text-base font-semibold text-[#7685ff] transition group-hover:translate-x-1 group-hover:text-[#aab2ff]">
+          {scan.status === "completed"
+            ? "Rapport →"
+            : isActive
+              ? "Suivre →"
+              : "Détail →"}
+        </span>
+      </Link>
+    );
+  });
+
   return (
     <WorkspaceShell trail={[{ label: history.site.name }]}>
       <ScanStatusRefresher active={activeScan} />
@@ -142,7 +198,7 @@ export default async function SitePage({
           <p className="mt-3 break-all text-[#7f8a9f]">
             {history.site.canonicalUrl}
           </p>
-          <div className="mt-4 flex items-center gap-2 text-sm text-[#9ca7ba]">
+          <div className="mt-4 flex items-center gap-2 text-base text-[#9ca7ba]">
             <span
               className={
                 "size-2 rounded-sm " +
@@ -231,13 +287,13 @@ export default async function SitePage({
 
       {history.site.status === "pending_verification" ? (
         <section className="mt-7 border-l-2 border-[#6d7cff] bg-[#0f1421] p-5">
-          <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
+          <p className="font-mono text-xs font-semibold uppercase tracking-[0.14em] text-[#8793ff]">
             Monitoring verrouillé
           </p>
           <h2 className="mt-2 text-lg font-semibold">
             La vérification DNS débloque le suivi continu
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
+          <p className="mt-2 max-w-3xl text-base leading-6 text-white/50">
             Tant que le domaine n’est pas vérifié, WebProbe reste en audit
             public one-shot. La validation active ensuite le planning, les
             alertes de monitoring et le partage de rapports. Les audits publics
@@ -248,7 +304,7 @@ export default async function SitePage({
             {["Planning", "Alertes", "Partage de rapports"].map((item) => (
               <span
                 key={item}
-                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#aeb9cc]"
+                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 font-mono text-xs uppercase tracking-[0.08em] text-[#aeb9cc]"
               >
                 {item}
               </span>
@@ -260,7 +316,7 @@ export default async function SitePage({
       {audit === "deferred" ? (
         <section className="mt-7 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
           <p className="font-semibold text-amber-100">Site créé.</p>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-amber-100/70">
+          <p className="mt-2 max-w-3xl text-base leading-6 text-amber-100/70">
             L’audit public n’a pas pu démarrer automatiquement, par exemple à
             cause d’un quota, d’un cooldown ou d’un scan déjà actif. Vous pouvez
             le relancer avec le bouton ci-dessus.
@@ -278,7 +334,7 @@ export default async function SitePage({
               <span className="size-2 animate-pulse rounded-sm bg-[#39c7ff]" />
               <p className="font-semibold text-[#dff7ff]">Scan en cours</p>
             </div>
-            <p className="mt-2 text-sm text-[#7f96a6]">
+            <p className="mt-2 text-base text-[#7f96a6]">
               Le statut se met à jour automatiquement. Ouvrez le scan actif
               ci-dessous pour suivre sa progression.
             </p>
@@ -293,7 +349,7 @@ export default async function SitePage({
                 "/scans/" +
                 activeScanEntry.id
               }
-              className="text-sm font-semibold text-[#65ccef] hover:text-[#a6eaff]"
+              className="text-base font-semibold text-[#65ccef] hover:text-[#a6eaff]"
             >
               Suivre le scan →
             </Link>
@@ -302,84 +358,42 @@ export default async function SitePage({
       ) : null}
 
       <section className="py-10">
-        <details className="am-scan-history overflow-hidden border-y border-[#242d40]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-1 py-5 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8793ff] sm:px-4">
+        <div className="overflow-hidden border-y border-[#242d40]">
+          <div className="flex items-center justify-between gap-4 px-1 py-5 font-semibold sm:px-4">
             <span>Historique des scans · {history.scans.length}</span>
-            <span
-              aria-hidden="true"
-              className="am-scan-history-chevron text-[#7685ff]"
-            >
-              ↓
-            </span>
-          </summary>
+          </div>
 
-          {history.scans.length === 0 ? (
+          {scanRows.length === 0 ? (
             <div className="border-t border-[#242d40] p-6">
               <p className="text-[#7f8a9f]">
                 Aucun scan n’a encore été exécuté pour ce site.
               </p>
             </div>
           ) : (
-            <div className="border-t border-[#242d40]">
-              {history.scans.map((scan, index) => {
-                const count = findingCount(scan.summary);
-                const isActive =
-                  scan.status === "queued" || scan.status === "running";
+            <>
+              <div className="border-t border-[#242d40]">{scanRows[0]}</div>
 
-                return (
-                  <Link
-                    key={scan.id}
-                    href={
-                      "/organizations/" +
-                      organizationId +
-                      "/sites/" +
-                      siteId +
-                      "/scans/" +
-                      scan.id
-                    }
-                    className="group grid gap-4 border-b border-[#242d40] px-1 py-5 transition last:border-b-0 hover:bg-[#0d121d] sm:grid-cols-[42px_1fr_150px_120px_auto] sm:items-center sm:px-4"
-                  >
-                    <span className="font-mono text-xs text-[#56627a]">
-                      {String(index + 1).padStart(2, "0")}
+              {scanRows.length > 1 ? (
+                <details className="am-scan-history border-t border-[#242d40]">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-1 py-4 font-semibold text-[#aeb9cc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#8793ff] sm:px-4">
+                    <span>
+                      Afficher les scans précédents · {scanRows.length - 1}
                     </span>
-                    <div>
-                      <p className="font-medium text-[#e2e7f1]">
-                        {scan.scanMode === "public_audit"
-                          ? "Audit public"
-                          : scan.scanMode === "verified_deep_audit"
-                            ? "Audit approfondi"
-                            : scan.trigger === "manual"
-                              ? "Monitoring manuel"
-                              : "Monitoring planifié"}
-                      </p>
-                      <p className="mt-1 text-sm text-[#68758c]">
-                        {formatDate(scan.queuedAt)}
-                      </p>
-                    </div>
-                    <div className="text-sm text-[#8d98ad]">
-                      {count === null
-                        ? "Résultat en attente"
-                        : count + " finding" + (count > 1 ? "s" : "")}
-                    </div>
-                    <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[#9aa6ba]">
-                      {isActive ? (
-                        <span className="size-1.5 animate-pulse rounded-sm bg-[#39c7ff]" />
-                      ) : null}
-                      {scanStatusLabels[scan.status]}
+                    <span
+                      aria-hidden="true"
+                      className="am-scan-history-chevron text-[#7685ff]"
+                    >
+                      ↓
                     </span>
-                    <span className="text-sm font-semibold text-[#7685ff] transition group-hover:translate-x-1 group-hover:text-[#aab2ff]">
-                      {scan.status === "completed"
-                        ? "Rapport →"
-                        : isActive
-                          ? "Suivre →"
-                          : "Détail →"}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
+                  </summary>
+                  <div className="border-t border-[#242d40]">
+                    {scanRows.slice(1)}
+                  </div>
+                </details>
+              ) : null}
+            </>
           )}
-        </details>
+        </div>
       </section>
 
       <section
@@ -388,18 +402,18 @@ export default async function SitePage({
       >
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#647188]">
               Configuration récurrente
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
               Monitoring
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6f7b91]">
+            <p className="mt-2 max-w-2xl text-base leading-6 text-[#6f7b91]">
               Planifiez les scans standards automatiques et les alertes. Les
               audits approfondis restent des actions manuelles distinctes.
             </p>
           </div>
-          <span className="w-fit rounded-md border border-[#303a50] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.08em] text-[#9aa6ba]">
+          <span className="w-fit rounded-md border border-[#303a50] px-2.5 py-1 font-mono text-xs uppercase tracking-[0.08em] text-[#9aa6ba]">
             {monitoringState.label}
           </span>
         </div>
@@ -428,13 +442,13 @@ export default async function SitePage({
       {canManage ? (
         <section className="mt-10 border-t border-[#242d40] pt-9">
           <div className="mb-6">
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#647188]">
               Préférences
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
               Rapports et alertes
             </h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-[#6f7b91]">
+            <p className="mt-3 max-w-3xl text-base leading-6 text-[#6f7b91]">
               Configurez ici la présentation des rapports et les alertes de
               dégradation utilisées depuis votre portail.
             </p>

@@ -39,10 +39,10 @@ export function ManualScanButton({
 
   return (
     <div className="rounded-lg border border-[#242d40] bg-[#0d111a] p-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
+      <p className="font-mono text-sm font-semibold uppercase tracking-[0.12em] text-[#39c7ff]">
         Actions immédiates
       </p>
-      <p className="mt-1 text-xs leading-5 text-[#7f8a9f]">
+      <p className="mt-1 text-sm leading-6 text-[#7f8a9f]">
         Standard pour le contrôle courant, approfondi pour une analyse Deep.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
@@ -65,7 +65,7 @@ export function ManualScanButton({
       </div>
 
       {error ? (
-        <p aria-live="polite" className="mt-3 text-xs leading-5 text-amber-100">
+        <p aria-live="polite" className="mt-3 text-sm leading-6 text-amber-100">
           {error}
         </p>
       ) : null}

@@ -234,42 +234,42 @@ export function DeepAuditReport({
           <h2 className="text-2xl font-semibold tracking-[-0.03em]">
             Synthèse Deep
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/50">
+          <p className="mt-2 max-w-3xl text-base leading-6 text-white/50">
             WebProbe analyse le domaine vérifié avec des transports HTTP et
             navigateur isolés. Les contrôles restent bornés au périmètre
             autorisé, aux budgets réseau et aux protections anti-SSRF.
           </p>
         </div>
-        <span className="rounded-md border border-[#39445d] bg-[#111827] px-3 py-2 text-xs text-[#b6c0d1]">
+        <span className="rounded-md border border-[#39445d] bg-[#111827] px-3 py-2 text-sm text-[#b6c0d1]">
           {coverageComplete
             ? "Couverture complète du périmètre"
             : "Couverture à vérifier"}
         </span>
       </div>
 
-      <div className="am-panel-soft mt-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.12em] text-white/40">
-            Score Deep
-          </p>
-          <p className="mt-1 text-3xl font-semibold tracking-[-0.04em]">
-            {status === "completed" && score.value !== null
-              ? `${score.value} / 100`
-              : "Non évalué"}
-          </p>
-        </div>
-        <div className="max-w-xl text-sm leading-6 text-white/50 sm:text-right">
-          <p className="font-medium text-white/70">
+      <div className="am-panel-soft mt-6 flex flex-col gap-4 p-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.12em] text-white/40">
+              Score Deep
+            </p>
+            <p className="mt-1 text-3xl font-semibold tracking-[-0.04em]">
+              {status === "completed" && score.value !== null
+                ? `${score.value} / 100`
+                : "Non évalué"}
+            </p>
+          </div>
+          <p className="pb-1 text-base font-semibold text-[#b8c2ff]">
             {status === "completed" ? score.label : "Analyse en cours"}
             {score.limitedCoverage && status === "completed"
               ? ` · Couverture partielle (${score.completedControls}/${score.expectedControls} contrôles de diagnostic)`
               : ""}
           </p>
-          <p>
-            Indice des constats observés, ni pourcentage de sécurité ni
-            certification. Les contrôles détaillés font foi.
-          </p>
         </div>
+        <p className="max-w-xl text-base leading-7 text-white/50 sm:text-right">
+          Indice des constats observés, ni pourcentage de sécurité ni
+          certification. Les contrôles détaillés font foi.
+        </p>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -280,7 +280,7 @@ export function DeepAuditReport({
           ["Échecs", coverage?.failedChecks ?? failed],
         ].map(([label, value]) => (
           <div key={String(label)} className="am-panel-soft p-4">
-            <p className="text-xs uppercase tracking-[0.12em] text-white/35">
+            <p className="text-sm uppercase tracking-[0.12em] text-white/35">
               {String(label)}
             </p>
             <p className="mt-2 text-2xl font-semibold">
@@ -302,8 +302,8 @@ export function DeepAuditReport({
               key={String(label)}
               className="rounded-lg border border-[#242d40] bg-[#0d111a] p-4"
             >
-              <p className="text-xs text-white/35">{String(label)}</p>
-              <p className="mt-1 text-sm font-medium text-white/70">
+              <p className="text-sm text-white/35">{String(label)}</p>
+              <p className="mt-1 text-base font-medium text-white/70">
                 {typeof value === "number" || typeof value === "string"
                   ? String(value)
                   : "—"}
@@ -315,7 +315,7 @@ export function DeepAuditReport({
 
       {reasons.length > 0 ? (
         <div className="mt-5 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
-          <p className="text-sm font-semibold text-amber-100">
+          <p className="text-base font-semibold text-amber-100">
             Certaines limites ont réduit la couverture
           </p>
           <div className="mt-3 space-y-3">
@@ -327,10 +327,10 @@ export function DeepAuditReport({
               };
               return (
                 <div key={reason}>
-                  <p className="text-sm font-medium text-amber-100 opacity-90">
+                  <p className="text-base font-medium text-amber-100 opacity-90">
                     {copy.title}
                   </p>
-                  <p className="mt-1 text-sm leading-6 text-amber-100 opacity-70">
+                  <p className="mt-1 text-base leading-6 text-amber-100 opacity-70">
                     {copy.detail}
                   </p>
                 </div>
@@ -340,7 +340,7 @@ export function DeepAuditReport({
         </div>
       ) : coverageComplete ? (
         <div className="mt-5 border-l-2 border-emerald-300/60 bg-emerald-200/[0.04] p-4">
-          <p className="text-sm text-emerald-100 opacity-75">
+          <p className="text-base text-emerald-100 opacity-75">
             Tous les contrôles prévus ont été exécutés dans le périmètre et les
             budgets autorisés.
           </p>
@@ -348,7 +348,7 @@ export function DeepAuditReport({
       ) : null}
 
       <div className="mt-8">
-        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+        <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#647188]">
           Ce qui a été analysé
         </p>
         <div className="mt-4 grid gap-5 lg:grid-cols-2">
@@ -400,11 +400,11 @@ export function DeepAuditReport({
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <h4 className="font-semibold">{userTitle}</h4>
-                            <p className="mt-2 text-sm leading-6 text-white/45">
+                            <p className="mt-2 text-base leading-6 text-white/45">
                               {userSummary}
                             </p>
                           </div>
-                          <span className="shrink-0 rounded-md border border-[#39445d] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#b6c0d1]">
+                          <span className="shrink-0 rounded-md border border-[#39445d] px-2.5 py-1 font-mono text-xs uppercase tracking-[0.1em] text-[#b6c0d1]">
                             {statusLabels[run.status] ??
                               humanizeIdentifier(run.status)}
                           </span>
@@ -415,7 +415,7 @@ export function DeepAuditReport({
                             {highlights.map((item) => (
                               <span
                                 key={item}
-                                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 text-xs text-[#aeb9cc]"
+                                className="rounded-md border border-[#303a50] bg-[#111827] px-2.5 py-1 text-sm text-[#aeb9cc]"
                               >
                                 {item}
                               </span>
@@ -424,7 +424,7 @@ export function DeepAuditReport({
                         ) : null}
 
                         {skipCopy ? (
-                          <p className="mt-4 text-sm leading-6 text-amber-100 opacity-70">
+                          <p className="mt-4 text-base leading-6 text-amber-100 opacity-70">
                             {skipCopy.detail}
                           </p>
                         ) : null}
@@ -471,10 +471,10 @@ export function DeepAuditReport({
                                   }
                                 >
                                   <div className="flex items-start justify-between gap-3">
-                                    <p className="text-sm font-medium text-white/80">
+                                    <p className="text-base font-medium text-white/80">
                                       {summary}
                                     </p>
-                                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-white/35">
+                                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.1em] text-white/35">
                                       {level === "risk"
                                         ? "À corriger"
                                         : level === "review"
@@ -483,12 +483,12 @@ export function DeepAuditReport({
                                     </span>
                                   </div>
                                   {observed ? (
-                                    <p className="mt-1 break-all text-xs text-white/45">
+                                    <p className="mt-1 break-all text-sm text-white/45">
                                       Observé : {observed}
                                     </p>
                                   ) : null}
                                   {recommendation ? (
-                                    <p className="mt-2 text-xs leading-5 text-white/55">
+                                    <p className="mt-2 text-sm leading-5 text-white/55">
                                       {recommendation}
                                     </p>
                                   ) : null}
@@ -497,39 +497,39 @@ export function DeepAuditReport({
                             })}
                           </div>
                         ) : cspUnavailable ? (
-                          <p className="mt-4 text-sm text-amber-100 opacity-75">
+                          <p className="mt-4 text-base text-amber-100 opacity-75">
                             Politique CSP non évaluée : réponse HTTP
                             indisponible.
                           </p>
                         ) : run.checkId === "deep-security-headers" &&
                           cspMissing ? (
-                          <p className="mt-4 text-sm text-white/55">
+                          <p className="mt-4 text-base text-white/55">
                             Le diagnostic de la CSP figure dans le contrôle
                             Politique CSP.
                           </p>
                         ) : run.status === "completed" ? (
-                          <p className="mt-4 text-sm text-emerald-100 opacity-75">
+                          <p className="mt-4 text-base text-emerald-100 opacity-75">
                             Aucun point nécessitant une action n’a été relevé
                             par ce contrôle.
                           </p>
                         ) : null}
 
                         <details className="mt-5 border-t border-[#242d40] pt-4">
-                          <summary className="cursor-pointer text-xs font-semibold text-[#8793ff]">
+                          <summary className="cursor-pointer text-sm font-semibold text-[#8793ff]">
                             Détails techniques
                           </summary>
                           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div>
-                              <dt className="text-xs text-white/30">
+                              <dt className="text-sm text-white/30">
                                 Identifiant interne
                               </dt>
-                              <dd className="mt-1 break-all font-mono text-xs text-white/55">
+                              <dd className="mt-1 break-all font-mono text-sm text-white/55">
                                 {run.checkId} · v{run.checkVersion}
                               </dd>
                             </div>
                             <div>
-                              <dt className="text-xs text-white/30">Durée</dt>
-                              <dd className="mt-1 text-xs text-white/55">
+                              <dt className="text-sm text-white/30">Durée</dt>
+                              <dd className="mt-1 text-sm text-white/55">
                                 {run.durationMs === null
                                   ? "—"
                                   : run.durationMs + " ms"}
@@ -537,12 +537,12 @@ export function DeepAuditReport({
                             </div>
                           </dl>
                           {Object.keys(run.budgetUsed).length > 0 ? (
-                            <pre className="mt-3 overflow-x-auto rounded-md bg-black/20 p-3 text-xs leading-5 text-white/55">
+                            <pre className="mt-3 overflow-x-auto rounded-md bg-black/20 p-3 text-sm leading-5 text-white/55">
                               {JSON.stringify(run.budgetUsed, null, 2)}
                             </pre>
                           ) : null}
                           {run.evidence.length > 0 ? (
-                            <pre className="mt-3 overflow-x-auto rounded-md bg-black/20 p-3 text-xs leading-5 text-white/55">
+                            <pre className="mt-3 overflow-x-auto rounded-md bg-black/20 p-3 text-sm leading-5 text-white/55">
                               {JSON.stringify(run.evidence, null, 2)}
                             </pre>
                           ) : null}
@@ -557,7 +557,7 @@ export function DeepAuditReport({
         </div>
       </div>
 
-      <p className="mt-7 max-w-4xl text-xs leading-5 text-white/35">
+      <p className="mt-7 max-w-4xl text-sm leading-5 text-white/35">
         Limites : l’audit Deep reste non destructif. Les destinations hors du
         domaine autorisé, les protocoles non prévus et les opérations réseau
         dépassant les budgets sont bloqués par conception.
