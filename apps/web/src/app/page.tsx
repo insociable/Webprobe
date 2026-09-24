@@ -13,13 +13,13 @@ const webApplicationJsonLd = {
   name: "WebProbe",
   url: "https://webprobe.fr/",
   description:
-    "Analyse technique de sites web couvrant la sécurité, les performances, le SEO, la disponibilité, la configuration et le suivi dans le temps.",
+    "Analyse technique de sites web avec scan standard et audit approfondi Deep V3 pour les domaines vérifiés : sécurité, performances, SEO, disponibilité, configuration et suivi dans le temps.",
 };
 
 const signals = [
   { label: "Sites suivis", value: "20 max.", detail: "périmètre pilote" },
+  { label: "Modes", value: "2", detail: "standard + Deep V3" },
   { label: "Cadence", value: "7 jours", detail: "+ scans manuels" },
-  { label: "Contrôles", value: "7 familles", detail: "dans un même rapport" },
 ];
 
 const checks = [
@@ -29,7 +29,10 @@ const checks = [
   ["SEO", "Title, description, canonical, robots et structure essentielle"],
   ["Navigateur", "Erreurs JavaScript et rendu réellement observé"],
   ["Historique", "Comparaison avec les scans précédents et rétablissements"],
-  ["Rapports & remédiations", "Preuves, priorités et recommandations actionnables"],
+  [
+    "Rapports & remédiations",
+    "Preuves, priorités et recommandations actionnables",
+  ],
 ];
 
 export default function Home() {
@@ -37,7 +40,9 @@ export default function Home() {
     <main className="min-h-screen">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(webApplicationJsonLd) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(webApplicationJsonLd),
+        }}
       />
       <nav className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center justify-between border-b border-[#242d40] py-5">
         <ProductMark />
@@ -65,6 +70,8 @@ export default function Home() {
             WebProbe analyse vos sites web et transforme chaque scan en
             informations actionnables : sécurité, performance, SEO,
             disponibilité, configuration technique, historique et remédiations.
+            Sur un domaine vérifié, vous pouvez aussi lancer un audit approfondi
+            avec le moteur Deep V3.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/sign-in" className="am-button-primary">
@@ -148,6 +155,35 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="mx-auto w-[min(1240px,calc(100%-32px))] border-t border-[#242d40] py-16">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <article className="am-panel p-6">
+            <p className="am-kicker">Scan standard</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+              Diagnostic et suivi régulier
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#8793a8]">
+              Analyse les principaux signaux sécurité, performance, SEO,
+              disponibilité, navigateur et configuration, avec historique,
+              comparaison et remédiations.
+            </p>
+          </article>
+
+          <article className="am-panel p-6">
+            <p className="am-kicker">Audit approfondi · Deep V3</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+              Plus de profondeur sur les domaines vérifiés
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#8793a8]">
+              Le mode Deep utilise le moteur V3 avec transports HTTP et
+              navigateur gardés, budgets réseau, protections anti-SSRF,
+              contrôles dédiés et preuves techniques. La vérification DNS
+              existante du domaine suffit pour l’autoriser.
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-10 border-t border-[#242d40] py-16 lg:grid-cols-[0.72fr_1.28fr]">
         <div>
           <p className="am-kicker">Du signal à la correction</p>
@@ -177,7 +213,9 @@ export default function Home() {
 
       <footer className="mx-auto flex w-[min(1240px,calc(100%-32px))] flex-col gap-2 border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176] sm:flex-row sm:items-center sm:justify-between">
         <p>WebProbe — audit et monitoring technique</p>
-        <p>Sécurité · Performance · SEO · Disponibilité · Historique · Rapports</p>
+        <p>
+          Sécurité · Performance · SEO · Disponibilité · Historique · Rapports
+        </p>
       </footer>
     </main>
   );
