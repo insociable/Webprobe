@@ -148,9 +148,7 @@ describe("candidate guarded browser transport", () => {
       { name: "session", secure: true, httpOnly: true, sameSite: "Lax" },
     ]);
     expect(observation.deep?.meta).toEqual(
-      expect.arrayContaining([
-        { name: "refresh", content: "0" },
-      ]),
+      expect.arrayContaining([{ name: "refresh", content: "0" }]),
     );
     expect(JSON.stringify(observation)).not.toContain("secret");
     expect(ledger.snapshot().reasons).not.toContain("scope-denied");

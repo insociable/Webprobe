@@ -39,8 +39,12 @@ export function ManualScanButton({
 
   return (
     <div className="rounded-lg border border-[#242d40] bg-[#0d111a] p-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">Actions immédiates</p>
-      <p className="mt-1 text-xs leading-5 text-[#7f8a9f]">Standard pour le contrôle courant, approfondi pour une analyse Deep.</p>
+      <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
+        Actions immédiates
+      </p>
+      <p className="mt-1 text-xs leading-5 text-[#7f8a9f]">
+        Standard pour le contrôle courant, approfondi pour une analyse Deep.
+      </p>
       <div className="mt-3 flex flex-wrap gap-3">
         <form action={standardFormAction}>
           <button

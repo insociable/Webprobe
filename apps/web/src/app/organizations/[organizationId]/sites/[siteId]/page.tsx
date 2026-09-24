@@ -388,8 +388,12 @@ export default async function SitePage({
       >
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">Configuration récurrente</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Monitoring</h2>
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+              Configuration récurrente
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">
+              Monitoring
+            </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[#6f7b91]">
               Planifiez les scans standards automatiques et les alertes. Les
               audits approfondis restent des actions manuelles distinctes.
