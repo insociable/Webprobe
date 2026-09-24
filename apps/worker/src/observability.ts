@@ -39,6 +39,26 @@ async function collectDatabaseHealth(
             and started_at <= ${staleBefore}::timestamptz
         )::int as scans_stale,
         count(*) filter (
+          where status = 'running'
+            and scan_mode = 'verified_deep_audit'
+        )::int as deep_scans_running,
+        count(*) filter (
+          where status = 'running'
+            and scan_mode = 'verified_deep_audit'
+            and started_at is not null
+            and started_at <= ${staleBefore}::timestamptz
+        )::int as deep_scans_stale,
+        count(*) filter (
+          where status = 'completed'
+            and scan_mode = 'verified_deep_audit'
+            and completed_at >= ${since}::timestamptz
+        )::int as deep_success_last_24h,
+        count(*) filter (
+          where status = 'failed'
+            and scan_mode = 'verified_deep_audit'
+            and completed_at >= ${since}::timestamptz
+        )::int as deep_failed_last_24h,
+        count(*) filter (
           where status = 'completed'
             and completed_at >= ${since}::timestamptz
         )::int as success_last_24h,
@@ -78,6 +98,10 @@ async function collectDatabaseHealth(
       status: "up",
       scansRunning: numberValue(scanMetrics?.scans_running),
       scansStale: numberValue(scanMetrics?.scans_stale),
+      deepScansRunning: numberValue(scanMetrics?.deep_scans_running),
+      deepScansStale: numberValue(scanMetrics?.deep_scans_stale),
+      deepSuccessLast24h: numberValue(scanMetrics?.deep_success_last_24h),
+      deepFailedLast24h: numberValue(scanMetrics?.deep_failed_last_24h),
       successLast24h,
       failedLast24h,
       successRateLast24h:
@@ -94,6 +118,10 @@ async function collectDatabaseHealth(
       status: "down",
       scansRunning: 0,
       scansStale: 0,
+      deepScansRunning: 0,
+      deepScansStale: 0,
+      deepSuccessLast24h: 0,
+      deepFailedLast24h: 0,
       successLast24h: 0,
       failedLast24h: 0,
       successRateLast24h: null,

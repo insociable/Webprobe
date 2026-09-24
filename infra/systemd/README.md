@@ -8,6 +8,7 @@ The unit:
 - reads runtime configuration from `/srv/agency-saas/.env`;
 - starts the already-built worker from `apps/worker/dist/index.js`;
 - restarts automatically after an unexpected exit;
+- allows up to 60 seconds for graceful shutdown, leaving margin beyond the 30-second Deep lease so abort/release can complete before SIGKILL;
 - enables basic systemd sandboxing.
 
 ## Install or refresh the unit

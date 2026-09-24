@@ -5,6 +5,7 @@ import { type ScanJob } from "@agency-saas/contracts";
 import { organizations, scanDispatches, scans, sites } from "@agency-saas/db";
 import { eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
+import { parseRedisConnectionUrl } from "../src/redis-connection.js";
 import { collectWorkerHealthSnapshot } from "../src/observability.js";
 
 const describeIntegration =
@@ -14,17 +15,8 @@ const describeIntegration =
     : describe.skip;
 
 function redisConnection() {
-  const rawUrl = process.env.REDIS_URL;
-  if (!rawUrl) {
-    throw new Error("REDIS_URL is required for Redis integration tests");
-  }
-  const url = new URL(rawUrl);
   return {
-    host: url.hostname,
-    port: Number(url.port || 6379),
-    username: url.username || undefined,
-    password: url.password || undefined,
-    tls: url.protocol === "rediss:" ? {} : undefined,
+    ...parseRedisConnectionUrl(process.env.REDIS_URL),
     connectTimeout: 5_000,
     maxRetriesPerRequest: 1,
   };
@@ -44,6 +36,7 @@ describeIntegration("worker observability", () => {
     const organizationId = randomUUID();
     const siteId = randomUUID();
     const queuedSiteId = randomUUID();
+    const deepSiteId = randomUUID();
     const browser = {
       status: "up" as const,
       checkedAt: now.toISOString(),
@@ -72,9 +65,25 @@ describeIntegration("worker observability", () => {
         status: "active",
         verifiedAt: now,
       },
+      {
+        id: deepSiteId,
+        organizationId,
+        name: "Deep metrics target",
+        canonicalUrl: "https://example.net/",
+        status: "active",
+        verifiedAt: now,
+      },
     ]);
 
-    const [running, completed, failed, queued] = await db
+    const [
+      running,
+      completed,
+      failed,
+      queued,
+      deepRunning,
+      deepCompleted,
+      deepFailed,
+    ] = await db
       .insert(scans)
       .values([
         {
@@ -106,10 +115,44 @@ describeIntegration("worker observability", () => {
           trigger: "manual",
           status: "queued",
         },
+        {
+          organizationId,
+          siteId: deepSiteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "running",
+          startedAt: new Date(now.getTime() - 60 * 60_000),
+        },
+        {
+          organizationId,
+          siteId: deepSiteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "completed",
+          startedAt: new Date(now.getTime() - 10_000),
+          completedAt: new Date(now.getTime() - 9_000),
+        },
+        {
+          organizationId,
+          siteId: deepSiteId,
+          trigger: "manual",
+          scanMode: "verified_deep_audit",
+          status: "failed",
+          startedAt: new Date(now.getTime() - 8_000),
+          completedAt: new Date(now.getTime() - 6_000),
+        },
       ])
       .returning({ id: scans.id });
 
-    if (!running || !completed || !failed || !queued) {
+    if (
+      !running ||
+      !completed ||
+      !failed ||
+      !queued ||
+      !deepRunning ||
+      !deepCompleted ||
+      !deepFailed
+    ) {
       throw new Error("observability fixture creation failed");
     }
 
@@ -144,16 +187,28 @@ describeIntegration("worker observability", () => {
 
       expect(snapshot.database.status).toBe("up");
       expect(snapshot.database.scansRunning).toBe(
-        baseline.database.scansRunning + 1,
+        baseline.database.scansRunning + 2,
       );
       expect(snapshot.database.scansStale).toBe(
-        baseline.database.scansStale + 1,
+        baseline.database.scansStale + 2,
+      );
+      expect(snapshot.database.deepScansRunning).toBe(
+        baseline.database.deepScansRunning + 1,
+      );
+      expect(snapshot.database.deepScansStale).toBe(
+        baseline.database.deepScansStale + 1,
+      );
+      expect(snapshot.database.deepSuccessLast24h).toBe(
+        baseline.database.deepSuccessLast24h + 1,
+      );
+      expect(snapshot.database.deepFailedLast24h).toBe(
+        baseline.database.deepFailedLast24h + 1,
       );
       expect(snapshot.database.successLast24h).toBe(
-        baseline.database.successLast24h + 1,
+        baseline.database.successLast24h + 2,
       );
       expect(snapshot.database.failedLast24h).toBe(
-        baseline.database.failedLast24h + 1,
+        baseline.database.failedLast24h + 2,
       );
       expect(snapshot.database.dispatchPending).toBe(
         baseline.database.dispatchPending + 1,

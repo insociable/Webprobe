@@ -41,7 +41,9 @@ describe("health readiness", () => {
     const now = new Date("2026-09-22T18:00:20.000Z");
     const raw = JSON.stringify(heartbeat("2026-09-22T18:00:00.000Z"));
 
-    expect(parseFreshWorkerHeartbeat(raw, now)?.queue.backlog).toBe(1);
+    const parsed = parseFreshWorkerHeartbeat(raw, now);
+    expect(parsed?.queue.backlog).toBe(1);
+    expect(parsed?.database.deepScansRunning).toBe(0);
   });
 
   it("rejects stale and malformed heartbeats", () => {

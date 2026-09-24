@@ -12,6 +12,7 @@ import {
 } from "@agency-saas/db";
 import { eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
+import { parseRedisConnectionUrl } from "../src/redis-connection.js";
 import {
   dispatchDueScanJobs,
   reconcileQueuedScanDispatches,
@@ -25,17 +26,8 @@ const describeIntegration =
     : describe.skip;
 
 function redisConnection() {
-  const rawUrl = process.env.REDIS_URL;
-  if (!rawUrl) {
-    throw new Error("REDIS_URL is required for Redis integration tests");
-  }
-  const url = new URL(rawUrl);
   return {
-    host: url.hostname,
-    port: Number(url.port || 6379),
-    username: url.username || undefined,
-    password: url.password || undefined,
-    tls: url.protocol === "rediss:" ? {} : undefined,
+    ...parseRedisConnectionUrl(process.env.REDIS_URL),
     connectTimeout: 5_000,
     maxRetriesPerRequest: 1,
   };

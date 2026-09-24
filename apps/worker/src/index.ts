@@ -76,16 +76,37 @@ const worker = new Worker<ScanJob>(
     const route = await scanModeForWorkerJob(job.data);
     if (route.mode === "verified_deep_audit") {
       const controller = new AbortController();
+      const configuredAttempts = job.opts.attempts ?? 1;
       activeDeepJobs.add(controller);
       try {
         const result = await runInternalDeepWorkerJob({
           payload: route.payload,
           attemptsMade: job.attemptsMade,
-          configuredAttempts: job.opts.attempts ?? 1,
+          configuredAttempts,
           signal: controller.signal,
         });
         logger.info({ jobId: job.id, ...result }, "internal Deep job finished");
         return result;
+      } catch (error) {
+        const errorCode =
+          error instanceof Error &&
+          "code" in error &&
+          typeof error.code === "string"
+            ? error.code
+            : undefined;
+        logger.warn(
+          {
+            jobId: job.id,
+            scanId: route.payload.scanId,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            errorCode,
+            attemptsMade: job.attemptsMade,
+            configuredAttempts,
+            aborted: controller.signal.aborted,
+          },
+          "internal Deep job failed",
+        );
+        throw error;
       } finally {
         activeDeepJobs.delete(controller);
       }

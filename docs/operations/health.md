@@ -20,6 +20,7 @@ The snapshot includes operational metrics only:
 
 - BullMQ waiting, active, delayed, failed, backlog and oldest pending age;
 - running and stale scans;
+- separate Deep running/stale and 24-hour completed/failed counters, so Deep incidents are distinguishable from V2;
 - completed and failed scans over the last 24 hours;
 - recent success rate and average terminal duration;
 - pending/error scan dispatches;
