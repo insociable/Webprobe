@@ -79,7 +79,13 @@ describe("candidate guarded browser transport", () => {
             enctype: "application/x-www-form-urlencoded",
           },
         ],
-        meta: [{ name: "referrer", content: "no-referrer" }],
+        meta: [
+          { name: "referrer", content: "no-referrer" },
+          {
+            name: "refresh",
+            content: "0; url=https://example.com/next?token=secret",
+          },
+        ],
         iframeSandboxes: [
           { url: "https://other.example.net/frame", sandbox: "allow-scripts" },
         ],
@@ -141,6 +147,11 @@ describe("candidate guarded browser transport", () => {
     expect(observation.deep?.cookies).toMatchObject([
       { name: "session", secure: true, httpOnly: true, sameSite: "Lax" },
     ]);
+    expect(observation.deep?.meta).toEqual(
+      expect.arrayContaining([
+        { name: "refresh", content: "0" },
+      ]),
+    );
     expect(JSON.stringify(observation)).not.toContain("secret");
     expect(ledger.snapshot().reasons).not.toContain("scope-denied");
   });

@@ -27,6 +27,20 @@ function safeObservedUrl(rawUrl: string): string | null {
   }
 }
 
+function safeMetaContent(name: string, rawContent: string): string {
+  if (/^refresh$/i.test(name)) {
+    return /^\s*(\d+(?:\.\d+)?)/.exec(rawContent)?.[1] ?? "present";
+  }
+  return rawContent.slice(0, 512);
+}
+
+function safeMetaContent(name: string, rawContent: string): string {
+  if (/^refresh$/i.test(name)) {
+    return /^\s*(\d+(?:\.\d+)?)/.exec(rawContent)?.[1] ?? "present";
+  }
+  return rawContent.slice(0, 512);
+}
+
 async function boundedDomObservation<T>(
   evaluation: Promise<T>,
   signal: AbortSignal | undefined,
@@ -464,7 +478,10 @@ export async function observeGuardedBrowserTarget(
         resources: [...resources.values()],
         endpoints: [...endpoints.values()],
         forms,
-        meta: dom?.meta ?? [],
+        meta: (dom?.meta ?? []).map((item) => ({
+          name: item.name,
+          content: safeMetaContent(item.name, item.content),
+        })),
         iframeSandboxes: (dom?.iframeSandboxes ?? []).flatMap((item) => {
           const url = safeObservedUrl(item.url);
           return url ? [{ url, sandbox: item.sandbox }] : [];
