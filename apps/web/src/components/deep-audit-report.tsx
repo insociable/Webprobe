@@ -278,12 +278,29 @@ export function DeepAuditReport({
                     const presentation = presentationFor(run.checkId);
                     const highlights = evidenceHighlights(run);
                     const skipCopy = run.skipReason ? reasonLabels[run.skipReason] : null;
+                    const firstEvidence = run.evidence[0];
+                    const evidenceData = firstEvidence ? asRecord(firstEvidence.data) : null;
+                    const userTitle =
+                      typeof evidenceData?.title === "string"
+                        ? evidenceData.title
+                        : presentation.title;
+                    const userSummary =
+                      typeof evidenceData?.summary === "string"
+                        ? evidenceData.summary
+                        : presentation.description;
+                    const findings = Array.isArray(evidenceData?.findings)
+                      ? evidenceData.findings
+                          .map(asRecord)
+                          .filter(
+                            (item): item is Record<string, unknown> => item !== null,
+                          )
+                      : [];
                     return (
                       <article key={run.id} className="rounded-lg border border-[#242d40] bg-[#0d111a] p-5">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <h4 className="font-semibold">{presentation.title}</h4>
-                            <p className="mt-2 text-sm leading-6 text-white/45">{presentation.description}</p>
+                            <h4 className="font-semibold">{userTitle}</h4>
+                            <p className="mt-2 text-sm leading-6 text-white/45">{userSummary}</p>
                           </div>
                           <span className="shrink-0 rounded-md border border-[#39445d] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-[#b6c0d1]">
                             {statusLabels[run.status] ?? humanizeIdentifier(run.status)}
@@ -302,6 +319,79 @@ export function DeepAuditReport({
 
                         {skipCopy ? (
                           <p className="mt-4 text-sm leading-6 text-amber-100/65">{skipCopy.detail}</p>
+                        ) : null}
+
+                        {findings.length > 0 ? (
+                          <div className="mt-4 space-y-2">
+                            {findings.map((finding, index) => {
+                              const level =
+                                finding.level === "risk" ||
+                                finding.level === "review" ||
+                                finding.level === "information"
+                                  ? finding.level
+                                  : "information";
+                              const summary =
+                                typeof finding.summary === "string"
+                                  ? finding.summary
+                                  : "Observation technique";
+                              const recommendation =
+                                typeof finding.recommendation === "string"
+                                  ? finding.recommendation
+                                  : null;
+                              const observed =
+                                typeof finding.observed === "string" ||
+                                typeof finding.observed === "number" ||
+                                typeof finding.observed === "boolean"
+                                  ? String(finding.observed)
+                                  : null;
+                              return (
+                                <div
+                                  key={
+                                    (typeof finding.code === "string"
+                                      ? finding.code
+                                      : "finding") +
+                                    "-" +
+                                    index
+                                  }
+                                  className={
+                                    "rounded-md border px-3 py-3 " +
+                                    (level === "risk"
+                                      ? "border-red-400/20 bg-red-400/[0.05]"
+                                      : level === "review"
+                                        ? "border-amber-300/20 bg-amber-200/[0.04]"
+                                        : "border-[#303a50] bg-black/10")
+                                  }
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <p className="text-sm font-medium text-white/80">
+                                      {summary}
+                                    </p>
+                                    <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-white/35">
+                                      {level === "risk"
+                                        ? "À corriger"
+                                        : level === "review"
+                                          ? "À vérifier"
+                                          : "Information"}
+                                    </span>
+                                  </div>
+                                  {observed ? (
+                                    <p className="mt-1 break-all text-xs text-white/45">
+                                      Observé : {observed}
+                                    </p>
+                                  ) : null}
+                                  {recommendation ? (
+                                    <p className="mt-2 text-xs leading-5 text-white/55">
+                                      {recommendation}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : run.status === "completed" ? (
+                          <p className="mt-4 text-sm text-emerald-100/65">
+                            Aucun point nécessitant une action n’a été relevé par ce contrôle.
+                          </p>
                         ) : null}
 
                         <details className="mt-5 border-t border-[#242d40] pt-4">
