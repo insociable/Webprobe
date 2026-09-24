@@ -6,6 +6,43 @@ import { resolveScanProfile } from "../src/scan-engine/profiles.js";
 import { ScopeGuard } from "../src/scan-engine/scope-guard.js";
 
 describe("deep check registry", () => {
+  it("keeps completed HTTP evidence when browser collection stops on bytes", async () => {
+    const profile = {
+      ...resolveScanProfile("verified_deep_audit"),
+      allowedChecks: ["deep-http-observation", "deep-browser-observation"],
+    };
+    const ledger = new BudgetLedger(profile.budget, Date.now());
+    ledger.markPartial("budget-bytes-transferred");
+    const runs = await runChecks({
+      profile,
+      registry: createDeepCheckRegistry(),
+      ledger,
+      scope: new ScopeGuard("https://example.com/"),
+      authorization: { allowed: true, level: "deep" },
+      targetUrl: "https://example.com/",
+      observations: {
+        http: {
+          ok: true,
+          finalUrl: "https://example.com/",
+          statusCode: 200,
+          durationMs: 1,
+          redirects: [],
+          headers: {},
+          securityHeaders: [],
+          tls: null,
+        },
+      },
+      observationFailures: { browser: "budget-bytes-transferred" },
+    });
+    expect(runs).toMatchObject([
+      { status: "completed", evidence: [{ classification: "observation" }] },
+      {
+        status: "skipped",
+        skipReason: "budget-bytes-transferred",
+        evidence: [],
+      },
+    ]);
+  });
   it("distinguishes non-applicable, out-of-scope and interrupted checks", async () => {
     const registry = createDeepCheckRegistry();
     const publicProfile = resolveScanProfile("public_audit");

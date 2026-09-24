@@ -46,6 +46,7 @@ export async function runChecks(input: {
   authorization: AuthorizationDecision;
   targetUrl: string;
   observations: Readonly<Record<string, unknown>>;
+  observationFailures?: Readonly<Record<string, string>>;
   now?: () => number;
   signal?: AbortSignal;
 }): Promise<readonly CheckRun[]> {
@@ -71,6 +72,15 @@ export async function runChecks(input: {
         : !authorizationAllowed
           ? "authorization-unavailable"
           : mayRun(check, input.profile);
+    if (!skipReason) {
+      const missing = check.requiredObservations?.find(
+        (key) => !(key in input.observations),
+      );
+      if (missing) {
+        skipReason =
+          input.observationFailures?.[missing] ?? "observation-unavailable";
+      }
+    }
     const before = input.ledger.snapshot().used;
     if (!skipReason) {
       const time = input.ledger.checkTime();

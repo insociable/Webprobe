@@ -40,4 +40,6 @@ export type CoverageReason =
   | "scope-denied"
   | "ssrf-denied"
   | "dns-failed"
+  | "transport-failed"
+  | "transport-timeout"
   | "check-timeout";

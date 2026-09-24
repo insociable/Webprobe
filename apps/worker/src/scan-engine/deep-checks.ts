@@ -9,10 +9,10 @@ import { createEvidence } from "./evidence.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { ScanProfile } from "./types.js";
 
-export type DeepObservations = Readonly<{
-  http: HttpProbeResult;
-  browser: BrowserRuntimeObservation;
-}>;
+export type DeepObservations = {
+  http?: HttpProbeResult;
+  browser?: BrowserRuntimeObservation;
+};
 
 /** Passive checks consume observations only; neither check can initiate network I/O. */
 export function createDeepCheckRegistry(): CheckRegistry {
@@ -25,6 +25,7 @@ export function createDeepCheckRegistry(): CheckRegistry {
     activity: "passive",
     modes: ["verified_deep_audit"],
     budget: {},
+    requiredObservations: ["http"],
     timeoutMs: 1_000,
     remediation: null,
     async analyze(input) {
@@ -52,6 +53,7 @@ export function createDeepCheckRegistry(): CheckRegistry {
     activity: "passive",
     modes: ["verified_deep_audit"],
     budget: {},
+    requiredObservations: ["browser"],
     timeoutMs: 1_000,
     remediation: null,
     async analyze(input) {
@@ -87,6 +89,7 @@ export async function analyzeAndPersistDeepObservations(input: {
   scope: ScopeGuard;
   ledger: BudgetLedger;
   observations: DeepObservations;
+  observationFailures?: Readonly<Record<string, string>>;
 }): Promise<readonly CheckRun[]> {
   if (input.profile.mode !== "verified_deep_audit") {
     throw new Error("Deep check profile required");
@@ -95,6 +98,9 @@ export async function analyzeAndPersistDeepObservations(input: {
     ...input,
     registry: createDeepCheckRegistry(),
     observations: input.observations,
+    ...(input.observationFailures
+      ? { observationFailures: input.observationFailures }
+      : {}),
   });
   await persistDeepCheckRuns({
     scanId: input.scanId,

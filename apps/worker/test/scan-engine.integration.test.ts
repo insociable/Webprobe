@@ -9,13 +9,11 @@ import {
   sites,
 } from "@agency-saas/db";
 import { eq } from "drizzle-orm";
+import type { Browser, BrowserContext, Page, Response } from "playwright";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import { validateScanContext } from "../src/scan-persistence.js";
-import { BudgetLedger } from "../src/scan-engine/budget-ledger.js";
-import { analyzeAndPersistDeepObservations } from "../src/scan-engine/deep-checks.js";
-import { revalidateDeepAuditAuthorization } from "../src/scan-engine/deep-proof.js";
+import { runDeepAuditCandidate } from "../src/scan-engine/deep-candidate.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
-import { ScopeGuard } from "../src/scan-engine/scope-guard.js";
 
 const describeDatabase =
   process.env.RUN_DB_INTEGRATION === "1" ? describe : describe.skip;
@@ -60,48 +58,59 @@ describeDatabase("V3 schema compatibility", () => {
         proofVerifiedAt: now,
         expiresAt: new Date(now.getTime() + 60_000),
       });
-      const authorization = await revalidateDeepAuditAuthorization({
-        siteId,
-        organizationId,
-        now,
-        resolveTxt: async () => [[token]],
-      });
-      expect(authorization).toEqual({ allowed: true, level: "deep" });
       const profile = {
         ...resolveScanProfile("verified_deep_audit"),
         allowedChecks: ["deep-http-observation", "deep-browser-observation"],
       };
-      const ledger = new BudgetLedger(profile.budget, now.getTime());
+      let requests = 0;
+      let onPage: ((page: Page) => void) | undefined;
+      const fakePage = {
+        on: () => fakePage,
+        goto: async () => ({ status: () => 200 }) as unknown as Response,
+        url: () => "https://deep.example.test/",
+        close: async () => undefined,
+      } as unknown as Page;
+      const fakeContext = {
+        setDefaultNavigationTimeout: () => undefined,
+        setDefaultTimeout: () => undefined,
+        on: (event: string, handler: (page: Page) => void) => {
+          if (event === "page") onPage = handler;
+          return fakeContext;
+        },
+        route: async () => undefined,
+        routeWebSocket: async () => undefined,
+        newPage: async () => {
+          onPage?.(fakePage);
+          return fakePage;
+        },
+        close: async () => undefined,
+      } as unknown as BrowserContext;
+      const fakeBrowser = {
+        newContext: async () => fakeContext,
+        close: async () => undefined,
+      } as unknown as Browser;
       const input = {
         scanId,
         organizationId,
         siteId,
         targetUrl: "https://deep.example.test/",
         profile,
-        authorization,
-        scope: new ScopeGuard("https://deep.example.test/"),
-        ledger,
-        observations: {
-          http: {
-            ok: true as const,
-            finalUrl: "https://deep.example.test/",
-            statusCode: 200,
-            durationMs: 1,
-            redirects: [],
-            headers: {},
-            securityHeaders: [],
-            tls: null,
-          },
-          browser: {
-            finalUrl: "https://deep.example.test/",
-            statusCode: 200,
-            pageCount: 1,
-            durationMs: 1,
-          },
+        resolveTxt: async () => [[token]],
+        resolver: async () => [
+          { address: "93.184.216.34", family: 4 as const },
+        ],
+        requester: async (
+          _target: unknown,
+          _timeout: number,
+          account?: (bytes: number) => void,
+        ) => {
+          requests += 1;
+          account?.(256);
+          return { statusCode: 200, durationMs: 1, tls: null, headers: {} };
         },
+        launchBrowser: async () => fakeBrowser,
       };
-      const runs = await analyzeAndPersistDeepObservations(input);
-      expect(runs).toHaveLength(2);
+      await runDeepAuditCandidate(input);
       const persisted = await db
         .select()
         .from(scanCheckRuns)
@@ -117,21 +126,83 @@ describeDatabase("V3 schema compatibility", () => {
         completedChecks: 2,
         partial: false,
       });
-      await expect(analyzeAndPersistDeepObservations(input)).rejects.toThrow(
+      await expect(runDeepAuditCandidate(input)).rejects.toThrow(
         "already persisted",
       );
-      const denied = await revalidateDeepAuditAuthorization({
-        siteId,
+      expect(requests).toBe(1);
+      await db
+        .update(scans)
+        .set({ status: "completed" })
+        .where(eq(scans.id, scanId));
+      const deniedScanId = randomUUID();
+      await db.insert(scans).values({
+        id: deniedScanId,
         organizationId,
-        now: new Date(now.getTime() + 1_000),
+        siteId,
+        trigger: "manual",
+        status: "running",
+        scanMode: "verified_deep_audit",
+      });
+      await runDeepAuditCandidate({
+        ...input,
+        scanId: deniedScanId,
         resolveTxt: async () => [["wrong"]],
       });
-      expect(denied).toMatchObject({ allowed: false });
+      const deniedRuns = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(eq(scanCheckRuns.scanId, deniedScanId));
+      expect(deniedRuns).toHaveLength(2);
+      expect(
+        deniedRuns.every(
+          (run) =>
+            run.status === "skipped" &&
+            run.skipReason === "authorization-unavailable",
+        ),
+      ).toBe(true);
+      expect(requests).toBe(1);
       const [grant] = await db
         .select({ revalidatedAt: deepAuditAuthorizations.revalidatedAt })
         .from(deepAuditAuthorizations)
         .where(eq(deepAuditAuthorizations.siteId, siteId));
       expect(grant?.revalidatedAt).toBeNull();
+      await db
+        .update(scans)
+        .set({ status: "completed" })
+        .where(eq(scans.id, deniedScanId));
+      const limitedScanId = randomUUID();
+      await db.insert(scans).values({
+        id: limitedScanId,
+        organizationId,
+        siteId,
+        trigger: "manual",
+        status: "running",
+        scanMode: "verified_deep_audit",
+      });
+      await runDeepAuditCandidate({
+        ...input,
+        scanId: limitedScanId,
+        profile: {
+          ...profile,
+          budget: { ...profile.budget, bytesTransferred: 128 },
+        },
+      });
+      const limitedRuns = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(eq(scanCheckRuns.scanId, limitedScanId));
+      expect(limitedRuns).toHaveLength(2);
+      expect(
+        limitedRuns.every(
+          (run) => run.skipReason === "budget-bytes-transferred",
+        ),
+      ).toBe(true);
+      const [limitedScan] = await db
+        .select({ summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, limitedScanId));
+      expect(limitedScan?.summary.v3Coverage).toMatchObject({ partial: true });
+      expect(requests).toBe(2);
     } finally {
       await db
         .delete(organizations)

@@ -9,6 +9,7 @@ export type CheckDefinition = Readonly<{
   activity: "passive" | "active_safe";
   modes: readonly ScanMode[];
   budget: Partial<Record<BudgetKind, number>>;
+  requiredObservations?: readonly string[];
   timeoutMs: number;
   analyze: (
     input: Readonly<Record<string, unknown>>,
@@ -35,6 +36,13 @@ export class CheckRegistry {
       check.timeoutMs > 60_000
     ) {
       throw new Error("Invalid check timeout");
+    }
+    if (
+      check.requiredObservations?.some(
+        (key) => !/^[a-z][a-z0-9-]{0,79}$/.test(key),
+      )
+    ) {
+      throw new Error("Invalid check observation key");
     }
     const validModes = new Set<ScanMode>([
       "public_audit",
