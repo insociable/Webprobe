@@ -3,7 +3,7 @@ import { UnsafeTargetError, type DnsResolver } from "@agency-saas/security";
 import { and, eq } from "drizzle-orm";
 import type { Browser, LaunchOptions } from "playwright";
 import { getDatabase } from "../database.js";
-import type { HttpRequester } from "../http-probe.js";
+import { networkFailure, type HttpRequester } from "../http-probe.js";
 import { BudgetLedger } from "./budget-ledger.js";
 import {
   analyzeAndPersistDeepObservations,
@@ -32,6 +32,14 @@ import type { CoverageReason, ScanProfile } from "./types.js";
 const candidateChecks = new Set([
   "deep-http-observation",
   "deep-browser-observation",
+  "deep-tls",
+  "deep-security-headers",
+  "deep-csp",
+  "deep-cookies",
+  "deep-resources",
+  "deep-endpoints",
+  "deep-forms",
+  "deep-browser-meta",
 ]);
 
 function checkedProfile(profile: ScanProfile): ScanProfile {
@@ -180,9 +188,23 @@ export async function runDeepAuditCandidate(input: {
     await monitor.assertCurrent();
     const observations: DeepObservations = {};
     const observationFailures: Record<string, string> = {};
-    const needsHttp = profile.allowedChecks.includes("deep-http-observation");
-    const needsBrowser = profile.allowedChecks.includes(
-      "deep-browser-observation",
+    const needsHttp = profile.allowedChecks.some((id) =>
+      [
+        "deep-http-observation",
+        "deep-tls",
+        "deep-security-headers",
+        "deep-csp",
+        "deep-cookies",
+      ].includes(id),
+    );
+    const needsBrowser = profile.allowedChecks.some((id) =>
+      [
+        "deep-browser-observation",
+        "deep-resources",
+        "deep-endpoints",
+        "deep-forms",
+        "deep-browser-meta",
+      ].includes(id),
     );
 
     if (authorization.allowed && (needsHttp || needsBrowser)) {
@@ -205,13 +227,15 @@ export async function runDeepAuditCandidate(input: {
           throwIfAborted(monitor.signal);
           const reason = failureReason(error, ledger);
           ledger.markPartial(reason);
-          observationFailures.http = reason;
+          const failure = networkFailure(site.canonicalUrl, [], error);
+          if (failure.error.kind === "tls") observations.http = failure;
+          else observationFailures.http = reason;
           if (needsBrowser) observationFailures.browser = reason;
         }
       }
       if (
         needsBrowser &&
-        (!needsHttp || observations.http) &&
+        (!needsHttp || observations.http?.ok) &&
         ledger.checkNetwork().allowed
       ) {
         try {

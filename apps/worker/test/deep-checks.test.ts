@@ -35,7 +35,7 @@ describe("deep check registry", () => {
       },
       observationFailures: { browser: "budget-bytes-transferred" },
     });
-    expect(runs).toMatchObject([
+    expect(runs.slice(0, 2)).toMatchObject([
       { status: "completed", evidence: [{ classification: "observation" }] },
       {
         status: "skipped",
@@ -96,7 +96,7 @@ describe("deep check registry", () => {
       targetUrl: "https://example.com/",
       observations: {},
     });
-    expect(runs).toHaveLength(2);
+    expect(runs).toHaveLength(10);
     expect(
       runs.every(
         (run) =>

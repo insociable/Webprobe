@@ -49,7 +49,11 @@ export async function persistDeepCheckRuns(input: {
   const coverage = input.ledger.snapshot();
   const reasons = new Set<string>(coverage.reasons);
   for (const run of input.runs) {
-    if (run.status !== "completed")
+    if (
+      run.status !== "completed" &&
+      run.skipReason !== "profile-denied" &&
+      run.skipReason !== "not-applicable"
+    )
       reasons.add(run.skipReason ?? "check-failed");
     if (
       !Number.isSafeInteger(run.durationMs) ||

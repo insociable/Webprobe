@@ -14,12 +14,52 @@ import {
   startSafeBrowserProxy,
   type SafeBrowserProxy,
 } from "./safe-browser-proxy.js";
+import type { ProbeCookie } from "./http-probe.js";
 
 export type BrowserRuntimeObservation = {
   finalUrl: string;
   statusCode: number | null;
   pageCount: number;
   durationMs: number;
+  deep?: {
+    resources: Array<{
+      url: string;
+      type: string;
+      inScope: boolean;
+      blocked: boolean;
+      statusCode: number | null;
+      method: string | null;
+      contentLength?: number | null;
+    }>;
+    endpoints: Array<{
+      url: string;
+      source: string;
+      method: string | null;
+      inScope: boolean;
+      statusCode: number | null;
+    }>;
+    forms: Array<{
+      action: string;
+      method: string;
+      inScope: boolean;
+      passwordFields: number;
+      sensitiveFields: number;
+      csrfHint: boolean;
+      autocomplete: string | null;
+      enctype: string | null;
+    }>;
+    meta: Array<{ name: string; content: string }>;
+    iframeSandboxes: Array<{ url: string; sandbox: string | null }>;
+    sri: Array<{
+      url: string;
+      integrityPresent: boolean;
+      crossorigin: string | null;
+    }>;
+    pageErrors: string[];
+    consoleWarnings: string[];
+    excludedThirdPartyRequests: number;
+    cookies?: ProbeCookie[];
+  };
 };
 
 export type BrowserRequestPolicyInput = {

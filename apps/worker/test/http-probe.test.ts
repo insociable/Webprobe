@@ -75,6 +75,44 @@ describe("probeHttpTarget", () => {
     ).toMatchObject({ expected: true, present: true });
   });
 
+  it("collects cookie attributes in Deep without persisting cookie values", async () => {
+    const result = await probeHttpTarget("https://example.com", {
+      resolver: publicResolver,
+      collectDeepMetadata: true,
+      requester: async () => ({
+        statusCode: 200,
+        durationMs: 1,
+        tls: null,
+        headers: {
+          "set-cookie": [
+            "__Host-session=secret=value; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=3600",
+            "prefs=private; Domain=example.com; Expires=Wed, 21 Oct 2030 07:28:00 GMT",
+          ],
+        },
+      }),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      cookies: [
+        {
+          name: "__Host-session",
+          secure: true,
+          httpOnly: true,
+          sameSite: "Lax",
+          path: "/",
+          maxAge: "3600",
+        },
+        {
+          name: "prefs",
+          domain: "example.com",
+          expires: "Wed, 21 Oct 2030 07:28:00 GMT",
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain("secret=value");
+    expect(JSON.stringify(result)).not.toContain("private");
+  });
+
   it("revalidates redirects while redacting query strings from results", async () => {
     const requestedHosts: string[] = [];
     const requestedUrls: string[] = [];

@@ -250,7 +250,7 @@ describeDatabase("internal Deep worker lifecycle", () => {
           .select()
           .from(scanCheckRuns)
           .where(eq(scanCheckRuns.scanId, f.scanId)),
-      ).toHaveLength(2);
+      ).toHaveLength(10);
       const attempts = await db
         .select()
         .from(scanAttempts)

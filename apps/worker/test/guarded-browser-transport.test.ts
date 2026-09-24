@@ -1,9 +1,12 @@
 import net from "node:net";
 import { describe, expect, it, vi } from "vitest";
 import type { DnsResolver } from "@agency-saas/security";
-import type { Browser, BrowserContext } from "playwright";
+import type { Browser, BrowserContext, Page, Response } from "playwright";
 import { BudgetLedger } from "../src/scan-engine/budget-ledger.js";
-import { createGuardedBrowserSession } from "../src/scan-engine/guarded-browser-transport.js";
+import {
+  createGuardedBrowserSession,
+  observeGuardedBrowserTarget,
+} from "../src/scan-engine/guarded-browser-transport.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
 import { ScopeGuard } from "../src/scan-engine/scope-guard.js";
 
@@ -34,6 +37,113 @@ function rawConnect(port: number, authority: string): Promise<string> {
 }
 
 describe("candidate guarded browser transport", () => {
+  it("collects bounded DOM metadata without treating excluded third parties as global partial coverage", async () => {
+    let onResponse: ((response: Response) => void) | undefined;
+    const fakeResponse = {
+      url: () => "https://example.com/",
+      status: () => 200,
+      headers: () => ({}),
+      headersArray: async () => [
+        {
+          name: "Set-Cookie",
+          value: "session=private; Secure; HttpOnly; SameSite=Lax",
+        },
+      ],
+    } as unknown as Response;
+    const fakePage = {
+      on: (event: string, callback: (response: Response) => void) => {
+        if (event === "response") onResponse = callback;
+        return fakePage;
+      },
+      goto: async () => {
+        onResponse?.(fakeResponse);
+        return fakeResponse;
+      },
+      url: () => "https://example.com/?private=secret",
+      evaluate: async () => ({
+        resources: [
+          {
+            url: "https://cdn.example.net/app.js?token=secret",
+            type: "script",
+          },
+        ],
+        links: ["https://example.com/api?token=secret"],
+        forms: [
+          {
+            action: "https://example.com/login?token=secret",
+            method: "POST",
+            passwordFields: 1,
+            sensitiveFields: 1,
+            csrfHint: true,
+            autocomplete: "off",
+            enctype: "application/x-www-form-urlencoded",
+          },
+        ],
+        meta: [{ name: "referrer", content: "no-referrer" }],
+        iframeSandboxes: [
+          { url: "https://other.example.net/frame", sandbox: "allow-scripts" },
+        ],
+        sri: [
+          {
+            url: "https://cdn.example.net/app.js?token=secret",
+            integrityPresent: false,
+            crossorigin: null,
+          },
+        ],
+      }),
+    } as unknown as Page;
+    const fakeContext = {
+      setDefaultNavigationTimeout: () => undefined,
+      setDefaultTimeout: () => undefined,
+      on: () => fakeContext,
+      route: async () => undefined,
+      routeWebSocket: async () => undefined,
+      newPage: async () => fakePage,
+      close: async () => undefined,
+    } as unknown as BrowserContext;
+    const fakeBrowser = {
+      newContext: async () => fakeContext,
+      close: async () => undefined,
+    } as unknown as Browser;
+    const profile = resolveScanProfile("verified_deep_audit");
+    const ledger = new BudgetLedger(profile.budget, Date.now());
+    const observation = await observeGuardedBrowserTarget({
+      targetUrl: "https://example.com/",
+      profile,
+      authorization: { allowed: true, level: "deep" },
+      scope: new ScopeGuard("https://example.com/"),
+      ledger,
+      launchBrowser: async () => fakeBrowser,
+      signal: new AbortController().signal,
+      beforeNetwork: async () => undefined,
+    });
+    expect(observation.finalUrl).toBe("https://example.com/");
+    expect(observation.deep?.resources).toMatchObject([
+      { url: "https://cdn.example.net/app.js", inScope: false, blocked: true },
+    ]);
+    expect(observation.deep?.endpoints).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: "https://example.com/api",
+          source: "html-link",
+          inScope: true,
+        }),
+        expect.objectContaining({
+          url: "https://example.com/login",
+          source: "form",
+          method: "POST",
+        }),
+      ]),
+    );
+    expect(observation.deep?.forms).toMatchObject([
+      { csrfHint: true, passwordFields: 1 },
+    ]);
+    expect(observation.deep?.cookies).toMatchObject([
+      { name: "session", secure: true, httpOnly: true, sameSite: "Lax" },
+    ]);
+    expect(JSON.stringify(observation)).not.toContain("secret");
+    expect(ledger.snapshot().reasons).not.toContain("scope-denied");
+  });
   it("rejects navigation, redirect and subresource scope escapes before proxy DNS", async () => {
     let routeHandler: ((route: any) => Promise<void>) | undefined;
     const resolver = vi.fn<DnsResolver>(async () => [

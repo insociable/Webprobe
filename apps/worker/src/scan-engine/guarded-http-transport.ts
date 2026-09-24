@@ -54,6 +54,7 @@ export async function probeGuardedHttpTarget(input: {
     return await abortable(
       probeHttpTarget(input.targetUrl, {
         ...input.transport,
+        collectDeepMetadata: profile.mode === "verified_deep_audit",
         ...(input.signal ? { signal: input.signal } : {}),
         resolver: async (hostname) => {
           throwIfAborted(input.signal);

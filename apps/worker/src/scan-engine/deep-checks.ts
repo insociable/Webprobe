@@ -9,6 +9,10 @@ import { createEvidence } from "./evidence.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { DeepLease } from "./deep-lease.js";
 import type { ScanProfile } from "./types.js";
+import {
+  createBrowserCatalogChecks,
+  createHttpCatalogChecks,
+} from "./deep-catalog.js";
 
 export type DeepObservations = {
   http?: HttpProbeResult;
@@ -76,6 +80,11 @@ export function createDeepCheckRegistry(): CheckRegistry {
       ];
     },
   });
+  for (const check of [
+    ...createHttpCatalogChecks(),
+    ...createBrowserCatalogChecks(),
+  ])
+    registry.register(check);
   return registry;
 }
 

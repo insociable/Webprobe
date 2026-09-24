@@ -116,14 +116,21 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, scanId));
-      expect(persisted).toHaveLength(2);
-      expect(persisted.every((run) => run.evidence.length === 1)).toBe(true);
+      expect(persisted).toHaveLength(10);
+      expect(
+        persisted.filter((run) => run.status === "completed"),
+      ).toHaveLength(2);
+      expect(
+        persisted
+          .filter((run) => run.status === "completed")
+          .every((run) => run.evidence.length === 1),
+      ).toBe(true);
       const [scan] = await db
         .select({ summary: scans.summary })
         .from(scans)
         .where(eq(scans.id, scanId));
       expect(scan?.summary.v3Coverage).toMatchObject({
-        totalChecks: 2,
+        totalChecks: 10,
         completedChecks: 2,
         partial: false,
       });
@@ -153,7 +160,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, deniedScanId));
-      expect(deniedRuns).toHaveLength(2);
+      expect(deniedRuns).toHaveLength(10);
       expect(
         deniedRuns.every(
           (run) =>
@@ -199,11 +206,11 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, limitedScanId));
-      expect(limitedRuns).toHaveLength(2);
+      expect(limitedRuns).toHaveLength(10);
       expect(
-        limitedRuns.every(
-          (run) => run.skipReason === "budget-bytes-transferred",
-        ),
+        limitedRuns
+          .filter((run) => profile.allowedChecks.includes(run.checkId))
+          .every((run) => run.skipReason === "budget-bytes-transferred"),
       ).toBe(true);
       const [limitedScan] = await db
         .select({ summary: scans.summary })
@@ -275,7 +282,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, scanId));
-      expect(runs).toHaveLength(2);
+      expect(runs).toHaveLength(10);
       expect(runs).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -301,9 +308,9 @@ describeDatabase("V3 schema compatibility", () => {
         .where(eq(scans.id, scanId));
       expect(persisted?.status).toBe("completed");
       expect(persisted?.summary.v3Coverage).toMatchObject({
-        totalChecks: 2,
+        totalChecks: 10,
         completedChecks: 1,
-        skippedChecks: 1,
+        skippedChecks: 9,
       });
     } finally {
       await db

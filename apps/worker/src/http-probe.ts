@@ -1,8 +1,9 @@
 import http, { type IncomingHttpHeaders } from "node:http";
 import https from "node:https";
+import { X509Certificate } from "node:crypto";
 import type { LookupFunction } from "node:net";
 import { performance } from "node:perf_hooks";
-import type { TLSSocket } from "node:tls";
+import { checkServerIdentity, type TLSSocket } from "node:tls";
 import {
   assertPublicHttpUrl,
   defaultDnsResolver,
@@ -18,6 +19,37 @@ export type ProbeTlsInfo = {
   cipher: string | null;
   validFrom: string | null;
   validTo: string | null;
+  certificate?: {
+    subjectCn: string | null;
+    subjectAltNames: string[];
+    issuerCn: string | null;
+    fingerprint256: string | null;
+    signatureAlgorithm: string | null;
+    keyType: string | null;
+    keyBits: number | null;
+    hostnameMatch: boolean | null;
+    authorized: boolean;
+    authorizationError: string | null;
+    chain: Array<{
+      subjectCn: string | null;
+      issuerCn: string | null;
+      fingerprint256: string | null;
+      validFrom: string | null;
+      validTo: string | null;
+    }>;
+  };
+};
+
+/** Cookie values are deliberately never copied into a scan observation. */
+export type ProbeCookie = {
+  name: string;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: string | null;
+  domain: string | null;
+  path: string | null;
+  maxAge: string | null;
+  expires: string | null;
 };
 
 export type ProbeRedirect = {
@@ -41,6 +73,7 @@ export type HttpProbeSuccess = {
   headers: Record<string, string>;
   securityHeaders: SecurityHeaderObservation[];
   tls: ProbeTlsInfo | null;
+  cookies?: ProbeCookie[];
 };
 
 export type HttpProbeFailure = {
@@ -71,7 +104,11 @@ export type HttpRequester = (
 const reportHeaderNames = [
   "cache-control",
   "content-security-policy",
+  "content-security-policy-report-only",
   "content-type",
+  "cross-origin-embedder-policy",
+  "cross-origin-opener-policy",
+  "cross-origin-resource-policy",
   "permissions-policy",
   "referrer-policy",
   "server",
@@ -105,9 +142,39 @@ function reportHeaders(headers: IncomingHttpHeaders): Record<string, string> {
   return Object.fromEntries(
     reportHeaderNames.flatMap((name) => {
       const value = firstHeaderValue(headers, name);
-      return value === null ? [] : [[name, value]];
+      return value === null ? [] : [[name, value.slice(0, 8192)]];
     }),
   );
+}
+
+export function observeCookies(headers: IncomingHttpHeaders): ProbeCookie[] {
+  const source = headers["set-cookie"];
+  const values = Array.isArray(source) ? source : source ? [source] : [];
+  return values.slice(0, 40).flatMap((value) => {
+    const [pair, ...attributes] = value.split(";");
+    const separator = pair?.indexOf("=") ?? -1;
+    if (separator < 1) return [];
+    const name = pair!.slice(0, separator).trim().slice(0, 128);
+    if (!name) return [];
+    const fields = new Map<string, string>();
+    for (const attribute of attributes) {
+      const [key, ...rest] = attribute.trim().split("=");
+      if (key)
+        fields.set(key.toLowerCase(), rest.join("=").trim().slice(0, 256));
+    }
+    return [
+      {
+        name,
+        secure: fields.has("secure"),
+        httpOnly: fields.has("httponly"),
+        sameSite: fields.get("samesite") ?? null,
+        domain: fields.get("domain") ?? null,
+        path: fields.get("path") ?? null,
+        maxAge: fields.get("max-age") ?? null,
+        expires: fields.get("expires") ?? null,
+      },
+    ];
+  });
 }
 export function inspectSecurityHeaders(
   headers: IncomingHttpHeaders,
@@ -133,13 +200,64 @@ export function inspectSecurityHeaders(
   });
 }
 
-function tlsInfoFromSocket(socket: TLSSocket): ProbeTlsInfo {
-  const certificate = socket.getPeerCertificate();
+function tlsInfoFromSocket(socket: TLSSocket, hostname: string): ProbeTlsInfo {
+  const certificate = socket.getPeerCertificate(true);
+  const chain: NonNullable<ProbeTlsInfo["certificate"]>["chain"] = [];
+  const seen = new Set<string>();
+  let current = certificate;
+  for (let index = 0; index < 5 && current?.raw; index += 1) {
+    const fingerprint = current.fingerprint256 ?? "";
+    if (seen.has(fingerprint)) break;
+    seen.add(fingerprint);
+    chain.push({
+      subjectCn: current.subject?.CN?.slice(0, 256) ?? null,
+      issuerCn: current.issuer?.CN?.slice(0, 256) ?? null,
+      fingerprint256: fingerprint || null,
+      validFrom: current.valid_from ?? null,
+      validTo: current.valid_to ?? null,
+    });
+    current = current.issuerCertificate;
+  }
+  let keyType: string | null = null;
+  let keyBits: number | null = null;
+  try {
+    const key = certificate.raw
+      ? new X509Certificate(certificate.raw).publicKey
+      : null;
+    keyType = key?.asymmetricKeyType ?? null;
+    keyBits =
+      key?.asymmetricKeyDetails?.modulusLength ?? certificate.bits ?? null;
+  } catch {
+    // Metadata is optional; a parsing failure must not weaken TLS validation.
+  }
   return {
     protocol: socket.getProtocol(),
     cipher: socket.getCipher()?.name ?? null,
     validFrom: certificate.valid_from || null,
     validTo: certificate.valid_to || null,
+    certificate: {
+      subjectCn: certificate.subject?.CN?.slice(0, 256) ?? null,
+      subjectAltNames: (certificate.subjectaltname ?? "")
+        .split(/,\s*/)
+        .filter(Boolean)
+        .slice(0, 32)
+        .map((item) => item.slice(0, 256)),
+      issuerCn: certificate.issuer?.CN?.slice(0, 256) ?? null,
+      fingerprint256: certificate.fingerprint256 ?? null,
+      signatureAlgorithm:
+        (certificate as typeof certificate & { signatureAlgorithm?: string })
+          .signatureAlgorithm ?? null,
+      keyType,
+      keyBits,
+      hostnameMatch: certificate.raw
+        ? checkServerIdentity(hostname, certificate) === undefined
+        : null,
+      authorized: socket.authorized,
+      authorizationError: socket.authorizationError
+        ? String(socket.authorizationError).slice(0, 256)
+        : null,
+      chain,
+    },
   };
 }
 function pinnedLookup(target: ValidatedHttpTarget): LookupFunction {
@@ -204,7 +322,10 @@ export const requestPinnedTarget: HttpRequester = async (
       (response) => {
         const tls =
           target.url.protocol === "https:"
-            ? tlsInfoFromSocket(response.socket as TLSSocket)
+            ? tlsInfoFromSocket(
+                response.socket as TLSSocket,
+                target.url.hostname,
+              )
             : null;
 
         const result: RawProbeResponse = {
@@ -447,7 +568,7 @@ const tlsErrorCodes = new Set([
   "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
 ]);
 
-function networkFailure(
+export function networkFailure(
   targetUrl: string,
   redirects: ProbeRedirect[],
   error: unknown,
@@ -488,6 +609,7 @@ export type HttpProbeOptions = {
   allowRedirect?: (from: URL, to: URL) => boolean;
   accountTransferredBytes?: (bytes: number) => void;
   requireTransferAccounting?: boolean;
+  collectDeepMetadata?: boolean;
 };
 
 export async function probeHttpTarget(
@@ -501,6 +623,7 @@ export async function probeHttpTarget(
   const redirects: ProbeRedirect[] = [];
   let currentUrl = rawUrl;
   let totalDurationMs = 0;
+  const observedCookies: ProbeCookie[] = [];
 
   while (true) {
     if (options.signal?.aborted) throw new Error("HTTP probe aborted");
@@ -540,6 +663,14 @@ export async function probeHttpTarget(
     }
 
     totalDurationMs += response.durationMs;
+    if (options.collectDeepMetadata && observedCookies.length < 120) {
+      observedCookies.push(
+        ...observeCookies(response.headers).slice(
+          0,
+          120 - observedCookies.length,
+        ),
+      );
+    }
     const location = firstHeaderValue(response.headers, "location");
     if (redirectStatuses.has(response.statusCode) && location) {
       if (redirects.length >= maxRedirects) {
@@ -594,6 +725,7 @@ export async function probeHttpTarget(
       headers: reportHeaders(response.headers),
       securityHeaders: inspectSecurityHeaders(response.headers, protocol),
       tls: response.tls,
+      ...(options.collectDeepMetadata ? { cookies: observedCookies } : {}),
     };
   }
 }
