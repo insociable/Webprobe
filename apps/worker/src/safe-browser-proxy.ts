@@ -34,6 +34,12 @@ export type SafeProxyTarget = {
 
 export type SafeBrowserProxyOptions = {
   resolver?: DnsResolver;
+  /** V3 defense at the proxy boundary, before DNS resolution or a TCP connect. */
+  allowTarget?: (url: URL) => boolean;
+  stillAllowed?: (url: URL) => boolean;
+  /** V3 shared byte ledger. Returning false closes the connection before forwarding. */
+  accountBytes?: (bytes: number) => boolean;
+  maxLifetimeMs?: number;
   connectTimeoutMs?: number;
   maxConnections?: number;
   maxHttpResponseBytes?: number;
@@ -73,6 +79,16 @@ function filteredHeaders(
       return !dropHost || normalized !== "host";
     }),
   );
+}
+
+function headerBytes(rawHeaders: readonly string[]): number {
+  let bytes = 2;
+  for (let index = 0; index < rawHeaders.length; index += 2) {
+    bytes += Buffer.byteLength(
+      `${rawHeaders[index]}: ${rawHeaders[index + 1]}\r\n`,
+    );
+  }
+  return bytes;
 }
 
 export async function resolveSafeProxyTarget(
@@ -150,7 +166,11 @@ function endConnectError(
 async function handleHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  options: Required<
+  options: {
+    allowTarget: SafeBrowserProxyOptions["allowTarget"];
+    stillAllowed: SafeBrowserProxyOptions["stillAllowed"];
+    accountBytes: SafeBrowserProxyOptions["accountBytes"];
+  } & Required<
     Pick<
       SafeBrowserProxyOptions,
       | "resolver"
@@ -180,6 +200,17 @@ async function handleHttpRequest(
     return;
   }
 
+  if (options.allowTarget) {
+    try {
+      if (!options.allowTarget(new URL(rawUrl)))
+        throw new Error("Out of scope");
+    } catch {
+      request.resume();
+      endHttpError(response, 403, "Proxy target outside scope");
+      return;
+    }
+  }
+
   let target: SafeProxyTarget;
   try {
     target = await resolveSafeProxyTarget(rawUrl, options.resolver);
@@ -194,6 +225,11 @@ async function handleHttpRequest(
     endHttpError(response, 400, "HTTPS must use CONNECT");
     return;
   }
+  if (options.stillAllowed && !options.stillAllowed(target.url)) {
+    request.resume();
+    endHttpError(response, 403, "Proxy target no longer allowed");
+    return;
+  }
   if (!consumeRequest(target.url.hostname)) {
     request.resume();
     endHttpError(response, 429, "Request budget exceeded");
@@ -203,6 +239,15 @@ async function handleHttpRequest(
   const headers = filteredHeaders(request.headers, true);
   headers.host = target.url.host;
   headers.connection = "close";
+  const requestHeaderBytes =
+    Buffer.byteLength(
+      `${method} ${target.url.pathname}${target.url.search} HTTP/1.1\r\n`,
+    ) + headerBytes(request.rawHeaders);
+  if (options.accountBytes && !consumeBytes(requestHeaderBytes)) {
+    request.resume();
+    endHttpError(response, 429, "Byte budget exceeded");
+    return;
+  }
 
   await new Promise<void>((resolve) => {
     let finished = false;
@@ -226,7 +271,19 @@ async function handleHttpRequest(
         setHost: false,
       },
       (upstreamResponse) => {
+        upstreamResponse.once("end", finish);
+        upstreamResponse.once("error", finish);
         const responseHeaders = filteredHeaders(upstreamResponse.headers);
+        const responseHeaderBytes =
+          Buffer.byteLength(
+            `HTTP/1.1 ${upstreamResponse.statusCode ?? 502}\r\n`,
+          ) + headerBytes(upstreamResponse.rawHeaders);
+        if (options.accountBytes && !consumeBytes(responseHeaderBytes)) {
+          upstreamResponse.destroy();
+          response.destroy();
+          finish();
+          return;
+        }
         response.writeHead(upstreamResponse.statusCode ?? 502, responseHeaders);
         let bytes = 0;
         upstreamResponse.on("data", (chunk: Buffer) => {
@@ -237,11 +294,23 @@ async function handleHttpRequest(
           ) {
             upstreamResponse.destroy();
             response.destroy();
+            return;
+          }
+          if (options.accountBytes) {
+            if (response.destroyed) {
+              upstreamResponse.destroy();
+              return;
+            }
+            if (!response.write(chunk)) upstreamResponse.pause();
           }
         });
-        upstreamResponse.once("end", finish);
-        upstreamResponse.once("error", finish);
-        upstreamResponse.pipe(response);
+        if (options.accountBytes)
+          response.on("drain", () => upstreamResponse.resume());
+        if (options.accountBytes) {
+          upstreamResponse.once("end", () => response.end());
+        } else {
+          upstreamResponse.pipe(response);
+        }
       },
     );
 
@@ -286,7 +355,11 @@ async function handleConnect(
   request: IncomingMessage,
   clientSocket: Duplex,
   head: Buffer,
-  options: Required<
+  options: {
+    allowTarget: SafeBrowserProxyOptions["allowTarget"];
+    stillAllowed: SafeBrowserProxyOptions["stillAllowed"];
+    accountBytes: SafeBrowserProxyOptions["accountBytes"];
+  } & Required<
     Pick<
       SafeBrowserProxyOptions,
       "resolver" | "connectTimeoutMs" | "maxTunnelDurationMs" | "maxTunnelBytes"
@@ -297,6 +370,16 @@ async function handleConnect(
   consumeRequest: (hostname: string) => boolean,
 ): Promise<void> {
   const authority = request.url ?? "";
+  if (options.allowTarget) {
+    try {
+      if (!options.allowTarget(new URL(`https://${authority}/`))) {
+        throw new Error("Out of scope");
+      }
+    } catch {
+      endConnectError(clientSocket, 403, "Forbidden");
+      return;
+    }
+  }
   let target: SafeProxyTarget;
   try {
     target = await resolveSafeConnectTarget(authority, options.resolver);
@@ -306,6 +389,10 @@ async function handleConnect(
   }
 
   if (target.port !== 443) {
+    endConnectError(clientSocket, 403, "Forbidden");
+    return;
+  }
+  if (options.stillAllowed && !options.stillAllowed(target.url)) {
     endConnectError(clientSocket, 403, "Forbidden");
     return;
   }
@@ -332,11 +419,13 @@ async function handleConnect(
     upstream.destroy();
     clientSocket.destroy();
   };
-  const accountTunnelBytes = (chunk: Buffer) => {
+  const accountTunnelBytes = (chunk: Buffer): boolean => {
     tunneledBytes += chunk.length;
     if (tunneledBytes > options.maxTunnelBytes || !consumeBytes(chunk.length)) {
       closeTunnel();
+      return false;
     }
+    return true;
   };
 
   upstream.once("connect", () => {
@@ -354,13 +443,30 @@ async function handleConnect(
       return;
     }
     tunnelTimer = setTimeout(closeTunnel, options.maxTunnelDurationMs);
-    clientSocket.on("data", accountTunnelBytes);
-    upstream.on("data", accountTunnelBytes);
+    if (options.accountBytes) {
+      clientSocket.on("data", (chunk: Buffer) => {
+        if (accountTunnelBytes(chunk) && !upstream.write(chunk))
+          clientSocket.pause();
+      });
+      upstream.on("data", (chunk: Buffer) => {
+        if (accountTunnelBytes(chunk) && !clientSocket.write(chunk))
+          upstream.pause();
+      });
+      upstream.on("drain", () => clientSocket.resume());
+      clientSocket.on("drain", () => upstream.resume());
+      clientSocket.on("end", () => upstream.end());
+      upstream.on("end", () => clientSocket.end());
+    } else {
+      clientSocket.on("data", accountTunnelBytes);
+      upstream.on("data", accountTunnelBytes);
+    }
     if (head.length > 0) {
       upstream.write(head);
     }
-    clientSocket.pipe(upstream);
-    upstream.pipe(clientSocket);
+    if (!options.accountBytes) {
+      clientSocket.pipe(upstream);
+      upstream.pipe(clientSocket);
+    }
   });
 
   const clearTunnelTimer = () => {
@@ -387,6 +493,10 @@ export async function startSafeBrowserProxy(
 ): Promise<SafeBrowserProxy> {
   const resolvedOptions = {
     resolver: options.resolver ?? defaultDnsResolver,
+    allowTarget: options.allowTarget,
+    stillAllowed: options.stillAllowed,
+    accountBytes: options.accountBytes,
+    maxLifetimeMs: options.maxLifetimeMs,
     connectTimeoutMs: options.connectTimeoutMs ?? 10_000,
     maxConnections: options.maxConnections ?? 64,
     maxHttpResponseBytes: options.maxHttpResponseBytes ?? 10 * 1024 * 1024,
@@ -402,8 +512,13 @@ export async function startSafeBrowserProxy(
   };
   let transferredBytes = 0;
   const consumeBytes = (bytes: number) => {
+    if (bytes === 0) return true;
+    if (transferredBytes + bytes > resolvedOptions.maxTotalTransferredBytes)
+      return false;
+    if (resolvedOptions.accountBytes && !resolvedOptions.accountBytes(bytes))
+      return false;
     transferredBytes += bytes;
-    return transferredBytes <= resolvedOptions.maxTotalTransferredBytes;
+    return true;
   };
   let requestCount = 0;
   const requestCountByHostname = new Map<string, number>();
@@ -424,6 +539,7 @@ export async function startSafeBrowserProxy(
   };
   const clientSockets = new Set<Socket>();
   const upstreamSockets = new Set<Socket>();
+  let lifetimeTimer: NodeJS.Timeout | undefined;
 
   const server = http.createServer((request, response) => {
     void handleHttpRequest(
@@ -477,10 +593,27 @@ export async function startSafeBrowserProxy(
     throw new Error("Safe browser proxy did not bind to TCP");
   }
 
+  if (resolvedOptions.maxLifetimeMs !== undefined) {
+    if (
+      !Number.isSafeInteger(resolvedOptions.maxLifetimeMs) ||
+      resolvedOptions.maxLifetimeMs <= 0
+    ) {
+      server.close();
+      throw new Error("Invalid proxy lifetime");
+    }
+    lifetimeTimer = setTimeout(() => {
+      for (const socket of upstreamSockets) socket.destroy();
+      for (const socket of clientSockets) socket.destroy();
+      server.close();
+    }, resolvedOptions.maxLifetimeMs);
+    lifetimeTimer.unref();
+  }
+
   return {
     url: `http://127.0.0.1:${address.port}`,
     port: address.port,
     async close(): Promise<void> {
+      if (lifetimeTimer) clearTimeout(lifetimeTimer);
       for (const socket of upstreamSockets) {
         socket.destroy();
       }

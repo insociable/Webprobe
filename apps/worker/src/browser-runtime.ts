@@ -49,6 +49,16 @@ export type BrowserRuntimeOptions = {
   maxRequests?: number;
   maxRequestsPerHostname?: number;
   requestPolicy?: BrowserRequestPolicy;
+  /** Internal V3 guard. Applied at both the browser route and proxy boundary. */
+  networkGuard?: {
+    allowPage: () => boolean;
+    allowRequest: (request: BrowserRequestPolicyInput) => boolean;
+    allowProxyTarget: (url: URL) => boolean;
+    allowProxyConnection: (url: URL) => boolean;
+    accountProxyBytes: (bytes: number) => boolean;
+    maxTransferredBytes: number;
+    maxLifetimeMs: number;
+  };
   launchBrowser?: (options: LaunchOptions) => Promise<Browser>;
 };
 
@@ -158,7 +168,9 @@ export async function createIsolatedBrowserSession(
   const navigationTimeoutMs = boundedNavigationTimeout(
     options.navigationTimeoutMs,
   );
-  const maxPages = boundedMaxPages(options.maxPages);
+  const maxPages = options.networkGuard
+    ? Math.max(1, Math.min(options.maxPages ?? 1, 40))
+    : boundedMaxPages(options.maxPages);
   const maxRequests = boundedRequestLimit(
     options.maxRequests,
     defaultPublicAuditMaxRequests,
@@ -178,6 +190,15 @@ export async function createIsolatedBrowserSession(
   try {
     proxy = await startSafeBrowserProxy({
       resolver,
+      ...(options.networkGuard
+        ? {
+            allowTarget: options.networkGuard.allowProxyTarget,
+            stillAllowed: options.networkGuard.allowProxyConnection,
+            accountBytes: options.networkGuard.accountProxyBytes,
+            maxTotalTransferredBytes: options.networkGuard.maxTransferredBytes,
+            maxLifetimeMs: options.networkGuard.maxLifetimeMs,
+          }
+        : {}),
       connectTimeoutMs: Math.min(navigationTimeoutMs, 10_000),
       maxTunnelDurationMs: Math.min(
         Math.max(navigationTimeoutMs * 2, 15_000),
@@ -216,7 +237,7 @@ export async function createIsolatedBrowserSession(
     const requestCountByHostname = new Map<string, number>();
 
     const consumeBrowserRequest = (rawUrl: string): boolean => {
-      if (scanMode !== "public_audit") {
+      if (scanMode !== "public_audit" || options.networkGuard) {
         return true;
       }
       let url: URL;
@@ -243,10 +264,11 @@ export async function createIsolatedBrowserSession(
 
     context.on("page", (openedPage) => {
       openedPageCount += 1;
+      const pageBudgetAllowed = options.networkGuard?.allowPage() ?? true;
       openedPage.on("download", (download) => {
         void download.cancel().catch(() => undefined);
       });
-      if (openedPageCount > maxPages) {
+      if (openedPageCount > maxPages || !pageBudgetAllowed) {
         void openedPage.close().catch(() => undefined);
       }
     });
@@ -262,16 +284,30 @@ export async function createIsolatedBrowserSession(
         return;
       }
 
+      const requestInput: BrowserRequestPolicyInput = {
+        url: request.url(),
+        method: request.method(),
+        resourceType: request.resourceType(),
+        isNavigationRequest: request.isNavigationRequest(),
+        redirectedFromUrl: request.redirectedFrom()?.url() ?? null,
+      };
+      if (options.networkGuard) {
+        let allowed = false;
+        try {
+          allowed = options.networkGuard.allowRequest(requestInput);
+        } catch {
+          allowed = false;
+        }
+        if (!allowed) {
+          await route.abort("blockedbyclient");
+          return;
+        }
+      }
+
       let policyAllowed = true;
       if (options.requestPolicy) {
         try {
-          policyAllowed = await options.requestPolicy({
-            url: request.url(),
-            method: request.method(),
-            resourceType: request.resourceType(),
-            isNavigationRequest: request.isNavigationRequest(),
-            redirectedFromUrl: request.redirectedFrom()?.url() ?? null,
-          });
+          policyAllowed = await options.requestPolicy(requestInput);
         } catch {
           policyAllowed = false;
         }

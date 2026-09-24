@@ -36,6 +36,108 @@ function rawProxyRequest(port: number, payload: string): Promise<string> {
 }
 
 describe("safe browser egress proxy", () => {
+  it("rechecks authorization after DNS before opening an upstream connection", async () => {
+    let expired = false;
+    const resolver: DnsResolver = async () => {
+      expired = true;
+      return [{ address: "93.184.216.34", family: 4 }];
+    };
+    const proxy = await startSafeBrowserProxy({
+      resolver,
+      allowTarget: () => true,
+      stillAllowed: () => !expired,
+    });
+    try {
+      const response = await rawProxyRequest(
+        proxy.port,
+        "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\n\r\n",
+      );
+      expect(response).toContain("403");
+      expect(response).toContain("no longer allowed");
+    } finally {
+      await proxy.close();
+    }
+  });
+
+  it("closes existing client sockets when the global proxy lifetime expires", async () => {
+    const proxy = await startSafeBrowserProxy({ maxLifetimeMs: 50 });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const socket = net.connect({ host: "127.0.0.1", port: proxy.port });
+        const timeout = setTimeout(
+          () => reject(new Error("Proxy lifetime not enforced")),
+          2_000,
+        );
+        socket.once("error", () => undefined);
+        socket.once("close", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+    } finally {
+      await proxy.close();
+    }
+  });
+  it("does not forward a CONNECT chunk rejected by the shared V3 byte ledger", async () => {
+    let received = 0;
+    const upstream = net.createServer((socket) => {
+      socket.on("data", (chunk: Buffer) => (received += chunk.length));
+    });
+    await new Promise<void>((resolve) =>
+      upstream.listen(0, "127.0.0.1", resolve),
+    );
+    const address = upstream.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    const originalConnect = net.connect.bind(net);
+    const spy = vi
+      .spyOn(net, "connect")
+      .mockImplementation(((options: net.NetConnectOpts) =>
+        originalConnect(
+          options.host === "93.184.216.34"
+            ? { host: "127.0.0.1", port: address.port }
+            : options,
+        )) as typeof net.connect);
+    const accountBytes = vi.fn((bytes: number) => bytes <= 2);
+    let proxy: Awaited<ReturnType<typeof startSafeBrowserProxy>> | undefined;
+    try {
+      proxy = await startSafeBrowserProxy({
+        resolver: publicResolver,
+        allowTarget: (url) => url.origin === "https://example.com",
+        accountBytes,
+      });
+      await new Promise<void>((resolve, reject) => {
+        const socket = originalConnect({
+          host: "127.0.0.1",
+          port: proxy!.port,
+        });
+        const timeout = setTimeout(
+          () => reject(new Error("Tunnel did not close")),
+          2_000,
+        );
+        socket.once("connect", () =>
+          socket.write(
+            "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+          ),
+        );
+        socket.on("data", (chunk: Buffer) => {
+          if (chunk.toString().includes("200 Connection Established"))
+            socket.write(Buffer.alloc(4));
+        });
+        socket.once("error", () => undefined);
+        socket.once("close", () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+      expect(accountBytes).toHaveBeenCalledWith(4);
+      expect(received).toBe(0);
+    } finally {
+      if (proxy) await proxy.close();
+      spy.mockRestore();
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
+  });
   it("closes established CONNECT tunnels at the stream lifetime limit", async () => {
     const upstream = net.createServer(() => undefined);
     await new Promise<void>((resolve) =>
@@ -162,6 +264,26 @@ describe("safe browser egress proxy", () => {
       port: 80,
     });
     expect(target.url.hostname).toBe("example.com");
+  });
+
+  it("revalidates DNS on every proxy request and rejects a changed private address", async () => {
+    let lookups = 0;
+    const resolver: DnsResolver = async () => {
+      lookups += 1;
+      return lookups === 1
+        ? [{ address: "93.184.216.34", family: 4 }]
+        : [{ address: "127.0.0.1", family: 4 }];
+    };
+    const proxy = await startSafeBrowserProxy({ resolver, maxRequests: 0 });
+    const payload =
+      "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    try {
+      expect(await rawProxyRequest(proxy.port, payload)).toContain("429");
+      expect(await rawProxyRequest(proxy.port, payload)).toContain("403");
+      expect(lookups).toBe(2);
+    } finally {
+      await proxy.close();
+    }
   });
 
   it("rejects a target when any DNS answer is non-public", async () => {

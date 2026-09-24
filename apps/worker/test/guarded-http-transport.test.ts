@@ -30,6 +30,68 @@ function fixture(
 }
 
 describe("guarded HTTP transport", () => {
+  it("times out DNS within the remaining global scan budget", async () => {
+    const requester = vi.fn<HttpRequester>(async () => {
+      throw new Error("unexpected request");
+    });
+    const timedProfile = {
+      ...profile,
+      budget: { ...profile.budget, maxDurationMs: 30 },
+    };
+    const ledger = new BudgetLedger(timedProfile.budget, Date.now());
+    const input = fixture(requester, {
+      profile: timedProfile,
+      ledger,
+      transport: {
+        resolver: async () => new Promise(() => undefined),
+        requester,
+      },
+    });
+    await expect(probeGuardedHttpTarget(input)).rejects.toMatchObject({
+      code: "budget-time",
+    });
+    expect(requester).not.toHaveBeenCalled();
+    expect(ledger.snapshot().reasons).toContain("budget-time");
+  });
+  it("rejects a requester that omits byte accounting", async () => {
+    const requester = vi.fn<HttpRequester>(async () => ({
+      statusCode: 200,
+      durationMs: 1,
+      tls: null,
+      headers: {},
+    }));
+    const input = fixture(requester);
+    await expect(probeGuardedHttpTarget(input)).rejects.toThrow(
+      "omitted transfer accounting",
+    );
+  });
+
+  it("stops a response that exceeds the shared byte budget", async () => {
+    const requester = vi.fn<HttpRequester>(
+      async (_target, _timeout, account) => {
+        account?.(129);
+        return { statusCode: 200, durationMs: 1, tls: null, headers: {} };
+      },
+    );
+    const limitedProfile = {
+      ...profile,
+      budget: { ...profile.budget, bytesTransferred: 128 },
+    };
+    const input = fixture(requester, {
+      profile: limitedProfile,
+      ledger: new BudgetLedger(limitedProfile.budget, Date.now()),
+    });
+    await expect(probeGuardedHttpTarget(input)).rejects.toMatchObject({
+      code: "budget-bytes-transferred",
+    });
+    expect(input.ledger.snapshot().reasons).toContain(
+      "budget-bytes-transferred",
+    );
+    await expect(probeGuardedHttpTarget(input)).rejects.toMatchObject({
+      code: "budget-bytes-transferred",
+    });
+    expect(requester).toHaveBeenCalledOnce();
+  });
   it("rejects missing authorization before DNS or transport", async () => {
     const dns = vi.fn(resolver);
     const requester = vi.fn<HttpRequester>(async () => {
@@ -68,12 +130,17 @@ describe("guarded HTTP transport", () => {
 
   it("stops an out-of-scope redirect without resolving or requesting the destination", async () => {
     const dns = vi.fn(resolver);
-    const requester = vi.fn<HttpRequester>(async () => ({
-      statusCode: 302,
-      durationMs: 1,
-      tls: null,
-      headers: { location: "https://other.example.test/private" },
-    }));
+    const requester = vi.fn<HttpRequester>(
+      async (_target, _timeout, account) => {
+        account?.(128);
+        return {
+          statusCode: 302,
+          durationMs: 1,
+          tls: null,
+          headers: { location: "https://other.example.test/private" },
+        };
+      },
+    );
     const input = fixture(requester, {
       transport: { resolver: dns, requester },
     });
@@ -91,12 +158,17 @@ describe("guarded HTTP transport", () => {
   });
 
   it("reserves request, DNS and TLS budgets before each permitted hop", async () => {
-    const requester = vi.fn<HttpRequester>(async (target) => ({
-      statusCode: target.url.pathname === "/" ? 302 : 200,
-      durationMs: 1,
-      tls: null,
-      headers: target.url.pathname === "/" ? { location: "/next" } : {},
-    }));
+    const requester = vi.fn<HttpRequester>(
+      async (target, _timeout, account) => {
+        account?.(128);
+        return {
+          statusCode: target.url.pathname === "/" ? 302 : 200,
+          durationMs: 1,
+          tls: null,
+          headers: target.url.pathname === "/" ? { location: "/next" } : {},
+        };
+      },
+    );
     const input = fixture(requester);
     const result = await probeGuardedHttpTarget(input);
     expect(result.ok).toBe(true);
@@ -105,6 +177,7 @@ describe("guarded HTTP transport", () => {
       httpRequests: 2,
       dnsQueries: 2,
       tlsHandshakes: 2,
+      bytesTransferred: 256,
     });
   });
 

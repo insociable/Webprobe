@@ -39,4 +39,5 @@ export type CoverageReason =
   | "authorization-unavailable"
   | "scope-denied"
   | "ssrf-denied"
+  | "dns-failed"
   | "check-timeout";

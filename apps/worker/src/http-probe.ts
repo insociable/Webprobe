@@ -65,6 +65,7 @@ type RawProbeResponse = {
 export type HttpRequester = (
   target: ValidatedHttpTarget,
   timeoutMs: number,
+  accountTransferredBytes?: (bytes: number) => void,
 ) => Promise<RawProbeResponse>;
 const reportHeaderNames = [
   "cache-control",
@@ -158,11 +159,27 @@ function pinnedLookup(target: ValidatedHttpTarget): LookupFunction {
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
 
-export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
+export const requestPinnedTarget: HttpRequester = async (
+  target,
+  timeoutMs,
+  accountTransferredBytes,
+) => {
   const transport = target.url.protocol === "https:" ? https : http;
   const startedAt = performance.now();
 
   return new Promise<RawProbeResponse>((resolve, reject) => {
+    let socket: import("node:net").Socket | undefined;
+    let initialBytes = 0;
+    let reported = false;
+    const reportTransferredBytes = () => {
+      if (reported) return;
+      reported = true;
+      accountTransferredBytes?.(
+        socket
+          ? Math.max(0, socket.bytesRead + socket.bytesWritten - initialBytes)
+          : 0,
+      );
+    };
     let timeoutHandle: NodeJS.Timeout | undefined;
     const clearRequestTimeout = () => {
       if (timeoutHandle) {
@@ -195,8 +212,14 @@ export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
         };
 
         clearRequestTimeout();
-        response.destroy();
-        resolve(result);
+        try {
+          reportTransferredBytes();
+          response.destroy();
+          resolve(result);
+        } catch (error) {
+          response.destroy();
+          reject(error);
+        }
       },
     );
 
@@ -208,7 +231,16 @@ export const requestPinnedTarget: HttpRequester = async (target, timeoutMs) => {
 
     request.once("error", (error) => {
       clearRequestTimeout();
-      reject(error);
+      try {
+        reportTransferredBytes();
+        reject(error);
+      } catch (accountingError) {
+        reject(accountingError);
+      }
+    });
+    request.once("socket", (assignedSocket) => {
+      socket = assignedSocket;
+      initialBytes = assignedSocket.bytesRead + assignedSocket.bytesWritten;
     });
     request.end();
   });
@@ -448,7 +480,10 @@ export type HttpProbeOptions = {
   timeoutMs?: number;
   maxRedirects?: number;
   beforeRequest?: (url: URL) => void;
+  beforeConnect?: (target: ValidatedHttpTarget) => number;
   allowRedirect?: (from: URL, to: URL) => boolean;
+  accountTransferredBytes?: (bytes: number) => void;
+  requireTransferAccounting?: boolean;
 };
 
 export async function probeHttpTarget(
@@ -468,11 +503,27 @@ export async function probeHttpTarget(
     // before DNS resolution or any network request. V2 callers are unchanged.
     if (options.beforeRequest) options.beforeRequest(new URL(currentUrl));
     const target = await assertPublicHttpUrl(currentUrl, resolver);
+    const requestTimeoutMs = options.beforeConnect?.(target) ?? timeoutMs;
 
     let response: RawProbeResponse;
+    let accountingReported = false;
+    let accountedBytes = 0;
     try {
-      response = await requester(target, timeoutMs);
+      response = await requester(target, requestTimeoutMs, (bytes) => {
+        accountingReported = true;
+        accountedBytes += bytes;
+        options.accountTransferredBytes?.(bytes);
+      });
+      if (options.requireTransferAccounting) {
+        if (!accountingReported) {
+          throw new Error("HTTP requester omitted transfer accounting");
+        }
+        if (accountedBytes <= 0) {
+          throw new Error("HTTP requester reported no transferred bytes");
+        }
+      }
     } catch (error) {
+      if (options.requireTransferAccounting) throw error;
       return networkFailure(reportSafeUrl(target.url), redirects, error);
     }
 

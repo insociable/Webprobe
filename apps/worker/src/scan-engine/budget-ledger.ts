@@ -96,6 +96,23 @@ export class BudgetLedger {
     return this.timeExceeded() ? this.deny("budget-time") : { allowed: true };
   }
 
+  /** A byte or time stop is terminal for subsequent network operations. */
+  checkNetwork(): BudgetReservation {
+    if (this.reasons.has("budget-bytes-transferred")) {
+      return { allowed: false, reason: "budget-bytes-transferred" };
+    }
+    return this.checkTime();
+  }
+
+  remainingDurationMs(): number {
+    const current = this.now();
+    if (!Number.isSafeInteger(current) || current < this.startedAtMs) return 0;
+    return Math.max(
+      0,
+      this.limits.maxDurationMs - (current - this.startedAtMs),
+    );
+  }
+
   markPartial(reason: CoverageReason): void {
     this.reasons.add(reason);
   }
