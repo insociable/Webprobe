@@ -13,6 +13,7 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
+import { parseRedisConnectionUrl } from "../src/redis-connection.js";
 import { scanArtifactStorageRoot } from "../src/scan-artifacts.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
@@ -26,12 +27,8 @@ if (!databaseUrlValue) {
   throw new Error("DATABASE_URL is required");
 }
 
-const redisUrl = new URL(redisUrlValue);
 const connection = {
-  host: redisUrl.hostname,
-  port: Number(redisUrl.port || 6379),
-  username: redisUrl.username || undefined,
-  password: redisUrl.password || undefined,
+  ...parseRedisConnectionUrl(redisUrlValue),
   maxRetriesPerRequest: null,
 };
 

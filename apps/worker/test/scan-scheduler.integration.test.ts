@@ -611,6 +611,82 @@ describeDatabase("scheduled scan coordinator persistence", () => {
     }
   });
 
+  it("continues stale Deep reconciliation beyond a full pending page", async () => {
+    const { db } = getDatabase();
+    const now = new Date("2026-09-22T08:00:00.000Z");
+    const organizationId = randomUUID();
+    const siteIds = Array.from({ length: 101 }, () => randomUUID());
+    const startedBase = new Date("2026-09-22T07:00:00.000Z").getTime();
+
+    await db.insert(organizations).values({
+      id: organizationId,
+      name: "Deep recovery pagination test",
+    });
+    await db.insert(sites).values(
+      siteIds.map((id, index) => ({
+        id,
+        organizationId,
+        name: `Deep recovery target ${index + 1}`,
+        canonicalUrl: `https://deep-${index + 1}.example.com/`,
+        status: "active" as const,
+        verifiedAt: now,
+      })),
+    );
+
+    try {
+      const inserted = await db
+        .insert(scans)
+        .values(
+          siteIds.map((siteId, index) => ({
+            organizationId,
+            siteId,
+            trigger: "manual" as const,
+            scanMode: "verified_deep_audit" as const,
+            status: "running" as const,
+            startedAt: new Date(startedBase + index),
+            summary: { internalDeepWorker: true },
+          })),
+        )
+        .returning({ id: scans.id });
+
+      const target = inserted.at(-1);
+      if (!target) throw new Error("pagination target was not created");
+
+      const result = await recoverOrphanedRunningScans(
+        async (scanId) => (scanId === target.id ? "failed" : "waiting"),
+        now,
+        15 * 60_000,
+        100,
+      );
+
+      expect(result).toEqual({
+        checked: 101,
+        recovered: 0,
+        failed: 1,
+        inspectionFailed: 0,
+      });
+
+      const [targetPersisted] = await db
+        .select({ status: scans.status, summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, target.id));
+      expect(targetPersisted?.status).toBe("failed");
+      expect(targetPersisted?.summary).toMatchObject({
+        deepError: { code: "deep-worker-job-failed" },
+      });
+
+      const [firstPersisted] = await db
+        .select({ status: scans.status })
+        .from(scans)
+        .where(eq(scans.id, inserted[0]!.id));
+      expect(firstPersisted?.status).toBe("running");
+    } finally {
+      await db
+        .delete(organizations)
+        .where(eq(organizations.id, organizationId));
+    }
+  });
+
   it("leaves stale running scans untouched when Redis inspection fails", async () => {
     const { db } = getDatabase();
     const now = new Date("2026-09-22T08:00:00.000Z");

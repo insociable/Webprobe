@@ -6,7 +6,18 @@ import {
   scans,
   sites,
 } from "@agency-saas/db";
-import { and, asc, desc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
 import {
@@ -361,118 +372,149 @@ export async function recoverOrphanedRunningScans(
 ): Promise<StaleScanRecoveryResult> {
   const { db } = getDatabase();
   const staleBefore = new Date(now.getTime() - staleAfterMs);
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new RangeError(
+      "stale recovery batch size must be a positive integer",
+    );
+  }
 
-  const rows = await db
-    .select({ id: scans.id, mode: scans.scanMode })
-    .from(scans)
-    .where(
-      and(
-        eq(scans.status, "running"),
-        isNotNull(scans.startedAt),
-        lte(scans.startedAt, staleBefore),
-      ),
-    )
-    .orderBy(asc(scans.startedAt))
-    .limit(batchSize);
-
+  let checked = 0;
   let recovered = 0;
   let failed = 0;
   let inspectionFailed = 0;
+  let cursor: { startedAt: Date; id: string } | undefined;
 
-  for (const row of rows) {
-    let inspection: ScheduledJobState;
-    try {
-      inspection = await hasJob(row.id);
-    } catch {
-      inspectionFailed += 1;
-      continue;
-    }
+  while (true) {
+    const afterCursor = cursor
+      ? or(
+          gt(scans.startedAt, cursor.startedAt),
+          and(eq(scans.startedAt, cursor.startedAt), gt(scans.id, cursor.id)),
+        )
+      : undefined;
 
-    if (row.mode === "verified_deep_audit") {
-      const outcome = await reconcileStaleDeepScan(row.id, inspection);
-      if (outcome === "failed") failed += 1;
-      if (outcome === "inspection-failed") inspectionFailed += 1;
-      continue;
-    }
+    const rows = await db
+      .select({
+        id: scans.id,
+        mode: scans.scanMode,
+        startedAt: scans.startedAt,
+      })
+      .from(scans)
+      .where(
+        and(
+          eq(scans.status, "running"),
+          isNotNull(scans.startedAt),
+          lte(scans.startedAt, staleBefore),
+          afterCursor,
+        ),
+      )
+      .orderBy(asc(scans.startedAt), asc(scans.id))
+      .limit(batchSize);
 
-    const present =
-      typeof inspection === "boolean" ? inspection : inspection !== "missing";
-    if (present) continue;
+    if (rows.length === 0) break;
+    checked += rows.length;
 
-    const attemptCount = await getScanAttemptCount(row.id);
-    if (attemptCount >= MAX_STALE_RECOVERY_ATTEMPTS) {
-      await db.transaction(async (tx) => {
-        const terminal = await tx
+    for (const row of rows) {
+      let inspection: ScheduledJobState;
+      try {
+        inspection = await hasJob(row.id);
+      } catch {
+        inspectionFailed += 1;
+        continue;
+      }
+
+      if (row.mode === "verified_deep_audit") {
+        const outcome = await reconcileStaleDeepScan(row.id, inspection);
+        if (outcome === "failed") failed += 1;
+        if (outcome === "inspection-failed") inspectionFailed += 1;
+        continue;
+      }
+
+      const present =
+        typeof inspection === "boolean" ? inspection : inspection !== "missing";
+      if (present) continue;
+
+      const attemptCount = await getScanAttemptCount(row.id);
+      if (attemptCount >= MAX_STALE_RECOVERY_ATTEMPTS) {
+        await db.transaction(async (tx) => {
+          const terminal = await tx
+            .update(scans)
+            .set({
+              status: "failed",
+              completedAt: now,
+              summary: {
+                error: { code: "stale-worker-recovery-exhausted" },
+              },
+            })
+            .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
+            .returning({ id: scans.id });
+
+          if (terminal.length === 1) {
+            await tx
+              .update(scanDispatches)
+              .set({
+                status: "failed",
+                leaseUntil: null,
+                lastErrorCode: "stale-worker-recovery-exhausted",
+                updatedAt: now,
+              })
+              .where(eq(scanDispatches.scanId, row.id));
+          }
+        });
+        failed += 1;
+        continue;
+      }
+
+      const didRecover = await db.transaction(async (tx) => {
+        const reset = await tx
           .update(scans)
           .set({
-            status: "failed",
-            completedAt: now,
-            summary: {
-              error: { code: "stale-worker-recovery-exhausted" },
-            },
+            status: "queued",
+            startedAt: null,
+            completedAt: null,
           })
           .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
           .returning({ id: scans.id });
 
-        if (terminal.length === 1) {
-          await tx
-            .update(scanDispatches)
-            .set({
-              status: "failed",
-              leaseUntil: null,
-              lastErrorCode: "stale-worker-recovery-exhausted",
-              updatedAt: now,
-            })
-            .where(eq(scanDispatches.scanId, row.id));
-        }
-      });
-      failed += 1;
-      continue;
-    }
+        if (reset.length !== 1) return false;
 
-    const didRecover = await db.transaction(async (tx) => {
-      const reset = await tx
-        .update(scans)
-        .set({
-          status: "queued",
-          startedAt: null,
-          completedAt: null,
-        })
-        .where(and(eq(scans.id, row.id), eq(scans.status, "running")))
-        .returning({ id: scans.id });
-
-      if (reset.length !== 1) return false;
-
-      await tx
-        .insert(scanDispatches)
-        .values({
-          scanId: row.id,
-          status: "pending",
-          nextAttemptAt: now,
-          leaseUntil: null,
-          dispatchedAt: null,
-          lastErrorCode: "stale-worker-job",
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: scanDispatches.scanId,
-          set: {
+        await tx
+          .insert(scanDispatches)
+          .values({
+            scanId: row.id,
             status: "pending",
             nextAttemptAt: now,
             leaseUntil: null,
             dispatchedAt: null,
             lastErrorCode: "stale-worker-job",
             updatedAt: now,
-          },
-        });
-      return true;
-    });
+          })
+          .onConflictDoUpdate({
+            target: scanDispatches.scanId,
+            set: {
+              status: "pending",
+              nextAttemptAt: now,
+              leaseUntil: null,
+              dispatchedAt: null,
+              lastErrorCode: "stale-worker-job",
+              updatedAt: now,
+            },
+          });
+        return true;
+      });
 
-    if (didRecover) recovered += 1;
+      if (didRecover) recovered += 1;
+    }
+
+    const last = rows.at(-1);
+    if (!last?.startedAt) {
+      throw new Error("stale recovery cursor lost its started_at");
+    }
+    cursor = { startedAt: last.startedAt, id: last.id };
+    if (rows.length < batchSize) break;
   }
 
   return {
-    checked: rows.length,
+    checked,
     recovered,
     failed,
     inspectionFailed,
