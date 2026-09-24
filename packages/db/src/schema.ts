@@ -290,6 +290,7 @@ export const deepAuditAuthorizations = pgTable(
     revalidatedAt: timestamp("revalidated_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    generationId: uuid("generation_id"),
   },
   (table) => [
     check("deep_audit_proof_type_dns", sql`${table.proofType} = 'dns_txt'`),
@@ -300,6 +301,35 @@ export const deepAuditAuthorizations = pgTable(
     check(
       "deep_audit_proof_hash_valid",
       sql`${table.proofTokenHash} is null or ${table.proofTokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
+export const deepAuditChallenges = pgTable(
+  "deep_audit_challenges",
+  {
+    siteId: uuid("site_id")
+      .primaryKey()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    generationId: uuid("generation_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    recordName: text("record_name").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("deep_audit_challenges_org_idx").on(table.organizationId),
+    check(
+      "deep_audit_challenges_hash_valid",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`,
     ),
   ],
 );
@@ -492,6 +522,8 @@ export const scanAttempts = pgTable(
       .defaultNow()
       .notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    leaseToken: uuid("lease_token"),
   },
   (table) => [
     uniqueIndex("scan_attempts_scan_number_unique").on(
