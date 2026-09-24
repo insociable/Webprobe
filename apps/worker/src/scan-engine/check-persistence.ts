@@ -176,6 +176,9 @@ export async function persistDeepCheckRuns(input: {
         }
       }
     }
+    if (input.signal?.aborted) {
+      throw new Error("Deep execution aborted before persistence");
+    }
     const prior = await tx
       .select({ id: scanCheckRuns.id })
       .from(scanCheckRuns)
