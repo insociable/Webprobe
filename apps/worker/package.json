@@ -12,7 +12,8 @@
     "smoke:browser": "tsx scripts/browser-smoke.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "test": "tsx scripts/test-gate.ts worker",
-    "diagnostics": "tsx scripts/diagnostics.ts"
+    "diagnostics": "tsx scripts/diagnostics.ts",
+    "sync:vulnerabilities": "tsx scripts/vulnerability-sync.ts"
   },
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",

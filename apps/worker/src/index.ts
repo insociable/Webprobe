@@ -27,6 +27,10 @@ import {
   MAX_SCAN_EXECUTION_ATTEMPTS,
 } from "./scan-retry.js";
 import { startScheduledScanCoordinator } from "./scan-scheduler.js";
+import {
+  getVulnerabilitySyncPolicy,
+  startVulnerabilitySyncCoordinator,
+} from "./vulnerability-sync-coordinator.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 void getDatabase();
@@ -282,11 +286,18 @@ const publicAuditRetentionCoordinator = startPublicAuditRetentionCoordinator({
   policy: publicAuditRetentionPolicy,
 });
 
+const vulnerabilitySyncPolicy = getVulnerabilitySyncPolicy();
+const vulnerabilitySyncCoordinator = startVulnerabilitySyncCoordinator({
+  logger,
+  policy: vulnerabilitySyncPolicy,
+});
+
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   for (const controller of activeDeepJobs) controller.abort();
   await observabilityCoordinator.stop();
   await publicAuditRetentionCoordinator.stop();
+  await vulnerabilitySyncCoordinator.stop();
   await schedulerCoordinator.stop();
   await dispatchCoordinator.stop();
   await notificationCoordinator.stop();
@@ -312,6 +323,9 @@ logger.info(
     publicAuditRetentionDays: publicAuditRetentionPolicy.retentionDays,
     publicAuditRetentionBatchSize: publicAuditRetentionPolicy.batchSize,
     publicAuditRetentionIntervalMs: publicAuditRetentionPolicy.intervalMs,
+    vulnerabilitySyncEnabled: vulnerabilitySyncPolicy.enabled,
+    vulnerabilitySyncIntervalMs: vulnerabilitySyncPolicy.intervalMs,
+    vulnerabilitySyncRunOnStart: vulnerabilitySyncPolicy.runOnStart,
   },
   "scanner worker ready",
 );

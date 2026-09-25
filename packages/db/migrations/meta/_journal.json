@@ -127,6 +127,13 @@
       "when": 1790258634693,
       "tag": "0017_public_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790316730835,
+      "tag": "0018_nasty_siren",
+      "breakpoints": true
     }
   ]
 }

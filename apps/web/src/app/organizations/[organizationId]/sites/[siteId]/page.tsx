@@ -3,11 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WorkspaceShell } from "@/components/product-shell";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
+import { SiteVulnerabilityOverview } from "@/components/site-vulnerability-overview";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { getMonitoringState } from "@/lib/monitoring-state";
+import { getSiteVulnerabilityOverview } from "@/lib/vulnerability-intelligence";
 import { ManualScanButton } from "../../manual-scan-button";
 import { PublicAuditButton } from "../../public-audit-button";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
@@ -74,6 +76,21 @@ async function loadSiteSchedule(
   }
 }
 
+async function loadVulnerabilityOverview(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+) {
+  try {
+    return await getSiteVulnerabilityOverview(userId, organizationId, siteId);
+  } catch (error) {
+    if (error instanceof OrganizationAccessError) {
+      notFound();
+    }
+    throw error;
+  }
+}
+
 export default async function SitePage({
   params,
   searchParams,
@@ -99,11 +116,14 @@ export default async function SitePage({
     notFound();
   }
 
-  const scheduleState = await loadSiteSchedule(
-    session.user.id,
-    organizationId,
-    siteId,
-  );
+  const [scheduleState, vulnerabilityOverview] = await Promise.all([
+    loadSiteSchedule(session.user.id, organizationId, siteId),
+    loadVulnerabilityOverview(session.user.id, organizationId, siteId),
+  ]);
+
+  if (!vulnerabilityOverview) {
+    notFound();
+  }
 
   const activeScanEntry =
     history.scans.find(
@@ -357,7 +377,14 @@ export default async function SitePage({
         </section>
       ) : null}
 
-      <section className="py-10">
+      <div className="py-10">
+        <SiteVulnerabilityOverview
+          observations={vulnerabilityOverview.observations}
+          matches={vulnerabilityOverview.matches}
+        />
+      </div>
+
+      <section className="pb-10">
         <div className="overflow-hidden border-y border-[#242d40]">
           <div className="flex items-center justify-between gap-4 px-1 py-5 font-semibold sm:px-4">
             <span>Historique des scans · {history.scans.length}</span>
