@@ -3,6 +3,8 @@ import {
   deepHttpObservationFailed,
   scoreDeepAudit,
 } from "../lib/deep-report-metrics";
+import { getFindingRemediation } from "../lib/finding-remediation";
+import { RemediationDetails } from "./remediation-details";
 
 type DeepCheckRunView = {
   id: string;
@@ -442,6 +444,10 @@ export function DeepAuditReport({
                                 typeof finding.summary === "string"
                                   ? finding.summary
                                   : "Observation technique";
+                              const code =
+                                typeof finding.code === "string"
+                                  ? finding.code
+                                  : "finding";
                               const recommendation =
                                 typeof finding.recommendation === "string"
                                   ? finding.recommendation
@@ -452,15 +458,10 @@ export function DeepAuditReport({
                                 typeof finding.observed === "boolean"
                                   ? String(finding.observed)
                                   : null;
+                              const remediation = getFindingRemediation(code);
                               return (
                                 <div
-                                  key={
-                                    (typeof finding.code === "string"
-                                      ? finding.code
-                                      : "finding") +
-                                    "-" +
-                                    index
-                                  }
+                                  key={code + "-" + index}
                                   className={
                                     "rounded-md border px-3 py-3 " +
                                     (level === "risk"
@@ -482,16 +483,42 @@ export function DeepAuditReport({
                                           : "Information"}
                                     </span>
                                   </div>
-                                  {observed ? (
-                                    <p className="mt-1 break-all text-sm text-white/45">
-                                      Observé : {observed}
-                                    </p>
-                                  ) : null}
-                                  {recommendation ? (
-                                    <p className="mt-2 text-sm leading-5 text-white/55">
-                                      {recommendation}
-                                    </p>
-                                  ) : null}
+                                  <RemediationDetails
+                                    remediation={remediation}
+                                    fallback={recommendation}
+                                    verification={
+                                      remediation
+                                        ? null
+                                        : "Relancez un audit approfondi après correction pour confirmer que le signal a disparu."
+                                    }
+                                  />
+
+                                  <details className="mt-3 rounded-md border border-[#29344b] bg-black/10">
+                                    <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-[#8793ff] [&::-webkit-details-marker]:hidden">
+                                      Détails techniques
+                                    </summary>
+                                    <dl className="grid gap-3 border-t border-[#242d40] px-3 py-3 sm:grid-cols-2">
+                                      <div>
+                                        <dt className="text-sm text-white/30">
+                                          Code
+                                        </dt>
+                                        <dd className="mt-1 break-all font-mono text-sm text-white/55">
+                                          {code}
+                                        </dd>
+                                      </div>
+                                      <div>
+                                        <dt className="text-sm text-white/30">
+                                          Valeur observée
+                                        </dt>
+                                        <dd className="mt-1 break-all text-sm text-white/55">
+                                          {observed ?? "—"}
+                                        </dd>
+                                      </div>
+                                    </dl>
+                                    <pre className="mx-3 mb-3 overflow-x-auto rounded-md bg-black/20 p-3 text-sm leading-5 text-white/55">
+                                      {JSON.stringify(finding, null, 2)}
+                                    </pre>
+                                  </details>
                                 </div>
                               );
                             })}
@@ -516,7 +543,7 @@ export function DeepAuditReport({
 
                         <details className="mt-5 border-t border-[#242d40] pt-4">
                           <summary className="cursor-pointer text-sm font-semibold text-[#8793ff]">
-                            Détails techniques
+                            Détails techniques du contrôle
                           </summary>
                           <dl className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div>

@@ -403,6 +403,16 @@ function accessibilityRemediation(code: string): FindingRemediation {
   };
 }
 
+const remediationAliases: Record<string, string> = {
+  "csp-absent": "security-header.csp.missing",
+  "hsts-absent": "security-header.hsts.missing",
+  "nosniff-absent": "security-header.x-content-type-options.missing",
+  "x-powered-by-exposed": "security-header.x-powered-by.exposed",
+  "certificate-expiring": "tls.certificate-expiring",
+  "certificate-validation-error": "tls.connection-failed",
+  "tls-or-http-connection-error": "tls.connection-failed",
+};
+
 function scannerV2Remediation(code: string): FindingRemediation | null {
   if (code === "seo.noindex") {
     return {
@@ -471,6 +481,11 @@ export function getFindingRemediation(code: string): FindingRemediation | null {
   const exact = exactRemediations[code];
   if (exact) {
     return exact;
+  }
+
+  const alias = remediationAliases[code];
+  if (alias) {
+    return exactRemediations[alias] ?? null;
   }
 
   if (code.startsWith("accessibility.")) {

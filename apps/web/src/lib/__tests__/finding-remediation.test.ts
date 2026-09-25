@@ -41,6 +41,18 @@ describe("finding remediation catalog", () => {
     }
   });
 
+  it("reuses the standard catalog for equivalent Deep finding codes", () => {
+    expect(getFindingRemediation("csp-absent")?.title).toBe(
+      getFindingRemediation("security-header.csp.missing")?.title,
+    );
+    expect(getFindingRemediation("hsts-absent")?.title).toBe(
+      getFindingRemediation("security-header.hsts.missing")?.title,
+    );
+    expect(getFindingRemediation("certificate-validation-error")?.title).toBe(
+      getFindingRemediation("tls.connection-failed")?.title,
+    );
+  });
+
   it("provides detailed guidance for the accessibility rules seen in prospect audits", () => {
     const region = getFindingRemediation("accessibility.region");
     const main = getFindingRemediation("accessibility.landmark-one-main");
