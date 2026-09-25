@@ -837,3 +837,252 @@ export const recipientFindingIncidents = pgTable(
     ),
   ],
 );
+
+export const technologyObservations = pgTable(
+  "technology_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    vendor: text("vendor").notNull(),
+    product: text("product").notNull(),
+    version: text("version"),
+    versionConfidence: text("version_confidence").default("unknown").notNull(),
+    detectionConfidence: text("detection_confidence").default("high").notNull(),
+    source: text("source").notNull(),
+    evidence: jsonb("evidence")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("technology_observations_scan_product_source_unique").on(
+      table.scanId,
+      table.vendor,
+      table.product,
+      table.source,
+    ),
+    index("technology_observations_site_product_idx").on(
+      table.siteId,
+      table.vendor,
+      table.product,
+      table.observedAt,
+    ),
+    check(
+      "technology_observations_version_confidence_valid",
+      sql`${table.versionConfidence} in ('exact', 'partial', 'unknown')`,
+    ),
+    check(
+      "technology_observations_detection_confidence_valid",
+      sql`${table.detectionConfidence} in ('high', 'medium')`,
+    ),
+    check(
+      "technology_observations_product_not_blank",
+      sql`length(btrim(${table.product})) > 0 and length(btrim(${table.vendor})) > 0`,
+    ),
+  ],
+);
+
+export const vulnerabilityAdvisories = pgTable(
+  "vulnerability_advisories",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    cveId: text("cve_id").notNull(),
+    summary: text("summary").default("").notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    modifiedAt: timestamp("modified_at", { withTimezone: true }),
+    severity: severity("severity"),
+    cvssScoreTenths: integer("cvss_score_tenths"),
+    cvssVector: text("cvss_vector"),
+    knownExploited: boolean("known_exploited").default(false).notNull(),
+    knownExploitedAt: timestamp("known_exploited_at", { withTimezone: true }),
+    knownRansomwareUse: text("known_ransomware_use"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("vulnerability_advisories_cve_unique").on(table.cveId),
+    index("vulnerability_advisories_modified_idx").on(table.modifiedAt),
+    index("vulnerability_advisories_kev_idx")
+      .on(table.knownExploited)
+      .where(sql`${table.knownExploited} = true`),
+    check(
+      "vulnerability_advisories_cve_format",
+      sql`${table.cveId} ~ '^CVE-[0-9]{4}-[0-9]{4,}$'`,
+    ),
+    check(
+      "vulnerability_advisories_cvss_range",
+      sql`${table.cvssScoreTenths} is null or ${table.cvssScoreTenths} between 0 and 100`,
+    ),
+  ],
+);
+
+export const vulnerabilitySources = pgTable(
+  "vulnerability_sources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    advisoryId: uuid("advisory_id")
+      .notNull()
+      .references(() => vulnerabilityAdvisories.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    sourceKey: text("source_key").notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("vulnerability_sources_source_key_unique").on(
+      table.source,
+      table.sourceKey,
+    ),
+    index("vulnerability_sources_advisory_idx").on(table.advisoryId),
+    check(
+      "vulnerability_sources_source_valid",
+      sql`${table.source} in ('nvd', 'cisa_kev')`,
+    ),
+  ],
+);
+
+export const vulnerabilityAffectedProducts = pgTable(
+  "vulnerability_affected_products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    advisoryId: uuid("advisory_id")
+      .notNull()
+      .references(() => vulnerabilityAdvisories.id, { onDelete: "cascade" }),
+    source: text("source").default("nvd").notNull(),
+    vendor: text("vendor").notNull(),
+    product: text("product").notNull(),
+    criteria: text("criteria"),
+    versionExact: text("version_exact"),
+    versionStartIncluding: text("version_start_including"),
+    versionStartExcluding: text("version_start_excluding"),
+    versionEndIncluding: text("version_end_including"),
+    versionEndExcluding: text("version_end_excluding"),
+    contextRequired: boolean("context_required").default(false).notNull(),
+    rawRule: jsonb("raw_rule")
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+  },
+  (table) => [
+    index("vulnerability_affected_products_lookup_idx").on(
+      table.vendor,
+      table.product,
+    ),
+    index("vulnerability_affected_products_advisory_idx").on(table.advisoryId),
+    check(
+      "vulnerability_affected_products_source_valid",
+      sql`${table.source} = 'nvd'`,
+    ),
+    check(
+      "vulnerability_affected_products_names_not_blank",
+      sql`length(btrim(${table.vendor})) > 0 and length(btrim(${table.product})) > 0`,
+    ),
+  ],
+);
+
+export const vulnerabilitySyncRuns = pgTable(
+  "vulnerability_sync_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull(),
+    status: text("status").default("running").notNull(),
+    cursorStart: timestamp("cursor_start", { withTimezone: true }),
+    cursorEnd: timestamp("cursor_end", { withTimezone: true }),
+    fetched: integer("fetched").default(0).notNull(),
+    created: integer("created").default(0).notNull(),
+    updated: integer("updated").default(0).notNull(),
+    failed: integer("failed").default(0).notNull(),
+    errorCode: text("error_code"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("vulnerability_sync_runs_source_started_idx").on(
+      table.source,
+      table.startedAt,
+    ),
+    uniqueIndex("vulnerability_sync_runs_source_running_unique")
+      .on(table.source)
+      .where(sql`${table.status} = 'running'`),
+    check(
+      "vulnerability_sync_runs_source_valid",
+      sql`${table.source} in ('nvd', 'cisa_kev')`,
+    ),
+    check(
+      "vulnerability_sync_runs_status_valid",
+      sql`${table.status} in ('running', 'completed', 'failed')`,
+    ),
+    check(
+      "vulnerability_sync_runs_counts_nonnegative",
+      sql`${table.fetched} >= 0 and ${table.created} >= 0 and ${table.updated} >= 0 and ${table.failed} >= 0`,
+    ),
+  ],
+);
+
+export const siteVulnerabilityMatches = pgTable(
+  "site_vulnerability_matches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    observationId: uuid("observation_id")
+      .notNull()
+      .references(() => technologyObservations.id, { onDelete: "cascade" }),
+    advisoryId: uuid("advisory_id")
+      .notNull()
+      .references(() => vulnerabilityAdvisories.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    reason: text("reason").notNull(),
+    matchedVersion: text("matched_version"),
+    affectedRange: text("affected_range"),
+    fixedVersion: text("fixed_version"),
+    firstMatchedAt: timestamp("first_matched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastMatchedAt: timestamp("last_matched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("site_vulnerability_matches_observation_advisory_unique").on(
+      table.observationId,
+      table.advisoryId,
+    ),
+    index("site_vulnerability_matches_site_status_idx").on(
+      table.siteId,
+      table.status,
+      table.lastMatchedAt,
+    ),
+    check(
+      "site_vulnerability_matches_status_valid",
+      sql`${table.status} in ('confirmed', 'potential')`,
+    ),
+  ],
+);

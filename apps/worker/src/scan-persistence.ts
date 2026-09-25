@@ -6,6 +6,7 @@ import {
   scanSchedules,
   scans,
   sites,
+  technologyObservations,
   users,
 } from "@agency-saas/db";
 import {
@@ -25,6 +26,7 @@ import {
   filterDegradationsByMinimumSeverity,
 } from "./scan-alerts.js";
 import type { ScanMode } from "./scan-engine/types.js";
+import type { TechnologyObservationInput } from "./technology-inventory.js";
 
 export class ScanContextError extends Error {
   constructor(
@@ -292,6 +294,7 @@ export async function persistScanCompletion(
   probe: HttpProbeResult,
   generatedFindings: GeneratedFinding[],
   scannerV2: ScannerV2PersistentSummary | null = null,
+  technologies: TechnologyObservationInput[] = [],
 ): Promise<void> {
   const { db } = getDatabase();
 
@@ -348,6 +351,29 @@ export async function persistScanCompletion(
           pageUrl: item.pageUrl,
           fingerprint: item.fingerprint,
           evidence: item.evidence,
+        })),
+      );
+    }
+
+    await tx
+      .delete(technologyObservations)
+      .where(eq(technologyObservations.scanId, context.scanId));
+
+    if (technologies.length > 0) {
+      await tx.insert(technologyObservations).values(
+        technologies.map((technology) => ({
+          organizationId: context.organizationId,
+          siteId: context.siteId,
+          scanId: context.scanId,
+          category: technology.category,
+          vendor: technology.vendor,
+          product: technology.product,
+          version: technology.version,
+          versionConfidence: technology.versionConfidence,
+          detectionConfidence: technology.detectionConfidence,
+          source: technology.source,
+          evidence: technology.evidence,
+          observedAt: new Date(result.completedAt),
         })),
       );
     }

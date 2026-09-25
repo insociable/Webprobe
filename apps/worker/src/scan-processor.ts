@@ -1,3 +1,4 @@
+import pino from "pino";
 import {
   ScanJobSchema,
   ScanResultSchema,
@@ -27,6 +28,10 @@ import {
   persistScanFailureForJob,
   validateScanContext,
 } from "./scan-persistence.js";
+import { detectTechnologyObservations } from "./technology-inventory.js";
+import { reconcileScanVulnerabilities } from "./vulnerability-correlation.js";
+
+const vulnerabilityLogger = pino({ name: "scanner-vulnerability-enrichment" });
 
 export type ScanExecutionResult = ScanResult & {
   http: HttpProbeResult;
@@ -116,6 +121,9 @@ export async function processScanJobAttempt(
   const scannerV2Summary = browserScan?.scannerV2
     ? summarizeScannerV2(browserScan.scannerV2)
     : null;
+  const technologies = httpProbe.ok
+    ? detectTechnologyObservations(httpProbe.headers)
+    : [];
 
   await persistScanCompletion(
     context,
@@ -123,7 +131,20 @@ export async function processScanJobAttempt(
     httpProbe,
     generatedFindings,
     scannerV2Summary,
+    technologies,
   );
+
+  try {
+    await reconcileScanVulnerabilities(context.scanId);
+  } catch (error) {
+    vulnerabilityLogger.warn(
+      {
+        scanId: context.scanId,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      },
+      "vulnerability correlation failed after completed scan",
+    );
+  }
 
   let screenshotStored = false;
   if (payload.profile.captureScreenshots && browserScan?.screenshot) {

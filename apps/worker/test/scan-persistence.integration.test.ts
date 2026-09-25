@@ -7,6 +7,7 @@ import {
   scanSchedules,
   scans,
   sites,
+  technologyObservations,
 } from "@agency-saas/db";
 import { and, eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
@@ -179,6 +180,62 @@ describeDatabase("scan persistence", () => {
         {
           code: "security-header.csp.missing",
           fingerprint: "a".repeat(64),
+        },
+      ]);
+    } finally {
+      await deleteFixture(fixture.organizationId);
+    }
+  });
+
+  it("persists the structured technology inventory with scan completion", async () => {
+    const { db } = getDatabase();
+    const fixture = await createFixture();
+
+    try {
+      const context = await validateScanContext(fixture.payload);
+      await markScanRunning(context);
+      await persistScanCompletion(
+        context,
+        completedResult(fixture.scanId, context.startedAt),
+        successfulProbe(),
+        [generatedFinding],
+        null,
+        [
+          {
+            category: "web_server",
+            vendor: "nginx",
+            product: "nginx",
+            version: "1.24.0",
+            versionConfidence: "exact",
+            detectionConfidence: "high",
+            source: "http_header",
+            evidence: {
+              header: "server",
+              signature: "nginx",
+              observedVersion: "1.24.0",
+            },
+          },
+        ],
+      );
+
+      const inventory = await db
+        .select({
+          vendor: technologyObservations.vendor,
+          product: technologyObservations.product,
+          version: technologyObservations.version,
+          versionConfidence: technologyObservations.versionConfidence,
+          source: technologyObservations.source,
+        })
+        .from(technologyObservations)
+        .where(eq(technologyObservations.scanId, fixture.scanId));
+
+      expect(inventory).toEqual([
+        {
+          vendor: "nginx",
+          product: "nginx",
+          version: "1.24.0",
+          versionConfidence: "exact",
+          source: "http_header",
         },
       ]);
     } finally {

@@ -140,3 +140,6 @@ pnpm lint
 Voir `docs/adr/0001-pilot-scope-and-architecture.md` et `SECURITY.md`.
 Le gate opérationnel avant toute mise en ligne est dans
 `docs/operations/preproduction.md`.
+
+Le fonctionnement du rapprochement CVE/KEV V3.1 est documenté dans
+`docs/architecture/vulnerability-intelligence.md`.
