@@ -5,7 +5,9 @@ Les unités versionnées décrivent les services Web et Worker de l'instance act
 ## Fichiers
 
 - `agency-saas-web.service` : application Next.js ;
-- `agency-saas-worker.service` : worker de scans.
+- `agency-saas-worker.service` : worker de scans ;
+- `webprobe-backup.service` / `.timer` : sauvegarde chiffrée quotidienne ;
+- `webprobe-backup-restore-check.service` / `.timer` : test de restauration hebdomadaire.
 
 Les noms historiques `agency-saas-*` restent utilisés par l'infrastructure afin d'éviter un renommage opérationnel inutile.
 
@@ -36,6 +38,22 @@ systemctl is-active agency-saas-worker.service
 ```
 
 Redémarrer uniquement les services concernés lorsque cela est possible.
+
+## Durcissement réseau du worker
+
+Le worker conserve l'accès à Internet public et aux services locaux nécessaires
+(PostgreSQL et Valkey via loopback), mais systemd bloque en défense en profondeur
+les destinations privées, CGNAT, link-local, multicast et les plages de documentation.
+Ces règles complètent les contrôles anti-SSRF applicatifs ; elles ne les remplacent pas.
+
+Avant toute modification de ces règles, vérifier le résolveur DNS et les dépendances
+réseau de l'hôte afin de ne pas couper un service légitime.
+
+## Sauvegardes
+
+La procédure d'installation des timers, la génération de la clé `age` et le test de
+restauration sont décrits dans `docs/operations/backups.md`. La clé privée reste hors
+du dépôt et ne doit jamais être copiée avec les archives.
 
 ## Secrets
 

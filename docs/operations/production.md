@@ -172,18 +172,19 @@ Avant retour arrière :
 
 Un retour arrière Git ne doit pas être confondu avec un retour arrière de base de données.
 
-## Sauvegardes à mettre en place
+## Sauvegardes et restauration
 
-Au moment de l'audit documentaire du 24 septembre 2026, aucun timer systemd, cron ou script WebProbe identifiable n'assurait clairement une sauvegarde de PostgreSQL ou de `SCAN_ARTIFACTS_DIR`.
+WebProbe fournit désormais un mécanisme d'exploitation versionné pour sauvegarder PostgreSQL et `SCAN_ARTIFACTS_DIR` :
 
-Une stratégie de sauvegarde doit donc être mise en place explicitement et couvrir au minimum :
+- archive quotidienne chiffrée avec `age` ;
+- rétention locale configurable, 14 jours par défaut ;
+- manifeste SHA-256 ;
+- test hebdomadaire de restauration dans une base PostgreSQL temporaire ;
+- extraction de contrôle des artefacts sans modifier la production.
 
-- PostgreSQL ;
-- le contenu de `SCAN_ARTIFACTS_DIR` ;
-- un stockage hors de la machine de production ;
-- le chiffrement des sauvegardes ;
-- une politique de rétention ;
-- un test régulier de restauration complète.
+Les scripts et unités systemd sont documentés dans [`backups.md`](./backups.md).
+
+La copie locale chiffrée ne couvre toutefois pas la perte complète du disque ou de la VM. Les archives `*.tar.age` doivent donc être répliquées vers un stockage hors hôte ; la clé privée de déchiffrement doit être conservée séparément.
 
 La restauration doit conserver la cohérence entre les métadonnées `scan_artifacts` en base et les fichiers correspondants.
 

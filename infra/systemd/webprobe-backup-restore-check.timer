@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly WebProbe backup restore verification
+
+[Timer]
+OnCalendar=Sun *-*-* 04:15:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=webprobe-backup-restore-check.service
+
+[Install]
+WantedBy=timers.target
