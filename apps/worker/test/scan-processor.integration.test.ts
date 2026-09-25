@@ -28,6 +28,53 @@ function successfulProbe(
   };
 }
 
+function emptyScannerV2() {
+  return {
+    crawl: {
+      maxPages: 1,
+      discoveredUrlCount: 1,
+      visitedUrlCount: 1,
+      ignoredUrlCount: 0,
+      unvisitedUrlCount: 0,
+      budgetReached: false,
+      urls: [],
+      redirects: [],
+      malformedUrlCount: 0,
+    },
+    network: {
+      resources: [],
+      failedRequests: [],
+      consoleErrors: [],
+      javascriptErrors: [],
+      issues: [],
+      suppressedThirdPartyIssueCount: 0,
+      collection: {
+        maxRetainedObservationCount: 400,
+        retainedObservationCount: 0,
+        droppedObservationCount: 0,
+        truncated: false,
+      },
+    },
+    performance: [],
+    seo: { pages: [], signals: [] },
+    completeness: {
+      crawl: { status: "complete" as const, linkExtractionFailureCount: 0 },
+      network: { status: "complete" as const, captureFailureCount: 0 },
+      performance: {
+        status: "unavailable" as const,
+        eligiblePageCount: 0,
+        observedPageCount: 0,
+        observerInstalled: true,
+      },
+      seo: {
+        status: "complete" as const,
+        eligiblePageCount: 1,
+        observedPageCount: 1,
+      },
+    },
+  };
+}
+
 async function createFixture(
   scanMode: "public_audit" | "verified_monitoring" = "verified_monitoring",
 ) {
@@ -98,6 +145,7 @@ describeDatabase("scan processor browser findings", () => {
             pagesVisited: 1,
             screenshot: null,
             observations: [],
+            scannerV2: emptyScannerV2(),
           };
         },
       });
@@ -134,6 +182,7 @@ describeDatabase("scan processor browser findings", () => {
               pagesVisited: 1,
               screenshot: null,
               observations: [],
+              scannerV2: emptyScannerV2(),
             };
           },
         });
@@ -322,6 +371,7 @@ describeDatabase("scan processor browser findings", () => {
         runBrowserScan: async () => ({
           pagesVisited: 1,
           observations: [],
+          scannerV2: emptyScannerV2(),
           screenshot: {
             data: Buffer.from("jpeg-bytes"),
             mediaType: "image/jpeg",
@@ -353,6 +403,7 @@ describeDatabase("scan processor browser findings", () => {
         runBrowserScan: async () => ({
           pagesVisited: 1,
           observations: [],
+          scannerV2: emptyScannerV2(),
           screenshot: {
             data: Buffer.from("jpeg-bytes"),
             mediaType: "image/jpeg",
