@@ -41,7 +41,7 @@ describe("scanner v2 crawl coverage", () => {
     expect(
       isAllowedCanonicalOriginShift(
         "https://example.com/",
-        "https://unrelated-third-party.com/",
+        "https://third-party.example/",
       ),
     ).toBe(false);
     expect(
