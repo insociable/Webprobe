@@ -31,9 +31,11 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
-# Defense in depth: the scanner may reach public Internet targets and localhost
-# services, but not RFC1918/CGNAT/link-local/multicast/documentation ranges.
+# Defense in depth: the scanner may reach public Internet targets and localhost.
+# Docker DNAT maps the production loopback ports to the 172.18.0.0/16 bridge,
+# which must remain allowed for PostgreSQL and Valkey.
 IPAddressAllow=localhost
+IPAddressAllow=172.18.0.0/16
 IPAddressDeny=0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.168.0.0/16 198.18.0.0/15 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4
 IPAddressDeny=fc00::/7 fe80::/10 ff00::/8 2001:db8::/32
 

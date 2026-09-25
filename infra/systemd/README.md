@@ -41,13 +41,16 @@ Redémarrer uniquement les services concernés lorsque cela est possible.
 
 ## Durcissement réseau du worker
 
-Le worker conserve l'accès à Internet public et aux services locaux nécessaires
-(PostgreSQL et Valkey via loopback), mais systemd bloque en défense en profondeur
-les destinations privées, CGNAT, link-local, multicast et les plages de documentation.
+Le worker conserve l'accès à Internet public et aux services nécessaires. Sur
+l'instance de référence, PostgreSQL et Valkey sont publiés sur loopback par Docker ;
+le DNAT Docker les traduit vers le bridge production `172.18.0.0/16`, qui doit donc
+rester explicitement autorisé. Les autres destinations privées, CGNAT, link-local,
+multicast et plages de documentation restent bloquées en défense en profondeur.
 Ces règles complètent les contrôles anti-SSRF applicatifs ; elles ne les remplacent pas.
 
-Avant toute modification de ces règles, vérifier le résolveur DNS et les dépendances
-réseau de l'hôte afin de ne pas couper un service légitime.
+Avant toute modification de ces règles, vérifier le résolveur DNS, le bridge Docker
+de production et les dépendances réseau de l'hôte afin de ne pas couper un service
+légitime.
 
 ## Sauvegardes
 
