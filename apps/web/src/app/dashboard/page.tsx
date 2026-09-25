@@ -3,8 +3,14 @@ import { WorkspaceShell } from "@/components/product-shell";
 import { getWorkspaceOverview } from "@/lib/workspace-overview";
 
 export default async function DashboardPage() {
-  const { user, sites, createSiteHref, scansInProgress, majorFindings } =
-    await getWorkspaceOverview();
+  const {
+    user,
+    sites,
+    createSiteHref,
+    scansInProgress,
+    majorFindings,
+    vulnerabilitySummary,
+  } = await getWorkspaceOverview();
   const emailFallbackName = user.email.split("@")[0] ?? "";
   const displayName =
     user.name.trim() && user.name !== "Utilisateur"
@@ -51,6 +57,68 @@ export default async function DashboardPage() {
             <p className="am-metric-value">{majorFindings}</p>
           </div>
         </div>
+      </section>
+
+      <section
+        className="border-b border-[#242d40] py-7"
+        aria-labelledby="vulnerability-summary-title"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="am-kicker">Technologies &amp; CVE</p>
+            <h2
+              id="vulnerability-summary-title"
+              className="mt-2 text-2xl font-semibold tracking-[-0.03em]"
+            >
+              Vulnérabilités connues
+            </h2>
+          </div>
+          <Link href="/sites" className="text-sm font-semibold text-[#8793ff]">
+            Voir les sites →
+          </Link>
+        </div>
+
+        {vulnerabilitySummary.technologies === 0 ? (
+          <div className="mt-5 border-l-2 border-[#46557a] bg-[#0d121d] p-5">
+            <p className="text-sm leading-6 text-[#8d98ad]">
+              Aucun inventaire technologique exploitable n’est encore
+              disponible. Les prochains scans peuvent alimenter cette synthèse à
+              partir de signaux passifs réellement observés.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["Technologies observées", vulnerabilitySummary.technologies],
+                ["CVE confirmées", vulnerabilitySummary.confirmed],
+                ["À vérifier", vulnerabilitySummary.potential],
+                ["CISA KEV", vulnerabilitySummary.kev],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="am-panel-soft p-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-white/35">
+                    {String(label)}
+                  </p>
+                  <p className="mt-2 text-2xl font-semibold">{Number(value)}</p>
+                </div>
+              ))}
+            </div>
+            {vulnerabilitySummary.confirmed === 0 &&
+            vulnerabilitySummary.potential === 0 ? (
+              <p className="mt-4 text-sm leading-6 text-[#7f8a9f]">
+                Aucune CVE actuellement corrélée aux technologies et versions
+                observées. Cela ne garantit pas l’absence de vulnérabilité.
+              </p>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-[#7f8a9f]">
+                Les correspondances « à vérifier » nécessitent notamment de
+                confirmer la version ou le contexte avant de conclure à une
+                exposition. L’absence de correspondance n’est pas une
+                certification de sécurité.
+              </p>
+            )}
+          </>
+        )}
       </section>
 
       <section className="grid gap-8 py-9 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.85fr)] lg:items-center">

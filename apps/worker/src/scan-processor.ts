@@ -28,7 +28,7 @@ import {
   persistScanFailureForJob,
   validateScanContext,
 } from "./scan-persistence.js";
-import { detectTechnologyObservations } from "./technology-inventory.js";
+import { detectTechnologyInventory } from "./technology-inventory.js";
 import { reconcileScanVulnerabilities } from "./vulnerability-correlation.js";
 
 const vulnerabilityLogger = pino({ name: "scanner-vulnerability-enrichment" });
@@ -122,7 +122,16 @@ export async function processScanJobAttempt(
     ? summarizeScannerV2(browserScan.scannerV2)
     : null;
   const technologies = httpProbe.ok
-    ? detectTechnologyObservations(httpProbe.headers)
+    ? detectTechnologyInventory({
+        headers: httpProbe.headers,
+        browser: browserScan
+          ? {
+              resources: browserScan.scannerV2.network.resources.map(
+                (resource) => resource.resourceUrl,
+              ),
+            }
+          : null,
+      })
     : [];
 
   await persistScanCompletion(

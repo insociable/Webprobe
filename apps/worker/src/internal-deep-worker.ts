@@ -1,3 +1,4 @@
+import pino from "pino";
 import { ScanJobSchema, type ScanJob } from "@agency-saas/contracts";
 import { scanAttempts, scans, sites } from "@agency-saas/db";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -12,6 +13,9 @@ import {
 import { resolveScanProfile } from "./scan-engine/profiles.js";
 import { classifyScanError } from "./scan-retry.js";
 import { ScanContextError } from "./scan-persistence.js";
+import { reconcileScanVulnerabilities } from "./vulnerability-correlation.js";
+
+const vulnerabilityLogger = pino({ name: "deep-vulnerability-enrichment" });
 
 /** Two server process settings are required; job data cannot enable Deep. */
 export function internalDeepWorkerEnabled(env: NodeJS.ProcessEnv): boolean {
@@ -222,6 +226,17 @@ export async function runInternalDeepWorkerJob(input: {
             lease = claimed;
           },
         });
+        try {
+          await reconcileScanVulnerabilities(input.payload.scanId);
+        } catch (error) {
+          vulnerabilityLogger.warn(
+            {
+              scanId: input.payload.scanId,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+            },
+            "vulnerability correlation failed after completed Deep scan",
+          );
+        }
         return { scanId: input.payload.scanId, status: "completed" };
       } catch (error) {
         if (

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireCurrentSession } from "./current-session";
 import { getUserMemberships } from "./membership-context";
 import { getOrganizationOverview } from "./organization-overview";
+import { getOrganizationVulnerabilitySummary } from "./vulnerability-intelligence";
 
 export async function getWorkspaceOverview() {
   const session = await requireCurrentSession();
@@ -11,11 +12,21 @@ export async function getWorkspaceOverview() {
     redirect("/onboarding");
   }
 
-  const overviews = await Promise.all(
-    memberships.map((membership) =>
-      getOrganizationOverview(session.user.id, membership.organizationId),
+  const [overviews, vulnerabilitySummaries] = await Promise.all([
+    Promise.all(
+      memberships.map((membership) =>
+        getOrganizationOverview(session.user.id, membership.organizationId),
+      ),
     ),
-  );
+    Promise.all(
+      memberships.map((membership) =>
+        getOrganizationVulnerabilitySummary(
+          session.user.id,
+          membership.organizationId,
+        ),
+      ),
+    ),
+  ]);
   const sites = memberships.flatMap((membership, index) =>
     overviews[index]!.sites.map((site) => ({
       ...site,
@@ -44,6 +55,15 @@ export async function getWorkspaceOverview() {
         (site.latestScan?.highCount ?? 0) +
         (site.latestScan?.criticalCount ?? 0),
       0,
+    ),
+    vulnerabilitySummary: vulnerabilitySummaries.reduce(
+      (summary, item) => ({
+        technologies: summary.technologies + item.technologies,
+        confirmed: summary.confirmed + item.confirmed,
+        potential: summary.potential + item.potential,
+        kev: summary.kev + item.kev,
+      }),
+      { technologies: 0, confirmed: 0, potential: 0, kev: 0 },
     ),
   };
 }

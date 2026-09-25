@@ -1,0 +1,2 @@
+ALTER TABLE "vulnerability_sync_runs" ADD COLUMN "scope_key" text;--> statement-breakpoint
+CREATE INDEX "vulnerability_sync_runs_source_scope_completed_idx" ON "vulnerability_sync_runs" USING btree ("source","scope_key","completed_at");

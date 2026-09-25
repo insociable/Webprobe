@@ -4,9 +4,11 @@ import {
   scanCheckRuns,
   scans,
   sites,
+  technologyObservations,
 } from "@agency-saas/db";
 import { and, eq, sql } from "drizzle-orm";
 import { getDatabase } from "../database.js";
+import type { TechnologyObservationInput } from "../technology-inventory.js";
 import { BudgetLedger } from "./budget-ledger.js";
 import type { CheckRun } from "./engine.js";
 import type { DeepGrantIdentity, DeepLease } from "./deep-lease.js";
@@ -20,6 +22,7 @@ export async function persistDeepCheckRuns(input: {
   targetUrl: string;
   runs: readonly CheckRun[];
   ledger: BudgetLedger;
+  technologies: readonly TechnologyObservationInput[];
   lease: DeepLease;
   grantIdentity: DeepGrantIdentity | null;
   authorizationReason?: string | null;
@@ -45,6 +48,13 @@ export async function persistDeepCheckRuns(input: {
   );
   if (new Set(identities).size !== identities.length) {
     throw new Error("Duplicate check runs");
+  }
+  const technologyIdentities = input.technologies.map(
+    (technology) =>
+      `${technology.vendor}\0${technology.product}\0${technology.source}`,
+  );
+  if (new Set(technologyIdentities).size !== technologyIdentities.length) {
+    throw new Error("Duplicate technology observations");
   }
   const coverage = input.ledger.snapshot();
   const reasons = new Set<string>(coverage.reasons);
@@ -189,6 +199,29 @@ export async function persistDeepCheckRuns(input: {
       .where(eq(scanCheckRuns.scanId, input.scanId))
       .limit(1);
     if (prior.length) throw new Error("Check runs already persisted");
+
+    await tx
+      .delete(technologyObservations)
+      .where(eq(technologyObservations.scanId, input.scanId));
+
+    if (input.technologies.length > 0) {
+      await tx.insert(technologyObservations).values(
+        input.technologies.map((technology) => ({
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          scanId: input.scanId,
+          category: technology.category,
+          vendor: technology.vendor,
+          product: technology.product,
+          version: technology.version,
+          versionConfidence: technology.versionConfidence,
+          detectionConfidence: technology.detectionConfidence,
+          source: technology.source,
+          evidence: technology.evidence,
+          observedAt: new Date(),
+        })),
+      );
+    }
 
     await tx.insert(scanCheckRuns).values(
       input.runs.map((run) => ({

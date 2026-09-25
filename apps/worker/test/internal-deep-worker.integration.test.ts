@@ -7,6 +7,7 @@ import {
   scanCheckRuns,
   scans,
   sites,
+  technologyObservations,
 } from "@agency-saas/db";
 import { asc, eq, sql } from "drizzle-orm";
 import { Queue, Worker } from "bullmq";
@@ -407,6 +408,12 @@ describeDatabase("internal Deep worker lifecycle", () => {
           .from(scanCheckRuns)
           .where(eq(scanCheckRuns.scanId, f.scanId)),
       ).toHaveLength(0);
+      expect(
+        await db
+          .select()
+          .from(technologyObservations)
+          .where(eq(technologyObservations.scanId, f.scanId)),
+      ).toHaveLength(0);
       const [scan] = await db
         .select()
         .from(scans)
@@ -553,6 +560,18 @@ describeDatabase("internal Deep worker lifecycle", () => {
             resolveScanProfile("verified_deep_audit").budget,
             Date.now(),
           ),
+          technologies: [
+            {
+              category: "web_server",
+              vendor: "nginx",
+              product: "nginx",
+              version: "1.24.0",
+              versionConfidence: "exact",
+              detectionConfidence: "high",
+              source: "http_header",
+              evidence: { header: "server", signature: "nginx" },
+            },
+          ],
           runs: [
             {
               checkId: "deep-http-observation",

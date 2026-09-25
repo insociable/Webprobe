@@ -33,6 +33,14 @@ L'Audit approfondi reste non destructif : il ne soumet pas de formulaire, ne lan
 
 Le code de `main` accepte un Audit approfondi sur un site actif déjà vérifié. Lorsqu'un grant Deep DNS dédié existe, il est revalidé avant l'exécution et son identité participe au fencing de l'exécution.
 
+### Technologies et vulnérabilités connues
+
+Les scans peuvent construire un inventaire passif à partir de signaux réellement observés dans les en-têtes HTTP et le navigateur. La détection couvre notamment nginx, Apache HTTP Server, PHP, Cloudflare, WordPress, Drupal, Joomla, Next.js et Express selon les preuves disponibles.
+
+Les produits explicitement corrélables sont rapprochés des données NVD et CISA KEV. WebProbe distingue les correspondances confirmées des résultats « à vérifier » lorsque la version est inconnue, partielle ou que le contexte ne permet pas de conclure.
+
+La recherche historique NVD est ciblée sur les technologies réellement observées : WebProbe n'importe pas aveuglément toute la base NVD et n'invente aucun CPE. Une absence de correspondance ne constitue jamais une garantie d'absence de vulnérabilité.
+
 ## Score Deep
 
 Le rapport Deep peut afficher un score sur 100 calculé à partir des constats réellement observés. Les contrôles de sécurité ont des pénalités et plafonds plus importants que les contrôles informatifs.
@@ -136,7 +144,7 @@ L'exploitation d'une instance WebProbe nécessite une infrastructure adaptée. S
 - `docs/operations/v3-deep-activation.md` : exploitation du mode Deep ;
 - `docs/operations/health.md` : santé, disponibilité et diagnostics ;
 - `docs/security/public-audit.md` : modèle de sécurité de l’Audit public ;
-- `docs/architecture/vulnerability-intelligence.md` : inventaire passif et rapprochement CVE/KEV V3.1.
+- `docs/architecture/vulnerability-intelligence.md` : inventaire passif, corrélation CVE/KEV et bootstrap NVD ciblé V3.2.
 
 ## Licence
 

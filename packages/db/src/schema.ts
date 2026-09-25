@@ -1006,6 +1006,7 @@ export const vulnerabilitySyncRuns = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     source: text("source").notNull(),
+    scopeKey: text("scope_key"),
     status: text("status").default("running").notNull(),
     cursorStart: timestamp("cursor_start", { withTimezone: true }),
     cursorEnd: timestamp("cursor_end", { withTimezone: true }),
@@ -1023,6 +1024,11 @@ export const vulnerabilitySyncRuns = pgTable(
     index("vulnerability_sync_runs_source_started_idx").on(
       table.source,
       table.startedAt,
+    ),
+    index("vulnerability_sync_runs_source_scope_completed_idx").on(
+      table.source,
+      table.scopeKey,
+      table.completedAt,
     ),
     uniqueIndex("vulnerability_sync_runs_source_running_unique")
       .on(table.source)

@@ -1,4 +1,5 @@
 import type { BrowserRuntimeObservation } from "../browser-runtime.js";
+import type { TechnologyObservationInput } from "../technology-inventory.js";
 import type { HttpProbeResult } from "../http-probe.js";
 import type { AuthorizationDecision } from "./authorization.js";
 import { BudgetLedger } from "./budget-ledger.js";
@@ -100,6 +101,7 @@ export async function analyzeAndPersistDeepObservations(input: {
   ledger: BudgetLedger;
   observations: DeepObservations;
   observationFailures?: Readonly<Record<string, string>>;
+  technologies: readonly TechnologyObservationInput[];
   lease: DeepLease;
   signal: AbortSignal;
 }): Promise<readonly CheckRun[]> {
@@ -122,6 +124,7 @@ export async function analyzeAndPersistDeepObservations(input: {
     targetUrl: input.targetUrl,
     runs,
     ledger: input.ledger,
+    technologies: input.technologies,
     lease: input.lease,
     grantIdentity:
       input.authorization.allowed && input.authorization.grantIdentity

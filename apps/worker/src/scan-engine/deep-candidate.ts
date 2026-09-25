@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import type { Browser, LaunchOptions } from "playwright";
 import { getDatabase } from "../database.js";
 import { networkFailure, type HttpRequester } from "../http-probe.js";
+import { detectTechnologyInventory } from "../technology-inventory.js";
 import { BudgetLedger } from "./budget-ledger.js";
 import {
   analyzeAndPersistDeepObservations,
@@ -270,6 +271,18 @@ export async function runDeepAuditCandidate(input: {
       }
     }
 
+    const technologies = detectTechnologyInventory({
+      ...(observations.http?.ok ? { headers: observations.http.headers } : {}),
+      browser: observations.browser?.deep
+        ? {
+            resources: observations.browser.deep.resources.map(
+              (resource) => resource.url,
+            ),
+            meta: observations.browser.deep.meta,
+          }
+        : null,
+    });
+
     await analyzeAndPersistDeepObservations({
       scanId: input.scanId,
       organizationId: input.organizationId,
@@ -281,6 +294,7 @@ export async function runDeepAuditCandidate(input: {
       ledger,
       observations,
       observationFailures,
+      technologies,
       lease,
       signal: monitor.signal,
     });

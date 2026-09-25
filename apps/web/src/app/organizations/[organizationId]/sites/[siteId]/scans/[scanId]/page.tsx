@@ -26,10 +26,12 @@ import { buildReportRecommendations } from "@/lib/report-recommendations";
 import { correlateReportSignals } from "@/lib/report-correlations";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { listActiveReportShares } from "@/lib/report-share-service";
+import { getScanVulnerabilityOverview } from "@/lib/vulnerability-intelligence";
 import { ScanStatusRefresher } from "@/components/scan-status-refresher";
 import { PrintReportButton } from "@/components/print-report-button";
 import { ReportAffectedPages } from "@/components/report-affected-pages";
 import { DeepAuditReport } from "@/components/deep-audit-report";
+import { SiteVulnerabilityOverview } from "@/components/site-vulnerability-overview";
 import { ReportActionPlan } from "@/components/report-action-plan";
 import { ReportCorrelations } from "@/components/report-correlations";
 import { ReportCoverageDetails } from "@/components/report-coverage-details";
@@ -231,6 +233,15 @@ export default async function ScanPage({ params }: ScanPageProps) {
     findings: orderedFindings,
   });
   const isDeepAudit = details.scan.scanMode === "verified_deep_audit";
+  const vulnerabilityOverview =
+    isDeepAudit && details.scan.status === "completed"
+      ? await getScanVulnerabilityOverview(
+          session.user.id,
+          organizationId,
+          siteId,
+          scanId,
+        )
+      : null;
   const isUnverifiedPublicAudit =
     details.scan.scanMode === "public_audit" &&
     (details.site.status !== "active" || !details.site.verifiedAt);
@@ -430,6 +441,13 @@ export default async function ScanPage({ params }: ScanPageProps) {
           status={details.scan.status}
           summary={details.scan.summary}
           checkRuns={details.checkRuns}
+        />
+      ) : null}
+
+      {isDeepAudit && vulnerabilityOverview ? (
+        <SiteVulnerabilityOverview
+          observations={vulnerabilityOverview.observations}
+          matches={vulnerabilityOverview.matches}
         />
       ) : null}
 

@@ -368,7 +368,7 @@ export async function observeGuardedBrowserTarget(
                 document.querySelectorAll("meta[http-equiv],meta[name]"),
               )
                 .filter((element) =>
-                  /^(content-security-policy|refresh|referrer|permissions-policy|x-frame-options|strict-transport-security)$/i.test(
+                  /^(content-security-policy|refresh|referrer|permissions-policy|x-frame-options|strict-transport-security|generator)$/i.test(
                     element.getAttribute("http-equiv") ??
                       element.getAttribute("name") ??
                       "",
