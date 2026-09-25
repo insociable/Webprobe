@@ -52,8 +52,8 @@ export default async function NewSitePage({ params }: NewSitePageProps) {
         </div>
 
         <p className="mt-5 max-w-xl text-xs leading-5 text-[#59647a]">
-          WebProbe respecte robots.txt, les budgets réseau et les limites
-          du Public Audit. Certaines parties du site peuvent donc ne pas être
+          WebProbe respecte robots.txt, les budgets réseau et les limites du
+          Public Audit. Certaines parties du site peuvent donc ne pas être
           analysées.
         </p>
       </section>

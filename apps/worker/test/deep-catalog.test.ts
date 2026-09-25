@@ -83,8 +83,7 @@ describe("deep catalog", () => {
     ).not.toContain("csp-absent");
     const noCspRuns = await catalogRuns({ ...http, headers: {} }, browser);
     expect(
-      noCspRuns.find((item) => item.checkId === "deep-csp")?.evidence[0]
-        ?.data,
+      noCspRuns.find((item) => item.checkId === "deep-csp")?.evidence[0]?.data,
     ).toMatchObject({
       summary: "Aucune CSP observée.",
       findings: [{ code: "csp-absent", level: "review" }],

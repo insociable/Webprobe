@@ -112,12 +112,8 @@
           "name": "auth_accounts_user_id_users_id_fk",
           "tableFrom": "auth_accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -206,12 +202,8 @@
           "name": "auth_sessions_user_id_users_id_fk",
           "tableFrom": "auth_sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -221,9 +213,7 @@
         "auth_sessions_token_unique": {
           "name": "auth_sessions_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -345,12 +335,8 @@
           "name": "deep_audit_authorizations_site_id_sites_id_fk",
           "tableFrom": "deep_audit_authorizations",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -503,12 +489,8 @@
           "name": "findings_organization_id_organizations_id_fk",
           "tableFrom": "findings",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -516,12 +498,8 @@
           "name": "findings_scan_id_scans_id_fk",
           "tableFrom": "findings",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -629,12 +607,8 @@
           "name": "memberships_organization_id_organizations_id_fk",
           "tableFrom": "memberships",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -642,12 +616,8 @@
           "name": "memberships_user_id_users_id_fk",
           "tableFrom": "memberships",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -849,12 +819,8 @@
           "name": "notification_deliveries_organization_id_organizations_id_fk",
           "tableFrom": "notification_deliveries",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -862,12 +828,8 @@
           "name": "notification_deliveries_site_id_sites_id_fk",
           "tableFrom": "notification_deliveries",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -875,12 +837,8 @@
           "name": "notification_deliveries_scan_id_scans_id_fk",
           "tableFrom": "notification_deliveries",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -888,12 +846,8 @@
           "name": "notification_deliveries_recipient_user_id_users_id_fk",
           "tableFrom": "notification_deliveries",
           "tableTo": "users",
-          "columnsFrom": [
-            "recipient_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["recipient_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1150,12 +1104,8 @@
           "name": "recipient_finding_incidents_organization_id_organizations_id_fk",
           "tableFrom": "recipient_finding_incidents",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1163,12 +1113,8 @@
           "name": "recipient_finding_incidents_site_id_sites_id_fk",
           "tableFrom": "recipient_finding_incidents",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1176,12 +1122,8 @@
           "name": "recipient_finding_incidents_recipient_user_id_users_id_fk",
           "tableFrom": "recipient_finding_incidents",
           "tableTo": "users",
-          "columnsFrom": [
-            "recipient_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["recipient_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1189,12 +1131,8 @@
           "name": "recipient_finding_incidents_opened_scan_id_scans_id_fk",
           "tableFrom": "recipient_finding_incidents",
           "tableTo": "scans",
-          "columnsFrom": [
-            "opened_scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["opened_scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1202,12 +1140,8 @@
           "name": "recipient_finding_incidents_resolved_scan_id_scans_id_fk",
           "tableFrom": "recipient_finding_incidents",
           "tableTo": "scans",
-          "columnsFrom": [
-            "resolved_scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["resolved_scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1394,12 +1328,8 @@
           "name": "report_deliveries_report_share_id_report_shares_id_fk",
           "tableFrom": "report_deliveries",
           "tableTo": "report_shares",
-          "columnsFrom": [
-            "report_share_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["report_share_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1407,12 +1337,8 @@
           "name": "report_deliveries_organization_id_organizations_id_fk",
           "tableFrom": "report_deliveries",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1420,12 +1346,8 @@
           "name": "report_deliveries_site_id_sites_id_fk",
           "tableFrom": "report_deliveries",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1433,12 +1355,8 @@
           "name": "report_deliveries_scan_id_scans_id_fk",
           "tableFrom": "report_deliveries",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1593,12 +1511,8 @@
           "name": "report_shares_organization_id_organizations_id_fk",
           "tableFrom": "report_shares",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1606,12 +1520,8 @@
           "name": "report_shares_site_id_sites_id_fk",
           "tableFrom": "report_shares",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1619,12 +1529,8 @@
           "name": "report_shares_scan_id_scans_id_fk",
           "tableFrom": "report_shares",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1632,12 +1538,8 @@
           "name": "report_shares_created_by_user_id_users_id_fk",
           "tableFrom": "report_shares",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1798,12 +1700,8 @@
           "name": "scan_artifacts_organization_id_organizations_id_fk",
           "tableFrom": "scan_artifacts",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1811,12 +1709,8 @@
           "name": "scan_artifacts_site_id_sites_id_fk",
           "tableFrom": "scan_artifacts",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1824,12 +1718,8 @@
           "name": "scan_artifacts_scan_id_scans_id_fk",
           "tableFrom": "scan_artifacts",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1968,12 +1858,8 @@
           "name": "scan_attempts_scan_id_scans_id_fk",
           "tableFrom": "scan_attempts",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2078,12 +1964,8 @@
           "name": "scan_check_runs_scan_id_scans_id_fk",
           "tableFrom": "scan_check_runs",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2207,12 +2089,8 @@
           "name": "scan_dispatches_scan_id_scans_id_fk",
           "tableFrom": "scan_dispatches",
           "tableTo": "scans",
-          "columnsFrom": [
-            "scan_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scan_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2351,12 +2229,8 @@
           "name": "scan_schedules_organization_id_organizations_id_fk",
           "tableFrom": "scan_schedules",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2364,12 +2238,8 @@
           "name": "scan_schedules_site_id_sites_id_fk",
           "tableFrom": "scan_schedules",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2599,12 +2469,8 @@
           "name": "scans_organization_id_organizations_id_fk",
           "tableFrom": "scans",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2612,12 +2478,8 @@
           "name": "scans_site_id_sites_id_fk",
           "tableFrom": "scans",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2625,12 +2487,8 @@
           "name": "scans_requested_by_user_id_users_id_fk",
           "tableFrom": "scans",
           "tableTo": "users",
-          "columnsFrom": [
-            "requested_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2638,12 +2496,8 @@
           "name": "scans_schedule_id_scan_schedules_id_fk",
           "tableFrom": "scans",
           "tableTo": "scan_schedules",
-          "columnsFrom": [
-            "schedule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schedule_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2756,12 +2610,8 @@
           "name": "site_verification_challenges_organization_id_organizations_id_fk",
           "tableFrom": "site_verification_challenges",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2769,12 +2619,8 @@
           "name": "site_verification_challenges_site_id_sites_id_fk",
           "tableFrom": "site_verification_challenges",
           "tableTo": "sites",
-          "columnsFrom": [
-            "site_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["site_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2886,12 +2732,8 @@
           "name": "sites_organization_id_organizations_id_fk",
           "tableFrom": "sites",
           "tableTo": "organizations",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organization_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2987,99 +2829,52 @@
     "public.notification_delivery_status": {
       "name": "notification_delivery_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "sending",
-        "sent"
-      ]
+      "values": ["pending", "sending", "sent"]
     },
     "public.organization_role": {
       "name": "organization_role",
       "schema": "public",
-      "values": [
-        "owner",
-        "admin",
-        "member"
-      ]
+      "values": ["owner", "admin", "member"]
     },
     "public.report_delivery_status": {
       "name": "report_delivery_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "sending",
-        "sent",
-        "cancelled"
-      ]
+      "values": ["pending", "sending", "sent", "cancelled"]
     },
     "public.scan_attempt_status": {
       "name": "scan_attempt_status",
       "schema": "public",
-      "values": [
-        "running",
-        "retrying",
-        "completed",
-        "failed"
-      ]
+      "values": ["running", "retrying", "completed", "failed"]
     },
     "public.scan_dispatch_status": {
       "name": "scan_dispatch_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "dispatching",
-        "dispatched",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["pending", "dispatching", "dispatched", "failed", "cancelled"]
     },
     "public.scan_mode": {
       "name": "scan_mode",
       "schema": "public",
-      "values": [
-        "public_audit",
-        "verified_monitoring",
-        "verified_deep_audit"
-      ]
+      "values": ["public_audit", "verified_monitoring", "verified_deep_audit"]
     },
     "public.scan_status": {
       "name": "scan_status",
       "schema": "public",
-      "values": [
-        "queued",
-        "running",
-        "completed",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["queued", "running", "completed", "failed", "cancelled"]
     },
     "public.scan_trigger": {
       "name": "scan_trigger",
       "schema": "public",
-      "values": [
-        "manual",
-        "scheduled"
-      ]
+      "values": ["manual", "scheduled"]
     },
     "public.severity": {
       "name": "severity",
       "schema": "public",
-      "values": [
-        "info",
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ]
+      "values": ["info", "low", "medium", "high", "critical"]
     },
     "public.site_status": {
       "name": "site_status",
       "schema": "public",
-      "values": [
-        "pending_verification",
-        "active",
-        "paused"
-      ]
+      "values": ["pending_verification", "active", "paused"]
     }
   },
   "schemas": {},

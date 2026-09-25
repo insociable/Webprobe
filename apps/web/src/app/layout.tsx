@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 
-const siteTitle = "WebProbe — audit, monitoring et analyse technique de sites web";
+const siteTitle =
+  "WebProbe — audit, monitoring et analyse technique de sites web";
 const siteDescription =
   "Analysez la sécurité, les performances, le SEO et la configuration technique de vos sites web avec des rapports clairs et des recommandations actionnables.";
 
