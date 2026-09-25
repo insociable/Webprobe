@@ -30,6 +30,10 @@ const checks = [
   ["Navigateur", "Erreurs JavaScript et rendu réellement observé"],
   ["Historique", "Comparaison avec les scans précédents et rétablissements"],
   [
+    "Technologies & CVE",
+    "Inventaire passif et vérification régulière des vulnérabilités connues via NVD et CISA KEV",
+  ],
+  [
     "Rapports & remédiations",
     "Preuves, priorités et recommandations actionnables",
   ],
@@ -71,7 +75,8 @@ export default function Home() {
             informations actionnables : sécurité, performance, SEO,
             disponibilité, configuration technique, historique et remédiations.
             Sur un domaine vérifié, vous pouvez aussi lancer un audit approfondi
-            avec le moteur Deep V3.
+            avec le moteur Deep V3, inventorier les technologies observées et
+            les rapprocher des CVE connues.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/sign-in" className="am-button-primary">
@@ -177,8 +182,10 @@ export default function Home() {
             <p className="mt-3 text-sm leading-6 text-[#8793a8]">
               Le mode Deep utilise le moteur V3 avec transports HTTP et
               navigateur gardés, budgets réseau, protections anti-SSRF,
-              contrôles dédiés et preuves techniques. La vérification DNS
-              existante du domaine suffit pour l’autoriser.
+              contrôles dédiés et preuves techniques. Les technologies observées
+              sont régulièrement rapprochées des CVE publiées par NVD et CISA
+              KEV. La vérification DNS existante du domaine suffit pour
+              l’autoriser.
             </p>
           </article>
         </div>
