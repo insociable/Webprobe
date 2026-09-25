@@ -55,5 +55,41 @@ describe("Deep audit report rendering", () => {
     expect(html).toContain("/ 100");
     expect(html).toContain("Le diagnostic de la CSP figure dans le contrôle");
     expect(html).toContain("Couverture à vérifier");
+    expect(html).toContain("Remédiation");
+    expect(html).toContain("Définir une Content-Security-Policy");
+    expect(html).toContain("Détails techniques");
+    expect(html).toContain("<details");
+    expect(html).toContain("<summary");
+  });
+
+  it("keeps a Deep finding actionable while preserving technical evidence", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: [
+          checkRun("deep-resources", {
+            title: "Ressources de page",
+            summary: "Une ressource non chiffrée a été observée.",
+            findings: [
+              {
+                code: "mixed-content-resource",
+                level: "review",
+                summary: "Ressource HTTP depuis une page HTTPS.",
+                recommendation: "Servir la ressource en HTTPS.",
+                observed: "http://assets.example/app.js",
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    expect(html).toContain("Ressource HTTP depuis une page HTTPS.");
+    expect(html).toContain("Remédiation");
+    expect(html).toContain("Servir la ressource en HTTPS.");
+    expect(html).toContain("Détails techniques");
+    expect(html).toContain("mixed-content-resource");
+    expect(html).toContain("http://assets.example/app.js");
   });
 });
