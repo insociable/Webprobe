@@ -1,41 +1,44 @@
-# Health and diagnostics
+# Santé et diagnostics
 
-Phase 4B keeps public health information deliberately small.
+## Endpoints publics
 
-## Public endpoints
+- `GET /api/health/live` : vérifie uniquement que le processus Web répond ;
+- `GET /api/health/ready` : vérifie les dépendances nécessaires au service ;
+- `GET /api/health` : alias de compatibilité de l'état de disponibilité.
 
-- `GET /api/health/live`: process liveness only. It does not query dependencies.
-- `GET /api/health/ready`: readiness for PostgreSQL, Valkey, worker heartbeat, scan queue and browser.
-- `GET /api/health`: compatibility alias for readiness.
+L'état de disponibilité renvoie HTTP 503 lorsqu'un composant requis est indisponible. La réponse publique reste volontairement synthétique et n'expose pas les détails métier des organisations ou des scans.
 
-Readiness returns only component states and HTTP 503 when any required component is down.
-It does not expose queue sizes, scan counts, URLs, tenant identifiers or error details.
+## Signal de vie du worker
 
-## Worker heartbeat
+Le worker publie périodiquement dans Valkey un état de santé avec expiration. Un signal de vie absent ou périmé fait échouer l'état de disponibilité.
 
-The scanner worker publishes an expiring health snapshot to Valkey every 10 seconds.
-A missing or stale heartbeat makes readiness fail closed.
+Les métriques internes comprennent notamment :
 
-The snapshot includes operational metrics only:
+- états BullMQ et backlog ;
+- scans en cours ou anciens ;
+- compteurs Deep séparés ;
+- succès et échecs récents ;
+- état des dispatches ;
+- PostgreSQL ;
+- Valkey et la file ;
+- Chromium.
 
-- BullMQ waiting, active, delayed, failed, backlog and oldest pending age;
-- running and stale scans;
-- separate Deep running/stale and 24-hour completed/failed counters, so Deep incidents are distinguishable from V2;
-- completed and failed scans over the last 24 hours;
-- recent success rate and average terminal duration;
-- pending/error scan dispatches;
-- database, queue and browser state.
+Chromium est sondé périodiquement par lancement/fermeture d'un navigateur sans navigation vers une cible.
 
-Chromium is probed periodically by launching and closing a headless browser without navigation.
+## Diagnostic local
 
-## Local detailed diagnostics
-
-Detailed metrics are intentionally not exposed through a public HTTP route.
-
-From the project directory, run:
+Depuis la racine :
 
 ```bash
 pnpm --filter @agency-saas/worker diagnostics
 ```
 
-The command reads the current Valkey heartbeat and reports its age/freshness.
+Pour la production :
+
+```bash
+curl -fsS https://webprobe.fr/api/health/ready
+systemctl is-active agency-saas-web.service
+systemctl is-active agency-saas-worker.service
+```
+
+Les métriques détaillées ne doivent pas être exposées publiquement sans besoin explicite.
