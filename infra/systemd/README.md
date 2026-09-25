@@ -1,33 +1,44 @@
-# Development worker service
+# Services systemd WebProbe
 
-The development VM runs the scanner worker as a systemd service.
+Les unités versionnées décrivent les services Web et Worker de l'instance actuelle.
 
-The unit:
+## Fichiers
 
-- runs as the unprivileged `vboxuser` account;
-- reads runtime configuration from `/srv/agency-saas/.env`;
-- starts the already-built worker from `apps/worker/dist/index.js`;
-- restarts automatically after an unexpected exit;
-- allows up to 60 seconds for graceful shutdown, leaving margin beyond the 30-second Deep lease so abort/release can complete before SIGKILL;
-- enables basic systemd sandboxing.
+- `agency-saas-web.service` : application Next.js ;
+- `agency-saas-worker.service` : worker de scans.
 
-## Install or refresh the unit
+Les noms historiques `agency-saas-*` restent utilisés par l'infrastructure afin d'éviter un renommage opérationnel inutile.
 
-```sh
-install -o root -g root -m 0644   /srv/agency-saas/infra/systemd/agency-saas-worker.service   /etc/systemd/system/agency-saas-worker.service
+## Installation ou mise à jour
+
+Depuis la VM :
+
+```bash
+install -o root -g root -m 0644 /srv/agency-saas/infra/systemd/agency-saas-web.service /etc/systemd/system/agency-saas-web.service
+install -o root -g root -m 0644 /srv/agency-saas/infra/systemd/agency-saas-worker.service /etc/systemd/system/agency-saas-worker.service
 systemctl daemon-reload
-systemctl enable --now agency-saas-worker.service
+systemctl enable agency-saas-web.service agency-saas-worker.service
 ```
 
-## Deploy new worker code on the development VM
+Ne pas remplacer une unité de production sans comparer d'abord la version installée et la version du dépôt.
 
-Build the worker and its workspace dependencies first:
+## Construction et redémarrage
 
-```sh
+Construire le code avant de redémarrer un service :
+
+```bash
 cd /srv/agency-saas
-runuser -u vboxuser -- env HOME=/home/vboxuser   XDG_CONFIG_HOME=/home/vboxuser/.config   pnpm exec turbo build --filter=@agency-saas/worker
+pnpm build
+systemctl restart agency-saas-web.service
 systemctl restart agency-saas-worker.service
+systemctl is-active agency-saas-web.service
 systemctl is-active agency-saas-worker.service
 ```
 
-Do not place secrets in the unit file. Keep them in the ignored `.env` file with restrictive permissions.
+Redémarrer uniquement les services concernés lorsque cela est possible.
+
+## Secrets
+
+Les unités ne contiennent aucun secret applicatif.
+
+La configuration sensible reste dans `/srv/agency-saas/.env`, non versionné et avec des permissions restrictives.

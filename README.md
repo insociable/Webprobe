@@ -1,62 +1,84 @@
-# Agency Site Monitor
+# WebProbe
 
-Nom de travail d'un SaaS B2B de surveillance de sites destiné aux agences,
-freelances et prestataires qui gèrent plusieurs sites clients.
+> Audit, monitoring et analyse technique de sites web.
 
-## État
+WebProbe analyse des sites web publics afin de faire ressortir des constats techniques sur leur disponibilité, leur configuration HTTP, leur sécurité, leur comportement navigateur, leur accessibilité et certains éléments de performance ou de référencement.
 
-Le dépôt contient le socle technique du pilote :
+L'instance officielle actuellement déployée est : `https://webprobe.fr`.
 
-- application web et API avec Next.js ;
-- worker de scans séparé et file de tâches BullMQ ;
-- contrats de données partagés et validés avec Zod ;
-- garde-fous SSRF testés avant toute navigation ;
-- runtime Chromium isolé pour crawl interne borné, JavaScript et axe-core ;
-- PostgreSQL, Valkey et Mailpit sous Docker Compose ;
-- commandes communes avec pnpm et Turborepo.
+## Fonctionnalités principales
 
-Aucun environnement de production n'est encore exposé.
+### Scan standard
 
-## Pilote fonctionnel
+Le Scan standard est destiné au contrôle courant et au monitoring d'un site. Il collecte notamment des informations HTTP, TLS, en-têtes, liens, comportement navigateur, JavaScript, accessibilité et capture visuelle lorsque celle-ci est activée.
 
-La première tranche verticale doit permettre :
+Les sites vérifiés peuvent être suivis dans le temps afin de comparer les résultats, planifier des scans et déclencher les notifications prévues par l'application.
 
-1. de créer une organisation et un site vérifié ;
-2. de lancer un scan manuel ou hebdomadaire ;
-3. de contrôler HTTP, TLS, en-têtes, liens, JavaScript et accessibilité ;
-4. de conserver les résultats et une capture ;
-5. d'afficher les différences depuis le scan précédent ;
-6. d'envoyer un rapport de marque par e-mail.
+### Audit approfondi
 
-La limite initiale est volontaire : quelques agences pilotes, vingt sites
-environ et un nombre de pages plafonné par scan.
+L'Audit approfondi utilise le mode interne `verified_deep_audit` et un moteur distinct du parcours standard. Il analyse actuellement dix contrôles :
 
-## Hors périmètre initial
+- observation HTTP ;
+- observation navigateur ;
+- TLS ;
+- en-têtes de sécurité ;
+- Content Security Policy ;
+- cookies ;
+- ressources ;
+- endpoints observés ;
+- formulaires ;
+- métadonnées navigateur.
 
-- pentest et scan agressif de vulnérabilités ;
-- réseaux internes ou sites nécessitant un mot de passe ;
-- crawl massif et soumission de formulaires ;
-- applications mobiles ;
-- catalogue d'intégrations ;
-- microservices et multi-région ;
-- certification juridique ou conformité WCAG exhaustive ;
-- automatisation par IA sans valeur démontrée.
+L'Audit approfondi reste non destructif : il ne soumet pas de formulaire, ne lance pas de recherche par dictionnaire et n'effectue pas de pentest agressif. Son périmètre réseau est strict, les transports sont protégés contre les SSRF et l'exécution est bornée par des budgets de requêtes, pages, octets, DNS, TLS et durée.
+
+Le code de `main` accepte un Audit approfondi sur un site actif déjà vérifié. Lorsqu'un grant Deep DNS dédié existe, il est revalidé avant l'exécution et son identité participe au fencing de l'exécution.
+
+## Score Deep
+
+Le rapport Deep peut afficher un score sur 100 calculé à partir des constats réellement observés. Les contrôles de sécurité ont des pénalités et plafonds plus importants que les contrôles informatifs.
+
+Une couverture incomplète limite le score maximal afin qu'un contrôle non exécuté ne soit pas interprété comme un résultat favorable.
+
+Le Score Deep est un indice de synthèse. Il ne constitue ni un pourcentage de sécurité, ni une preuve d'absence de vulnérabilité, ni une certification.
 
 ## Architecture
 
-- `apps/web` : interface, API et orchestration métier ;
-- `apps/worker` : consommation des tâches de scan ;
-- `packages/contracts` : schémas partagés ;
-- `packages/security` : validation des cibles et protections réseau ;
-- `packages/db` : accès PostgreSQL et migrations ;
-- `infra/compose.yaml` : dépendances locales uniquement.
+Le dépôt est un monorepo TypeScript géré avec pnpm et Turborepo.
 
-Le produit reste un monolithe modulaire. Le worker est séparé parce que le
-navigateur headless constitue une frontière de sécurité et de ressources.
+- `apps/web` : interface Web, API, authentification et orchestration applicative ;
+- `apps/worker` : exécution des scans, BullMQ, Chromium et traitements asynchrones ;
+- `packages/contracts` : contrats et schémas partagés ;
+- `packages/security` : validation des cibles et primitives de sécurité réseau ;
+- `packages/db` : schéma PostgreSQL, accès aux données et migrations ;
+- `infra/compose.yaml` : dépendances d'infrastructure pour l'environnement local.
 
-## Démarrage local
+PostgreSQL est la source de vérité. Valkey est utilisé par BullMQ et pour l'état opérationnel éphémère. Chromium est piloté avec Playwright par le worker.
 
-Prérequis : Node.js 24, pnpm 10 et Docker Compose.
+## Sécurité
+
+Les principaux invariants sont :
+
+- validation des URL, DNS et adresses IP avant connexion ;
+- refus des destinations privées, loopback, link-local, multicast et metadata cloud ;
+- revalidation des redirections et épinglage de l'adresse publique validée ;
+- périmètre strict pour l'Audit approfondi ;
+- Chromium exécuté sans privilège avec sandbox active ;
+- proxy et transports applicatifs contrôlés ;
+- budgets de réseau, durée et concurrence ;
+- lease et fencing PostgreSQL pour les tentatives Deep ;
+- isolation des données par organisation ;
+- secrets conservés hors du dépôt ;
+- artefacts sensibles non servis directement comme fichiers statiques.
+
+Voir `SECURITY.md` pour les détails.
+
+## Installation locale
+
+Prérequis :
+
+- Node.js 24 ;
+- pnpm 10 ;
+- Docker avec Docker Compose.
 
 ```bash
 cp .env.example .env
@@ -67,10 +89,7 @@ pnpm test
 pnpm dev
 ```
 
-Les ports PostgreSQL, Valkey, SMTP et Mailpit sont publiés uniquement sur
-`127.0.0.1`. Le fichier `.env` n'est jamais versionné.
-
-Pour préparer le runtime navigateur du worker :
+Pour installer Chromium pour le worker :
 
 ```bash
 PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
@@ -78,68 +97,43 @@ PLAYWRIGHT_BROWSERS_PATH=.playwright-browsers \
 pnpm --filter @agency-saas/worker smoke:browser
 ```
 
-Le cache Chromium local est ignoré par Git. Le smoke charge une cible publique et
-vérifie qu'un accès loopback/metadata ne contourne pas le proxy egress sécurisé.
+La configuration est décrite dans `.env.example`. Les secrets réels ne doivent jamais être versionnés.
 
-## Captures du pilote
+## Vérifications du dépôt
 
-Quand `captureScreenshots` est activé, le worker conserve au plus une capture
-JPEG du viewport de la page principale par scan, avec une limite de 2 MiB. Les
-octets restent hors PostgreSQL sous `SCAN_ARTIFACTS_DIR` (par défaut
-`storage/scan-artifacts`) ; la base ne contient que la clé, le type, la taille
-et le SHA-256.
-
-Les audits publics terminés suivent une rétention automatique de 90 jours par
-défaut, configurable avec `PUBLIC_AUDIT_RETENTION_DAYS`. La purge est exécutée
-par le worker en lots bornés : elle supprime d'abord les fichiers d'artefacts,
-puis le scan et ses données liées par cascade. Une erreur de suppression fichier
-fait échouer la purge de ce scan plutôt que de laisser volontairement un fichier
-orphelin. Un audit possédant encore un lien de rapport actif n'est pas purgé.
-
-Les scans de monitoring vérifié ne sont pas concernés par cette politique. Les
-paramètres `PUBLIC_AUDIT_RETENTION_BATCH_SIZE` et
-`PUBLIC_AUDIT_RETENTION_INTERVAL_SECONDS` bornent respectivement la taille d'un
-lot et la fréquence du coordinator.
-
-## Rapports partageables
-
-Les owners et admins peuvent créer un lien public temporaire pour un scan terminé
-ou mettre un rapport en file d'envoi par e-mail. Le branding du pilote comprend
-un nom de marque et une couleur d'accent ; aucun logo distant n'est chargé.
-
-Les liens expirent après sept jours et peuvent être révoqués à tout moment. Le
-jeton brut n'est pas stocké : PostgreSQL conserve son SHA-256 pour la résolution
-publique et une copie chiffrée AES-256-GCM pour reconstruire le lien dans le
-dashboard et l'outbox. `REPORT_TOKEN_SECRET` doit contenir au moins 32 caractères
-aléatoires ; `REPORT_PUBLIC_BASE_URL` définit l'origine des liens envoyés.
-
-Le rapport public est résolu uniquement par jeton, recroise organisation, site et
-scan côté serveur, utilise `noindex/nofollow` et `no-referrer`, et ne nécessite
-aucun identifiant interne dans son URL.
-
-## Invariants de sécurité
-
-- seules les URL HTTP(S) sur ports standards sont acceptées ;
-- toutes les réponses DNS doivent être publiques ;
-- chaque redirection devra être revalidée avant navigation ;
-- les plages privées, locales, link-local, multicast et metadata cloud sont bloquées ;
-- les workers Playwright seront isolés et limités en temps, pages et ressources ;
-- chaque requête métier portera explicitement l'identifiant d'organisation ;
-- aucun secret, mot de passe de site ou contenu sensible ne doit finir dans les logs ;
-- les rapports partagés utilisent des jetons courts, révocables et expirants.
-
-## Vérifications
+Les commandes principales sont :
 
 ```bash
-pnpm build
+pnpm format:check
+pnpm lint
 pnpm typecheck
 pnpm test
-pnpm lint
+pnpm build
 ```
 
-Voir `docs/adr/0001-pilot-scope-and-architecture.md` et `SECURITY.md`.
-Le gate opérationnel avant toute mise en ligne est dans
-`docs/operations/preproduction.md`.
+Les tests d'intégration PostgreSQL et Valkey nécessitent leur environnement dédié. Les modifications purement documentaires ne nécessitent pas systématiquement l'exécution de toute la suite applicative.
 
-Le fonctionnement du rapprochement CVE/KEV V3.1 est documenté dans
-`docs/architecture/vulnerability-intelligence.md`.
+## Production
+
+L'instance actuelle est déployée sous `/srv/agency-saas` et exposée sur `https://webprobe.fr`.
+
+Les services principaux sont :
+
+- `agency-saas-web.service` ;
+- `agency-saas-worker.service`.
+
+Les procédures d'exploitation, de déploiement, de diagnostic et de retour arrière sont documentées dans `docs/operations/production.md`.
+
+## Coûts d'infrastructure
+
+L'exploitation d'une instance WebProbe nécessite une infrastructure adaptée. Selon l'hébergement retenu, cela peut inclure les coûts d'un serveur ou d'une VM, du domaine, du stockage et des sauvegardes, de l'envoi d'e-mails et d'éventuels services tiers.
+
+## Documentation
+
+- `SECURITY.md` : modèle de sécurité et limites ;
+- `docs/architecture/v3-scan-engine.md` : architecture du moteur Deep ;
+- `docs/operations/production.md` : guide d’exploitation de la production ;
+- `docs/operations/v3-deep-activation.md` : exploitation du mode Deep ;
+- `docs/operations/health.md` : santé, disponibilité et diagnostics ;
+- `docs/security/public-audit.md` : modèle de sécurité de l’Audit public ;
+- `docs/architecture/vulnerability-intelligence.md` : inventaire passif et rapprochement CVE/KEV V3.1.

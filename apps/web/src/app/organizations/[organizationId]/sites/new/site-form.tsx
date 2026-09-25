@@ -20,7 +20,7 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
           required
           inputMode="url"
           name="canonicalUrl"
-          placeholder="https://entreprise.fr"
+          placeholder="https://entreprise.example"
           className="am-field text-base"
         />
         <span className="mt-2 block text-xs leading-5 text-white/35">

@@ -1,0 +1,35 @@
+[Unit]
+Description=Agency SaaS web application
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vboxuser
+Group=vboxuser
+WorkingDirectory=/srv/agency-saas/apps/web
+Environment=NODE_ENV=production
+EnvironmentFile=/srv/agency-saas/.env
+ExecStart=/usr/bin/node /srv/agency-saas/apps/web/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+MemoryHigh=512M
+MemoryMax=768M
+TasksMax=256
+LimitNOFILE=4096
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

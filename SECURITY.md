@@ -1,129 +1,131 @@
-# Security Policy
+# Politique de sécurité
 
-## Statut
+## Signalement
 
-Le projet est en phase pilote privée. Ne publiez pas de vulnérabilité exploitable
-dans une issue publique. Utilisez un canal privé avec le mainteneur du dépôt.
+Ne publiez pas de vulnérabilité exploitable dans une issue GitHub publique. Utilisez un canal privé avec le mainteneur du dépôt afin de permettre l'analyse et la correction avant divulgation.
 
 ## Frontières de confiance
 
-Les URL analysées et tout leur contenu sont hostiles. Les navigateurs de scan,
-réponses DNS, redirections, certificats, fichiers téléchargés et scripts distants
-ne doivent jamais être considérés comme fiables.
+Les URL analysées et leur contenu sont considérés comme hostiles. Les réponses DNS, redirections, certificats, ressources distantes, scripts, formulaires et données navigateur ne sont jamais considérés comme fiables par défaut.
 
-Les principales menaces sont :
+Les risques principaux sont notamment :
 
-- SSRF vers le LAN, la VM hôte, les services Docker ou une metadata cloud ;
-- DNS rebinding et redirections vers une adresse non publique ;
-- évasion ou épuisement de ressources depuis Chromium ;
-- fuite entre organisations ;
-- injection HTML dans les rapports ;
-- exposition de secrets dans les journaux ou les artefacts ;
-- abus de la plateforme pour scanner des tiers.
+- SSRF vers le LAN, la VM hôte, les services locaux ou une metadata cloud ;
+- DNS rebinding et redirections vers une destination non publique ;
+- contournement du périmètre autorisé ;
+- épuisement de ressources ou évasion depuis Chromium ;
+- fuite de données entre organisations ;
+- injection de contenu dans les rapports ;
+- exposition de secrets dans les journaux ou artefacts ;
+- utilisation du service pour sonder des cibles hors périmètre.
 
-## Contrôles obligatoires
+## Anti-SSRF, DNS et redirections
 
-- vérification de propriété avant scans récurrents ;
-- validation DNS avant chaque connexion et chaque redirection ;
-- refus par défaut des destinations non publiques et ports non standards ;
-- quotas de pages, temps, taille, concurrence et fréquence ;
-- exécution du navigateur sans privilège dans un environnement isolé ;
-- chiffrement TLS en transit et secrets hors du dépôt ;
-- filtrage systématique par organisation dans les accès aux données ;
-- journal d'audit pour les actions sensibles ;
-- durée de conservation explicite pour captures et rapports.
+WebProbe applique des validations réseau avant les connexions :
 
-## Règles d'exploitation
+- seules les URL HTTP(S) compatibles avec la politique du mode sont acceptées ;
+- les résolutions DNS doivent produire des adresses publiques ;
+- les plages privées, loopback, link-local, multicast et metadata cloud sont refusées ;
+- les redirections sont revalidées avant connexion ;
+- les transports gardés épinglent une adresse publique validée afin de réduire le risque de DNS rebinding ;
+- les ports et changements d'origine non autorisés sont refusés.
 
-Les services de développement écoutent uniquement sur `127.0.0.1`.
-Publier un port Docker sur toutes les interfaces exige une revue de sécurité.
-Le groupe Unix `docker` confère pratiquement les privilèges root.
+Ces contrôles sont appliqués dans le parcours standard et renforcés par le périmètre explicite du moteur Deep.
 
-La connexion SSH par mot de passe est temporairement conservée jusqu'à ce
-qu'une clé soit installée et testée. Le compte root n'est pas autorisé en SSH.
+## Chromium
 
-## Authentification du pilote
+Chromium est piloté avec Playwright par le worker.
 
-L'authentification applicative utilise un OTP envoyé par e-mail, sans mot de
-passe géré par le SaaS. Les OTP expirent après cinq minutes, sont limités à trois
-essais et sont stockés sous forme hachée. L'envoi est limité à trois demandes
-par minute et par client au niveau de Better Auth. Les adresses e-mail sont
-normalisées avant recherche et création.
+L'environnement d'exécution du navigateur :
 
-Mailpit est uniquement un transport de développement. La limitation de débit
-actuelle utilise la mémoire du processus et devra passer sur un stockage partagé
-avant tout déploiement multi-instance.
+- fonctionne sous un compte non privilégié ;
+- conserve le sandbox Chromium actif ;
+- utilise un proxy local contrôlé pour les connexions sortantes ;
+- désactive le bypass loopback implicite ;
+- désactive QUIC et les flux WebRTC UDP non proxifiés ;
+- bloque les WebSockets et service workers dans le parcours de scan concerné ;
+- refuse les méthodes HTTP non idempotentes lorsque la politique du scan l'exige ;
+- applique des limites de pages, durée, mémoire et tâches.
 
-## Runtime navigateur du pilote
+Une politique egress réseau au niveau de l'hôte ou du conteneur reste une défense complémentaire utile face à une hypothétique évasion complète du sandbox.
 
-Le runtime Chromium utilise Playwright avec le sandbox Chromium explicitement
-activé. Chaque session crée un proxy HTTP local éphémère obligatoire :
+## Audit approfondi
 
-- chaque cible HTTP et chaque tunnel HTTPS CONNECT est revalidé avec les mêmes
-  règles SSRF que le probe HTTP ;
-- toutes les réponses DNS doivent être publiques et la connexion sortante est
-  épinglée sur l'adresse validée ;
-- seuls les ports HTTP/HTTPS standards sont acceptés ;
-- le bypass implicite loopback de Chromium est désactivé ;
-- la résolution DNS directe de Chromium est désactivée hors proxy ;
-- QUIC et l'UDP WebRTC non proxifié sont désactivés ;
-- les WebSockets et service workers sont bloqués dans cette première version ;
-- le runtime refuse les méthodes HTTP non idempotentes avant émission ;
-- les pages, délais, processus et descripteurs sont bornés ; le service systemd
-  ajoute des limites mémoire et de tâches.
+Le mode `verified_deep_audit` possède un cycle de vie distinct du scan standard.
 
-Le smoke navigateur démarre également un serveur sentinelle sur loopback et
-vérifie qu'un Chromium ayant accès à un site public ne peut pas l'atteindre.
+Il impose notamment :
 
-Les contrôles navigateur ne persistent pas les messages JavaScript, piles
-d'erreur, sélecteurs axe ou extraits DOM. Les résultats conservés sont limités
-aux URLs de rapport sans query/fragment, codes/règles, impacts et compteurs.
+- un site actif et déjà vérifié ;
+- un marquage interne du scan ;
+- le barrière serveur `WEBPROBE_RUNTIME_ENV` + `WEBPROBE_INTERNAL_DEEP_WORKER` ;
+- un périmètre limité à l'origine canonique autorisée ;
+- des transports HTTP et navigateur gardés ;
+- un budget partagé ;
+- un lease PostgreSQL par tentative ;
+- un token de fencing empêchant une ancienne tentative d'écrire après perte du lease ;
+- une persistance atomique des `scan_check_runs`.
 
-Une capture visuelle optionnelle peut contenir du contenu client. Elle est donc
-traitée comme un artefact sensible : une seule image JPEG bornée à 2 MiB par
-scan, fichier privé hors PostgreSQL, chemin construit uniquement avec les UUID
-internes, métadonnées tenant-scopées et SHA-256 vérifié à la lecture. La route interne
-exige une session valide et recroise organisation, site et scan avant de servir
-l'image ; une route publique n'est accessible qu'au travers d'un jeton de rapport
-encore valide. Les captures suivent la rétention de l'historique de scan et ne
-doivent jamais être exposées directement par un serveur de fichiers statique.
+Le comportement actuel de `main` autorise Deep à partir de la vérification active du site lorsqu'aucun grant Deep dédié n'est présent. Lorsqu'un grant DNS Deep existe, son état, sa génération, son expiration, sa révocation et sa preuve TXT sont revalidés et participent au fencing avant la persistance.
 
-Cette défense vise le contenu web hostile dans le pilote privé. Elle ne remplace
-pas une politique egress noyau/conteneur face à une hypothétique évasion complète
-du sandbox Chromium ; cette couche restera requise avant une exposition de
-production plus large.
+La perte du lease, la révocation d'un grant utilisé, un changement de site ou un abort empêchent la tentative obsolète de finaliser normalement son résultat.
 
-## Rapports publics du pilote
+## Périmètre et couverture
 
-Les liens de rapport utilisent un jeton aléatoire de 256 bits encodé en base64url,
-valable sept jours et révocable. Le jeton brut n'est jamais conservé en base :
-`report_shares.token_hash` contient son SHA-256 et `token_ciphertext` une copie
-AES-256-GCM nécessaire au dashboard et à l'envoi différé.
+Un Audit approfondi ne doit pas être interprété comme une exploration illimitée. Les origines tierces peuvent être observées comme dépendances ou être bloquées par le périmètre sans qu'il s'agisse d'une navigation principale hors périmètre.
 
-La résolution publique exige simultanément un jeton valide, non expiré, non
-révoqué, un scan terminé et le même scope organisation/site/scan. La révocation
-rend le rapport inaccessible et annule les livraisons encore pending ou sending.
-Les routes de captures publiques réutilisent ce contrôle puis revérifient le
-scope et l'intégrité SHA-256 de l'artefact.
+Les budgets, timeouts, erreurs de transport et contrôles non exécutés sont reportés comme couverture partielle. Une couverture partielle ne signifie pas qu'un défaut a été trouvé ; elle signifie qu'une partie de l'analyse n'a pas pu être menée complètement.
 
-`REPORT_TOKEN_SECRET` doit contenir au moins 32 caractères aléatoires et doit
-être distinct des autres secrets en production. `REPORT_PUBLIC_BASE_URL` doit
-pointer vers l'origine publique attendue. Les journaux du worker n'incluent ni
-jeton, ni hash, ni ciphertext. Les pages publiques sont `noindex/nofollow` avec
-une politique de referrer `no-referrer`; les captures sont servies avec
-`Cache-Control: private, no-store`.
+## Isolation des organisations
 
-## Dépendances connues
+Les données métier sont rattachées à une organisation. Les opérations sensibles recroisent l'organisation, le site et le scan côté serveur.
 
-`pnpm audit --prod` signale actuellement `GHSA-67mh-4wv8-2f99`, de sévérité
-modérée, sur `esbuild 0.18.20` via l'outillage `drizzle-kit`. Cette alerte concerne
-le serveur de développement esbuild. Ce serveur n'est ni utilisé ni exposé par
-le SaaS, et les services de développement restent liés à `127.0.0.1`. Le paquet
-parent impose `esbuild ~0.18.20`; aucun override incompatible n'est appliqué.
-Cette dépendance doit être réévaluée lors des mises à jour de Drizzle.
+Un identifiant reçu du navigateur ou d'une tâche BullMQ ne suffit pas à modifier le périmètre d'une opération : les informations persistées dans PostgreSQL restent la référence.
 
-## Limites du produit
+## Captures et artefacts
 
-Ce service détecte des défauts observables d'un site web. Il ne constitue ni un
-pentest, ni une certification de sécurité ou d'accessibilité, ni un conseil
-juridique. Les scans authentifiés et les réseaux internes sont exclus du pilote.
+Les captures sont des artefacts potentiellement sensibles.
+
+Elles sont conservées hors PostgreSQL sous `SCAN_ARTIFACTS_DIR`. La base conserve les métadonnées nécessaires, notamment la taille et le SHA-256.
+
+Les artefacts :
+
+- ne doivent pas être servis directement comme répertoire statique ;
+- doivent rester accessibles uniquement au serveur Web et au worker lorsque nécessaire ;
+- sont recroisés avec l'organisation, le site et le scan avant lecture ;
+- suivent la politique de rétention applicable au type de scan.
+
+## Rapports partageables
+
+Les rapports publics utilisent des jetons aléatoires temporaires et révocables.
+
+Le jeton brut n'est pas conservé en clair en base. La résolution vérifie le jeton, l'expiration, la révocation, le scan et son périmètre organisation/site.
+
+`REPORT_TOKEN_SECRET` doit être distinct des autres secrets en production. Les pages de rapport public utilisent des protections d'indexation et de referrer adaptées.
+
+Un Audit public sur un site non vérifié reste privé via l'application ; voir `docs/security/public-audit.md`.
+
+## Secrets
+
+Les secrets restent hors du dépôt et sont chargés depuis l'environnement, notamment via `.env` sur l'instance actuelle.
+
+Les unités systemd versionnées ne contiennent aucun secret. Les journaux ne doivent pas contenir de mot de passe, jeton brut, valeur de cookie sensible ni contenu d'en-tête d'autorisation.
+
+## Rétention
+
+L'Audit public applique une rétention automatique configurable, de 90 jours par défaut pour les scans terminés concernés.
+
+Les scans de monitoring vérifié ne sont pas supprimés par ce mécanisme. Les sauvegardes, lorsqu'elles seront mises en place, devront avoir une politique compatible avec les durées de rétention applicatives.
+
+## Limites
+
+WebProbe détecte des défauts observables à partir de contrôles passifs et bornés.
+
+WebProbe n'est pas :
+
+- un pentest complet ;
+- un scanner agressif de vulnérabilités ;
+- une certification de sécurité ;
+- une certification d'accessibilité ;
+- un avis juridique.
+
+Les résultats doivent être interprétés avec leur couverture, leurs preuves et les limites du mode de scan utilisé.
