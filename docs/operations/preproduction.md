@@ -1,6 +1,6 @@
 # Validation en préproduction
 
-La préproduction sert à valider un candidat avant une modification sensible de la production. Elle n'est pas une description de l'état de production ; le runbook de production se trouve dans `docs/operations/production.md`.
+La préproduction sert à valider un candidat avant une modification sensible de la production. Elle n'est pas une description de l'état de production ; le guide d’exploitation de la production se trouve dans `docs/operations/production.md`.
 
 ## Configuration
 

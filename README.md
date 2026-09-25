@@ -132,7 +132,7 @@ L'exploitation d'une instance WebProbe nécessite une infrastructure adaptée. S
 
 - `SECURITY.md` : modèle de sécurité et limites ;
 - `docs/architecture/v3-scan-engine.md` : architecture du moteur Deep ;
-- `docs/operations/production.md` : runbook de production ;
+- `docs/operations/production.md` : guide d’exploitation de la production ;
 - `docs/operations/v3-deep-activation.md` : exploitation du mode Deep ;
 - `docs/operations/health.md` : santé, disponibilité et diagnostics ;
-- `docs/security/public-audit.md` : modèle de sécurité du Audit public.
+- `docs/security/public-audit.md` : modèle de sécurité de l’Audit public.
