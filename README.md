@@ -137,3 +137,7 @@ L'exploitation d'une instance WebProbe nécessite une infrastructure adaptée. S
 - `docs/operations/health.md` : santé, disponibilité et diagnostics ;
 - `docs/security/public-audit.md` : modèle de sécurité de l’Audit public ;
 - `docs/architecture/vulnerability-intelligence.md` : inventaire passif et rapprochement CVE/KEV V3.1.
+
+## Licence
+
+WebProbe est distribué sous licence **GNU Affero General Public License v3.0 uniquement (AGPL-3.0-only)**. Voir `LICENSE`.
