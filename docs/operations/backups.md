@@ -37,8 +37,8 @@ Ne jamais committer `identity.txt`.
 - un manifeste SHA-256 ;
 - des métadonnées non sensibles : date UTC, SHA Git et chemins techniques.
 
-La rétention locale par défaut est de 14 jours. Elle peut être modifiée avec
-`WEBPROBE_BACKUP_RETENTION_DAYS`.
+La rétention locale par défaut est de 14 jours. L'administrateur la fixe dans
+la configuration root installée avec `--retention-days`.
 
 Le répertoire local par défaut est :
 
@@ -55,18 +55,11 @@ Les unités versionnées sont :
 - `webprobe-backup-restore-check.service` ;
 - `webprobe-backup-restore-check.timer` : test de restauration hebdomadaire.
 
-Installation :
-
-```bash
-install -o root -g root -m 0644   /srv/agency-saas/infra/systemd/webprobe-backup.service   /etc/systemd/system/webprobe-backup.service
-install -o root -g root -m 0644   /srv/agency-saas/infra/systemd/webprobe-backup.timer   /etc/systemd/system/webprobe-backup.timer
-install -o root -g root -m 0644   /srv/agency-saas/infra/systemd/webprobe-backup-restore-check.service   /etc/systemd/system/webprobe-backup-restore-check.service
-install -o root -g root -m 0644   /srv/agency-saas/infra/systemd/webprobe-backup-restore-check.timer   /etc/systemd/system/webprobe-backup-restore-check.timer
-
-systemctl daemon-reload
-systemctl enable --now webprobe-backup.timer
-systemctl enable --now webprobe-backup-restore-check.timer
-```
+Les services exécutent les copies root protégées sous
+`/usr/local/libexec/webprobe-ops/`, jamais les scripts du checkout modifiable
+par `vboxuser`. Suivre la [procédure de délégation et de mise à jour](delegated-ops.md)
+pour installer les copies, les unités et la configuration. Les timers existants
+restent gérés par l'administrateur.
 
 ## Vérification de restauration
 

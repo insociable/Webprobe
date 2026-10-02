@@ -2,15 +2,16 @@
 set -euo pipefail
 
 umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-APP_ROOT="${WEBPROBE_APP_ROOT:-/srv/agency-saas}"
-ENV_FILE="${WEBPROBE_ENV_FILE:-${APP_ROOT}/.env}"
-BACKUP_DIR="${WEBPROBE_BACKUP_DIR:-/var/backups/webprobe}"
-KEY_DIR="${WEBPROBE_BACKUP_KEY_DIR:-/etc/webprobe-backup}"
+APP_ROOT=/srv/agency-saas
+BACKUP_DIR=/var/backups/webprobe
+KEY_DIR=/etc/webprobe-backup
 RECIPIENT_FILE="${KEY_DIR}/recipient.txt"
-POSTGRES_CONTAINER="${WEBPROBE_POSTGRES_CONTAINER:-agency-saas-postgres-1}"
-RETENTION_DAYS="${WEBPROBE_BACKUP_RETENTION_DAYS:-14}"
-LOCK_FILE="${WEBPROBE_BACKUP_LOCK_FILE:-/run/lock/webprobe-backup.lock}"
+POSTGRES_CONTAINER="${WEBPROBE_POSTGRES_CONTAINER:?root-owned backup.env required}"
+RETENTION_DAYS="${WEBPROBE_BACKUP_RETENTION_DAYS:?root-owned backup.env required}"
+ARTIFACTS_DIR="${WEBPROBE_ARTIFACTS_DIR:?root-owned backup.env required}"
+LOCK_FILE=/run/lock/webprobe-backup.lock
 
 for command in age docker sha256sum tar flock; do
   command -v "${command}" >/dev/null || {
@@ -19,19 +20,15 @@ for command in age docker sha256sum tar flock; do
   }
 done
 
-[[ -r "${ENV_FILE}" ]] || { echo "missing environment file: ${ENV_FILE}" >&2; exit 1; }
 [[ -r "${RECIPIENT_FILE}" ]] || { echo "missing age recipient: ${RECIPIENT_FILE}" >&2; exit 1; }
+[[ "${RETENTION_DAYS}" =~ ^[0-9]{1,3}$ && "${RETENTION_DAYS}" -ge 1 && "${RETENTION_DAYS}" -le 365 ]] || exit 1
+[[ "${POSTGRES_CONTAINER}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || exit 1
+[[ "${ARTIFACTS_DIR}" == /* && -d "${ARTIFACTS_DIR}" ]] || exit 1
 
 install -d -o root -g root -m 0700 "${BACKUP_DIR}"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || { echo "another backup is already running" >&2; exit 1; }
 
-set -a
-# shellcheck disable=SC1090
-. "${ENV_FILE}"
-set +a
-
-ARTIFACTS_DIR="${SCAN_ARTIFACTS_DIR:-${APP_ROOT}/storage/scan-artifacts}"
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 output="${BACKUP_DIR}/webprobe-${timestamp}.tar.age"
 tmp_dir="$(mktemp -d)"
@@ -41,21 +38,16 @@ docker exec "${POSTGRES_CONTAINER}" sh -ceu '
   pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"     --format=custom --no-owner --no-privileges
 ' > "${tmp_dir}/database.dump"
 
-if [[ -d "${ARTIFACTS_DIR}" ]]; then
-  tar -C "${ARTIFACTS_DIR}" -czf "${tmp_dir}/artifacts.tar.gz" .
-else
-  tar -czf "${tmp_dir}/artifacts.tar.gz" --files-from /dev/null
-fi
+# The artifact tree is maintained by vboxuser. Read it with that account,
+# even when the configured directory contains links to other locations.
+runuser -u vboxuser -- tar -C "${ARTIFACTS_DIR}" -czf - . > "${tmp_dir}/artifacts.tar.gz"
 
 (
   cd "${tmp_dir}"
   sha256sum database.dump artifacts.tar.gz > manifest.sha256
 )
 
-git_sha="unknown"
-if [[ -d "${APP_ROOT}/.git" ]]; then
-  git_sha="$(git -c safe.directory="${APP_ROOT}" -C "${APP_ROOT}" rev-parse HEAD 2>/dev/null || true)"
-fi
+git_sha="$(runuser -u vboxuser -- git -C "${APP_ROOT}" rev-parse HEAD 2>/dev/null || printf unknown)"
 
 cat > "${tmp_dir}/metadata.txt" <<EOF
 created_at=${timestamp}

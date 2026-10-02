@@ -2,11 +2,13 @@
 set -euo pipefail
 
 umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-BACKUP_DIR="${WEBPROBE_BACKUP_DIR:-/var/backups/webprobe}"
-KEY_DIR="${WEBPROBE_BACKUP_KEY_DIR:-/etc/webprobe-backup}"
+BACKUP_DIR=/var/backups/webprobe
+KEY_DIR=/etc/webprobe-backup
 IDENTITY_FILE="${KEY_DIR}/identity.txt"
-POSTGRES_CONTAINER="${WEBPROBE_POSTGRES_CONTAINER:-agency-saas-postgres-1}"
+POSTGRES_CONTAINER="${WEBPROBE_POSTGRES_CONTAINER:?root-owned backup.env required}"
+[[ "${POSTGRES_CONTAINER}" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || exit 1
 
 for command in age docker sha256sum tar; do
   command -v "${command}" >/dev/null || {
