@@ -62,6 +62,10 @@ const vulnerabilityDefinitions = [
     title: "Confirmée ou à vérifier",
     text: "Une correspondance est confirmée seulement lorsque la version observée permet de conclure qu’elle se trouve dans une plage affectée comprise par WebProbe. Si la version est inconnue, partielle ou dépend d’un contexte supplémentaire, le résultat reste à vérifier.",
   },
+  {
+    title: "J’ai vérifié",
+    text: "Sur la fiche du site, un responsable peut masquer une correspondance après l’avoir examinée. Elle reste dans les rapports et peut être réaffichée. Elle revient dans la liste à suivre si la version, la règle ou la priorité change. Ce bouton ne prouve pas que la faille est corrigée.",
+  },
 ] as const;
 
 export default async function GuidePage() {
