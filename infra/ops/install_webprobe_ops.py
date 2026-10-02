@@ -23,7 +23,7 @@ import stat
 sys.path.insert(0, str(pathlib.Path(__file__).absolute().parent))
 from webprobe_ops import (
     BACKUP_FILES, CLEAN_ENV, INSTALL_MANIFEST, OpsError, SERVICE_DIR, STATE_DIR,
-    VERSION, protected_read, protected_unlink, protected_write, secure_dir,
+    VERSION, operation_lock, protected_read, protected_unlink, protected_write, secure_dir,
 )
 
 
@@ -191,6 +191,10 @@ def restore_snapshot(name: str, *, require_new: bool) -> None:
         old.append(content)
     # The legacy backup units execute mutable root code. Rollback revokes the
     # delegation and leaves timers stopped even if it restores those files.
+    # Remove sudo access before the first legacy file can be restored, including
+    # when a later write fails and leaves recovery incomplete.
+    protected_unlink(SUDOERS)
+    run(["/usr/sbin/visudo", "-c"])
     for index, (target, content) in enumerate(zip(ALL_TARGETS, old)):
         if target == SUDOERS:
             continue
@@ -198,8 +202,6 @@ def restore_snapshot(name: str, *, require_new: bool) -> None:
             protected_unlink(target)
         else:
             protected_write(target, content, metadata["old_modes"][index])
-    protected_unlink(SUDOERS)
-    run(["/usr/sbin/visudo", "-c"])
     run(["/usr/bin/systemctl", "daemon-reload"])
 
 
@@ -217,16 +219,23 @@ def install(args: argparse.Namespace) -> str:
         if path != HELPER and path.suffix == ".sh":
             modes[path] = 0o755
     try:
+        protected_unlink(SUDOERS)
         for target in ALL_TARGETS:
+            if target == SUDOERS:
+                continue
             protected_write(target, new[target], modes.get(target, 0o644))
         run(["/usr/sbin/visudo", "-c"])
         run(["/usr/bin/systemctl", "daemon-reload"])
+        # Publish delegation only after all protected files and units are ready.
+        protected_write(SUDOERS, new[SUDOERS], modes[SUDOERS])
+        run(["/usr/sbin/visudo", "-c"])
         result = run(["/usr/sbin/runuser", "-u", "vboxuser", "--", "/usr/bin/sudo", "-n",
                       str(HELPER), "version"])
         if json.loads(result) != {"version": VERSION}:
             raise OpsError("installed_version_unexpected")
     except Exception:
         try:
+            protected_unlink(SUDOERS)
             restore_snapshot(state_name, require_new=False)
         except Exception:
             raise OpsError("install_failed_recovery_incomplete:" + state_name) from None
@@ -272,22 +281,23 @@ def main() -> int:
             return 0
         if os.geteuid() != 0:
             raise OpsError("root_install_required")
-        if args.print_current:
-            print(json.dumps(current_manifest(), sort_keys=True, indent=2))
-        elif args.install:
-            if args.expected_current is None or args.artifacts_dir is None:
-                raise OpsError("expected_manifest_and_artifacts_required")
-            name = install(args)
-            print(json.dumps({"installed": VERSION, "rollbackState": name,
-                              "timers": "remain_stopped"}))
-        elif args.rollback_install:
-            require_idle()
-            restore_snapshot(args.rollback_install, require_new=True)
-            print(json.dumps({"rollbackState": args.rollback_install,
-                              "delegation": "revoked", "timers": "remain_stopped"}))
-        else:
-            revoke()
-            print(json.dumps({"delegation": "revoked", "timers": "stopped"}))
+        with operation_lock(create=True):
+            if args.print_current:
+                print(json.dumps(current_manifest(), sort_keys=True, indent=2))
+            elif args.install:
+                if args.expected_current is None or args.artifacts_dir is None:
+                    raise OpsError("expected_manifest_and_artifacts_required")
+                name = install(args)
+                print(json.dumps({"installed": VERSION, "rollbackState": name,
+                                  "timers": "remain_stopped"}))
+            elif args.rollback_install:
+                require_idle()
+                restore_snapshot(args.rollback_install, require_new=True)
+                print(json.dumps({"rollbackState": args.rollback_install,
+                                  "delegation": "revoked", "timers": "remain_stopped"}))
+            else:
+                revoke()
+                print(json.dumps({"delegation": "revoked", "timers": "stopped"}))
         return 0
     except OpsError as error:
         print(json.dumps({"error": str(error)}), file=sys.stderr)
