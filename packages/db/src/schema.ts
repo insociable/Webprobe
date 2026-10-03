@@ -894,6 +894,42 @@ export const technologyObservations = pgTable(
   ],
 );
 
+export const siteTechnologyVersions = pgTable(
+  "site_technology_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    observationId: uuid("observation_id")
+      .notNull()
+      .references(() => technologyObservations.id, { onDelete: "cascade" }),
+    version: text("version").notNull(),
+    declaredBy: uuid("declared_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    declaredAt: timestamp("declared_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("site_technology_versions_observation_unique").on(
+      table.observationId,
+    ),
+    index("site_technology_versions_org_site_idx").on(
+      table.organizationId,
+      table.siteId,
+    ),
+    check(
+      "site_technology_versions_version_format",
+      sql`${table.version} ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'`,
+    ),
+  ],
+);
+
 export const vulnerabilityAdvisories = pgTable(
   "vulnerability_advisories",
   {

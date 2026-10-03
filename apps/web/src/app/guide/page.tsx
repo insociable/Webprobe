@@ -31,7 +31,7 @@ const steps = [
   {
     number: "06",
     title: "Lire Technologies & CVE",
-    text: "L’Audit approfondi peut identifier passivement certaines technologies. WebProbe rapproche uniquement les produits et versions réellement observés de vulnérabilités publiques connues.",
+    text: "L’Audit approfondi peut identifier passivement certaines technologies. Sur la fiche du site, les CVE partageant une version manquante sont regroupées. Un responsable peut renseigner une version installée pour comparer tout le lot automatiquement au catalogue NVD.",
   },
   {
     number: "07",
@@ -61,6 +61,10 @@ const vulnerabilityDefinitions = [
   {
     title: "Confirmée ou à vérifier",
     text: "Une correspondance est confirmée seulement lorsque la version observée permet de conclure qu’elle se trouve dans une plage affectée comprise par WebProbe. Si la version est inconnue, partielle ou dépend d’un contexte supplémentaire, le résultat reste à vérifier.",
+  },
+  {
+    title: "Comparer le lot de CVE",
+    text: "Retrouvez la version exacte dans votre déploiement ou auprès de votre hébergeur, puis renseignez-la sur la fiche du site. WebProbe compare toutes les CVE de la technologie : versions affectées, CVE écartées par version et cas encore à vérifier. Une version déclarée reste distincte d’une version observée ; elle doit être reconfirmée après un nouveau scan. Les rapports antérieurs ne changent pas.",
   },
   {
     title: "J’ai vérifié",
