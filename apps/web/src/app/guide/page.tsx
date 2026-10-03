@@ -43,6 +43,11 @@ const steps = [
     title: "Suivre l’évolution",
     text: "Consultez l’historique repliable, les rapports successifs, les changements de constats et les alertes du monitoring vérifié.",
   },
+  {
+    number: "09",
+    title: "Supprimer un site",
+    text: "Dans Sites / Monitoring, ouvrez « ⋯ » sur la ligne du site puis choisissez « Supprimer le site ». Confirmez en retapant son nom. Cette action supprime définitivement le site, ses scans, rapports, liens publics, réglages, alertes et observations ; attendez la fin d’un scan actif avant de la lancer.",
+  },
 ] as const;
 
 const vulnerabilityDefinitions = [
@@ -83,9 +88,25 @@ export default async function GuidePage() {
           Du premier audit au suivi continu
         </h1>
         <p className="mt-4 max-w-3xl leading-7 text-[#8793a8]">
-          Huit étapes pour passer d’une observation publique ponctuelle à un
+          Neuf étapes pour passer d’une observation publique ponctuelle à un
           suivi vérifié, puis interpréter les technologies et vulnérabilités
           connues sans surévaluer ce que le scan a réellement observé.
+        </p>
+      </section>
+
+      <section className="border-b border-[#242d40] py-9">
+        <p className="am-kicker">Périmètre réseau</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+          Ce que WebProbe ne sonde pas
+        </h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8793a8]">
+          WebProbe ne lance pas de balayage arbitraire de ports TCP ou UDP et ne
+          cartographie pas les services d’une adresse. Les contrôles restent
+          limités à la surface HTTP(S) autorisée par l’URL, au DNS nécessaire à
+          la vérification et aux transports navigateur/HTTP bornés. Un rapport
+          WebProbe ne peut donc pas conclure qu’un port ou un service est absent
+          ; cette vérification doit être menée séparément, avec une autorisation
+          explicite.
         </p>
       </section>
 

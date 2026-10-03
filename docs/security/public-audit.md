@@ -19,6 +19,7 @@ L'Audit public est passif et borné :
 - déclenchement manuel ;
 - profil serveur limité ;
 - méthodes HTTP compatibles avec une observation non destructive ;
+- aucun balayage arbitraire de ports TCP ou UDP ;
 - WebSockets bloqués ;
 - téléchargements et service workers désactivés dans le parcours concerné ;
 - Chromium forcé par le proxy sûr ;

@@ -110,6 +110,101 @@ describeDatabase("organization/site tenant isolation", () => {
     }
   });
 
+  it("restricts site deletion and blocks an active scan", async () => {
+    const { memberships, organizations, scans, sites, users } = await import(
+      "@agency-saas/db"
+    );
+    const { and, eq, inArray } = await import("drizzle-orm");
+    const { db } = await import("../database");
+    const { getSiteForOrganization, OrganizationAccessError } = await import(
+      "../organization-site-service"
+    );
+    const { deleteSiteForOrganization } = await import(
+      "../site-deletion-service"
+    );
+
+    const ownerId = randomUUID();
+    const adminId = randomUUID();
+    const memberId = randomUUID();
+    const organizationId = randomUUID();
+    const siteId = randomUUID();
+
+    try {
+      await db.insert(users).values([
+        {
+          id: ownerId,
+          email: `delete-owner-${ownerId}@example.invalid`,
+          displayName: "Delete owner",
+        },
+        {
+          id: adminId,
+          email: `delete-admin-${adminId}@example.invalid`,
+          displayName: "Delete admin",
+        },
+        {
+          id: memberId,
+          email: `delete-member-${memberId}@example.invalid`,
+          displayName: "Delete member",
+        },
+      ]);
+      await db.insert(organizations).values({
+        id: organizationId,
+        name: "Deletion organization",
+      });
+      await db.insert(memberships).values([
+        { organizationId, userId: ownerId, role: "owner" },
+        { organizationId, userId: adminId, role: "admin" },
+        { organizationId, userId: memberId, role: "member" },
+      ]);
+      await db.insert(sites).values({
+        id: siteId,
+        organizationId,
+        name: "Deletion site",
+        canonicalUrl: `https://delete-${siteId}.example.invalid/`,
+      });
+
+      await expect(
+        deleteSiteForOrganization(memberId, organizationId, siteId),
+      ).rejects.toBeInstanceOf(OrganizationAccessError);
+
+      await db.insert(scans).values({
+        organizationId,
+        siteId,
+        status: "queued",
+        trigger: "manual",
+        scanMode: "verified_monitoring",
+      });
+
+      await expect(
+        deleteSiteForOrganization(ownerId, organizationId, siteId),
+      ).rejects.toMatchObject({ code: "scan-active" });
+
+      await db
+        .update(scans)
+        .set({ status: "completed", completedAt: new Date() })
+        .where(
+          and(
+            eq(scans.organizationId, organizationId),
+            eq(scans.siteId, siteId),
+          ),
+        );
+
+      await expect(
+        deleteSiteForOrganization(adminId, organizationId, siteId),
+      ).resolves.toMatchObject({ deleted: true });
+      await expect(
+        getSiteForOrganization(ownerId, organizationId, siteId),
+      ).resolves.toBeNull();
+    } finally {
+      await db
+        .delete(users)
+        .where(inArray(users.id, [ownerId, adminId, memberId]));
+      await db
+        .delete(organizations)
+        .where(eq(organizations.id, organizationId));
+    }
+  });
+
   it("serializes initial onboarding for the same user", async () => {
     const { memberships, organizations, users } = await import(
       "@agency-saas/db"
