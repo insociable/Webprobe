@@ -62,8 +62,9 @@ export async function getWorkspaceOverview() {
         confirmed: summary.confirmed + item.confirmed,
         potential: summary.potential + item.potential,
         kev: summary.kev + item.kev,
+        reviewed: summary.reviewed + item.reviewed,
       }),
-      { technologies: 0, confirmed: 0, potential: 0, kev: 0 },
+      { technologies: 0, confirmed: 0, potential: 0, kev: 0, reviewed: 0 },
     ),
   };
 }

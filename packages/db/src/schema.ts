@@ -1048,6 +1048,40 @@ export const vulnerabilitySyncRuns = pgTable(
   ],
 );
 
+export const siteVulnerabilityReviews = pgTable(
+  "site_vulnerability_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    advisoryId: uuid("advisory_id")
+      .notNull()
+      .references(() => vulnerabilityAdvisories.id, { onDelete: "cascade" }),
+    fingerprint: text("fingerprint").notNull(),
+    reviewedBy: uuid("reviewed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("site_vulnerability_reviews_site_fingerprint_unique").on(
+      table.siteId,
+      table.fingerprint,
+    ),
+    index("site_vulnerability_reviews_org_idx").on(table.organizationId),
+    check(
+      "site_vulnerability_reviews_fingerprint_valid",
+      sql`${table.fingerprint} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
 export const siteVulnerabilityMatches = pgTable(
   "site_vulnerability_matches",
   {

@@ -381,6 +381,10 @@ export default async function SitePage({
         <SiteVulnerabilityOverview
           observations={vulnerabilityOverview.observations}
           matches={vulnerabilityOverview.matches}
+          organizationId={organizationId}
+          siteId={siteId}
+          canManage={canManage}
+          hideReviewed
         />
       </div>
 
