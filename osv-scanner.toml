@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2026-10-10
+reason = "Exception temporaire approuvée le 3 octobre 2026 : braces 3.0.3 est uniquement une dépendance transitive de développement de eslint-config-next, absente du graphe des dépendances de production. Les motifs de lint viennent de la configuration du dépôt. Aucun correctif publié ; réexaminer avant expiration."
