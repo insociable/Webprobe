@@ -86,6 +86,12 @@ avant l'installation et ne sont jamais remis en marche automatiquement.
 
 L'installateur écrit les fichiers par remplacement atomique, valide sudoers,
 recharge systemd, puis vérifie `webprobe-ops version` via la règle sudoers.
+Il utilise le même verrou `operation.lock` que le helper, y compris lors du
+retour arrière et de la révocation. Une erreur `operation_in_progress` indique
+qu'une opération détient déjà ce verrou : attendre sa fin avant de réessayer.
+L'accès sudo est retiré avant tout remplacement et publié en dernier après
+installation des fichiers protégés et rechargement des unités. L'action
+`version`, qui ne modifie aucun état, reste disponible pendant cette vérification.
 Il conserve un instantané `install-...` dans `/var/lib/webprobe-ops/`. Si une
 étape échoue, il restaure les fichiers précédents, **révoque la délégation** et
 laisse les timers arrêtés. Une erreur `recovery_incomplete` impose une
@@ -104,7 +110,9 @@ visudo -c
 ```
 
 Le retour arrière compare les empreintes installées à la version attendue
-avant remplacement. Il restaure les anciens fichiers mais retire la règle
+avant remplacement. Il retire la règle sudoers avant de restaurer le premier
+fichier, afin qu'un échec de restauration ne réactive pas l'ancien helper.
+Il restaure les anciens fichiers mais retire la règle
 sudoers et laisse les timers arrêtés. **Si les anciennes unités pointent vers
 `/srv/agency-saas/infra/backup`, elles restent vulnérables : ne pas relancer
 les timers ni ces services avant correction.** En urgence, `--revoke` arrête

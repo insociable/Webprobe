@@ -19,9 +19,10 @@ import sys
 import time
 import urllib.request
 from dataclasses import dataclass
+from contextlib import contextmanager
 
 
-VERSION = "2026-10-02-v2"
+VERSION = "2026-10-02-v3"
 SERVICE_DIR = pathlib.Path("/etc/systemd/system")
 STATE_DIR = pathlib.Path("/var/lib/webprobe-ops")
 BACKUP_DIR = pathlib.Path("/var/backups/webprobe")
@@ -182,6 +183,30 @@ def protected_unlink(path: pathlib.Path) -> None:
         except FileNotFoundError:
             pass
         os.fsync(parent)
+    finally:
+        os.close(parent)
+
+
+@contextmanager
+def operation_lock(*, create: bool = False):
+    """Serialize helper operations and administrator installation changes."""
+    if fcntl is None:
+        raise OpsError("operation_lock_requires_linux")
+    parent = secure_dir(STATE_DIR, create=create)
+    try:
+        lock = os.open("operation.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
+                       0o600, dir_fd=parent)
+        try:
+            info = os.fstat(lock)
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+                raise OpsError("unsafe_lock")
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise OpsError("operation_in_progress") from None
+            yield
+        finally:
+            os.close(lock)
     finally:
         os.close(parent)
 
@@ -496,23 +521,16 @@ def main() -> int:
         return 1
     os.umask(0o077)
     try:
-        parent = secure_dir(STATE_DIR)
-        try:
-            lock = os.open("operation.lock", os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC,
-                           0o600, dir_fd=parent)
-            try:
-                info = os.fstat(lock)
-                if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
-                    raise OpsError("unsafe_lock")
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                result = Ops().execute(sys.argv[1:])
-                if result is not None:
-                    print(json.dumps(result, sort_keys=True))
-                return 0
-            finally:
-                os.close(lock)
-        finally:
-            os.close(parent)
+        # Installation checks the new sudoers rule while holding the same lock.
+        # Version only reports this executable's constant and changes no state.
+        if sys.argv[1:] == ["version"]:
+            print(json.dumps({"version": VERSION}))
+            return 0
+        with operation_lock():
+            result = Ops().execute(sys.argv[1:])
+            if result is not None:
+                print(json.dumps(result, sort_keys=True))
+            return 0
     except OpsError as error:
         print(json.dumps({"error": str(error)}), file=sys.stderr)
         return 1
