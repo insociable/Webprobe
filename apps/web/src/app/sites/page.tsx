@@ -2,6 +2,7 @@ import Link from "next/link";
 import { WorkspaceShell } from "@/components/product-shell";
 import { getMonitoringState } from "@/lib/monitoring-state";
 import { getWorkspaceOverview } from "@/lib/workspace-overview";
+import { SiteActionsMenu } from "./site-actions-menu";
 
 const scanStatusLabels = {
   queued: "En file",
@@ -76,6 +77,7 @@ export default async function SitesPage() {
               const scanActive =
                 site.latestScan?.status === "queued" ||
                 site.latestScan?.status === "running";
+              const siteHref = `/organizations/${site.organizationId}/sites/${site.id}`;
               const monitoringState = getMonitoringState({
                 status: site.status,
                 verifiedAt: site.verifiedAt,
@@ -83,12 +85,11 @@ export default async function SitesPage() {
               });
 
               return (
-                <Link
+                <div
                   key={site.id}
-                  href={`/organizations/${site.organizationId}/sites/${site.id}`}
                   className="group grid gap-4 py-5 transition hover:bg-[#0d121d] sm:grid-cols-[1fr_190px_150px_auto] sm:items-center sm:px-4"
                 >
-                  <div className="min-w-0">
+                  <Link href={siteHref} className="min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
                       <h3 className="font-semibold text-[#e9edf6] group-hover:text-white">
                         {site.name}
@@ -103,7 +104,7 @@ export default async function SitesPage() {
                     <p className="mt-2 text-xs text-[#657188]">
                       {monitoringState.detail}
                     </p>
-                  </div>
+                  </Link>
 
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#5f6b81]">
@@ -133,10 +134,23 @@ export default async function SitesPage() {
                     </p>
                   </div>
 
-                  <span className="text-[#6d7cff] transition group-hover:translate-x-1 group-hover:text-[#aab2ff]">
-                    →
-                  </span>
-                </Link>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <Link
+                      href={siteHref}
+                      aria-label={`Ouvrir ${site.name}`}
+                      className="text-[#6d7cff] transition hover:translate-x-1 hover:text-[#aab2ff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8793ff]"
+                    >
+                      →
+                    </Link>
+                    {site.canManage ? (
+                      <SiteActionsMenu
+                        organizationId={site.organizationId}
+                        siteId={site.id}
+                        siteName={site.name}
+                      />
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
           </div>

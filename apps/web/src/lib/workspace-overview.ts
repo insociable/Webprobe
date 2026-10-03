@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireCurrentSession } from "./current-session";
 import { getUserMemberships } from "./membership-context";
 import { getOrganizationOverview } from "./organization-overview";
+import { canManageOrganization } from "./organization-permissions";
 import { getOrganizationVulnerabilitySummary } from "./vulnerability-intelligence";
 
 export async function getWorkspaceOverview() {
@@ -31,6 +32,7 @@ export async function getWorkspaceOverview() {
     overviews[index]!.sites.map((site) => ({
       ...site,
       organizationId: membership.organizationId,
+      canManage: canManageOrganization(overviews[index]!.access.role),
     })),
   );
   const manageableMembership = memberships.find(

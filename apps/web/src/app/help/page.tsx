@@ -54,6 +54,16 @@ const faq = [
       "Un scan peut être lancé manuellement. Sur un domaine vérifié, un responsable peut aussi activer le planning hebdomadaire et choisir son créneau.",
   },
   {
+    question: "Comment supprimer un site ?",
+    answer:
+      "Depuis Sites / Monitoring, ouvrez le menu « ⋯ » de la ligne du site puis choisissez « Supprimer le site ». Seuls le propriétaire et les administrateurs peuvent le faire. Après confirmation en retapant le nom du site, ses scans, findings, rapports, liens publics, alertes, réglages et observations CVE sont supprimés définitivement. Un site ne peut pas être supprimé pendant un scan actif.",
+  },
+  {
+    question: "WebProbe scanne-t-il les ports ?",
+    answer:
+      "Non. WebProbe ne réalise pas de balayage arbitraire TCP ou UDP et ne cartographie pas les ports d’une adresse. Les audits publics et le monitoring restent centrés sur la surface web autorisée par l’URL : HTTP(S), TLS, DNS nécessaire à la vérification et contrôles navigateur/HTTP bornés. L’absence d’un constat WebProbe ne prouve donc pas qu’un port ou un service est absent ; une cartographie réseau doit faire l’objet d’un contrôle séparé et explicitement autorisé.",
+  },
+  {
     question:
       "Pourquoi un Public Audit non vérifié ne peut-il pas être partagé ?",
     answer:

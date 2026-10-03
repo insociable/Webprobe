@@ -33,6 +33,8 @@ L'Audit approfondi reste non destructif : il ne soumet pas de formulaire, ne lan
 
 Le code de `main` accepte un Audit approfondi sur un site actif déjà vérifié. Lorsqu'un grant Deep DNS dédié existe, il est revalidé avant l'exécution et son identité participe au fencing de l'exécution.
 
+WebProbe ne réalise pas de balayage arbitraire de ports TCP ou UDP. Les contrôles réseau restent bornés à la surface HTTP(S) autorisée par l'URL, au DNS nécessaire et aux transports navigateur/HTTP gardés ; une cartographie de ports doit être réalisée séparément avec une autorisation explicite.
+
 ### Technologies et vulnérabilités connues
 
 Les scans peuvent construire un inventaire passif à partir de signaux réellement observés dans les en-têtes HTTP et le navigateur. La détection couvre notamment nginx, Apache HTTP Server, PHP, Cloudflare, WordPress, Drupal, Joomla, Next.js et Express selon les preuves disponibles.
