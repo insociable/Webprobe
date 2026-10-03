@@ -92,9 +92,14 @@ export default async function DashboardPage() {
               {[
                 ["Technologies observées", vulnerabilitySummary.technologies],
                 ["CVE confirmées", vulnerabilitySummary.confirmed],
-                ["À vérifier", vulnerabilitySummary.potential],
+                ["Versions à renseigner", vulnerabilitySummary.versionChecks],
+                ["CVE potentielles", vulnerabilitySummary.potential],
                 ["CISA KEV", vulnerabilitySummary.kev],
                 ["Vérifiées et masquées", vulnerabilitySummary.reviewed],
+                [
+                  "Écartées par version déclarée",
+                  vulnerabilitySummary.excluded,
+                ],
               ].map(([label, value]) => (
                 <div key={String(label)} className="am-panel-soft p-4">
                   <p className="text-xs uppercase tracking-[0.12em] text-white/35">
@@ -113,10 +118,10 @@ export default async function DashboardPage() {
               </p>
             ) : (
               <p className="mt-4 text-sm leading-6 text-[#7f8a9f]">
-                Les correspondances « à vérifier » nécessitent notamment de
-                confirmer la version ou le contexte avant de conclure à une
-                exposition. L’absence de correspondance n’est pas une
-                certification de sécurité.
+                Renseignez une version par technologie sur la fiche du site :
+                WebProbe compare ensuite tout le lot au catalogue NVD. Les CVE
+                potentielles partagent souvent une même version manquante ;
+                elles ne demandent pas chacune une vérification séparée.
               </p>
             )}
           </>

@@ -39,6 +39,8 @@ Les scans peuvent construire un inventaire passif à partir de signaux réelleme
 
 Les produits explicitement corrélables sont rapprochés des données NVD et CISA KEV. WebProbe distingue les correspondances confirmées des résultats « à vérifier » lorsque la version est inconnue, partielle ou que le contexte ne permet pas de conclure.
 
+Les CVE bloquées par une version inconnue sont regroupées par technologie. Un propriétaire ou administrateur peut déclarer la version installée une fois pour comparer tout le lot au catalogue NVD : versions affectées, exclusions par version et cas encore incertains restent distincts. La déclaration est liée à l’observation courante et doit être reconfirmée après un nouveau scan ; les rapports historiques conservent leurs preuves d’origine.
+
 La recherche historique NVD est ciblée sur les technologies réellement observées : WebProbe n'importe pas aveuglément toute la base NVD et n'invente aucun CPE. Une absence de correspondance ne constitue jamais une garantie d'absence de vulnérabilité.
 
 ## Score Deep
