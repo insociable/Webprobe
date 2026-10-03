@@ -94,6 +94,7 @@ export default async function DashboardPage() {
                 ["CVE confirmées", vulnerabilitySummary.confirmed],
                 ["À vérifier", vulnerabilitySummary.potential],
                 ["CISA KEV", vulnerabilitySummary.kev],
+                ["Vérifiées et masquées", vulnerabilitySummary.reviewed],
               ].map(([label, value]) => (
                 <div key={String(label)} className="am-panel-soft p-4">
                   <p className="text-xs uppercase tracking-[0.12em] text-white/35">
@@ -106,8 +107,9 @@ export default async function DashboardPage() {
             {vulnerabilitySummary.confirmed === 0 &&
             vulnerabilitySummary.potential === 0 ? (
               <p className="mt-4 text-sm leading-6 text-[#7f8a9f]">
-                Aucune CVE actuellement corrélée aux technologies et versions
-                observées. Cela ne garantit pas l’absence de vulnérabilité.
+                {vulnerabilitySummary.reviewed > 0
+                  ? "Aucune CVE restant à suivre. Les correspondances vérifiées restent consultables sur la fiche du site."
+                  : "Aucune CVE actuellement corrélée aux technologies et versions observées. Cela ne garantit pas l’absence de vulnérabilité."}
               </p>
             ) : (
               <p className="mt-4 text-sm leading-6 text-[#7f8a9f]">
