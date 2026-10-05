@@ -92,10 +92,13 @@ export default function Home() {
         <div className="am-panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-[#242d40] px-5 py-4">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#68758c]">
-                Dernier signal
+              <p className="font-mono text-xs uppercase tracking-[0.15em] text-[#aeb9cc]">
+                Exemple de résultat
               </p>
               <p className="mt-1 font-semibold">client.example.fr</p>
+              <p className="mt-1 text-xs text-[#aeb9cc]">
+                Données fictives de démonstration
+              </p>
             </div>
             <span className="rounded-md border border-[#31435a] bg-[#0a1720] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#68d7ff]">
               Scan terminé

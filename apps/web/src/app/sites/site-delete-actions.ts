@@ -45,11 +45,9 @@ export async function deleteSiteAction(
       organizationId,
       siteId,
     );
-    if (result.artifactCleanupFailures > 0) {
-      console.error("Site deleted with artifact cleanup failures", {
-        organizationId,
-        siteId,
-        artifactCleanupFailures: result.artifactCleanupFailures,
+    if (result.artifactCleanupPending > 0) {
+      console.info("Site deleted with artifact cleanup pending", {
+        pendingArtifacts: result.artifactCleanupPending,
       });
     }
   } catch (error) {

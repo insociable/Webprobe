@@ -22,6 +22,13 @@ export function SiteActionsMenu({
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const deleteRef = useRef<HTMLButtonElement>(null);
+  const panelId = `site-actions-${siteId}`;
+
+  useEffect(() => {
+    if (open && !confirming) deleteRef.current?.focus();
+  }, [open, confirming]);
   const action = deleteSiteAction.bind(null, organizationId, siteId, siteName);
   const [state, formAction, pending] = useActionState(action, initialState);
 
@@ -38,6 +45,7 @@ export function SiteActionsMenu({
       if (event.key === "Escape") {
         setOpen(false);
         setConfirming(false);
+        triggerRef.current?.focus();
       }
     };
 
@@ -52,9 +60,19 @@ export function SiteActionsMenu({
   return (
     <div ref={rootRef} className="relative shrink-0">
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="menu"
+        aria-controls={open ? panelId : undefined}
         aria-expanded={open}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+            setConfirming(false);
+            deleteRef.current?.focus();
+          }
+        }}
         aria-label={`Actions pour ${siteName}`}
         onClick={() => {
           setOpen((value) => !value);
@@ -69,24 +87,41 @@ export function SiteActionsMenu({
 
       {open ? (
         <div
-          role="menu"
-          aria-label={`Actions pour ${siteName}`}
+          id={panelId}
+          role={confirming ? "dialog" : "menu"}
+          aria-label={
+            confirming
+              ? `Confirmer la suppression de ${siteName}`
+              : `Actions pour ${siteName}`
+          }
+          onBlur={(event) => {
+            if (!pending && !rootRef.current?.contains(event.relatedTarget)) {
+              setOpen(false);
+              setConfirming(false);
+            }
+          }}
           className="absolute right-0 top-11 z-20 w-72 rounded-lg border border-[#303a50] bg-[#0b1019] p-2 shadow-2xl"
         >
           {!confirming ? (
             <button
+              ref={deleteRef}
               type="button"
               role="menuitem"
+              onKeyDown={(event) => {
+                if (
+                  ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)
+                ) {
+                  event.preventDefault();
+                  deleteRef.current?.focus();
+                }
+              }}
               onClick={() => setConfirming(true)}
               className="flex w-full items-center rounded-md px-3 py-2.5 text-left text-sm text-red-200 transition hover:bg-red-300/[0.08] hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#8793ff]"
             >
               Supprimer le site
             </button>
           ) : (
-            <div
-              role="dialog"
-              aria-label={`Confirmer la suppression de ${siteName}`}
-            >
+            <div>
               <p className="px-3 pt-2 text-sm font-semibold text-[#e9edf6]">
                 Supprimer « {siteName} » ?
               </p>

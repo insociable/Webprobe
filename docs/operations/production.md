@@ -1,14 +1,21 @@
 # Exploitation de la production
 
-Ce document est le guide d'exploitation de référence de l'instance WebProbe actuellement déployée.
+Ce document est le guide d'exploitation de référence de l'instance WebProbe.
 
 ## Emplacement
 
-Dépôt de production :
+Le code servi provient d’une release sous `/srv/webprobe/releases`. Le
+répertoire `/srv/agency-saas` conserve la configuration et le stockage ; son
+HEAD ne prouve pas la version servie. Lire le répertoire de travail des deux
+services avant toute comparaison Git :
 
-```text
-/srv/agency-saas
+```bash
+systemctl show agency-saas-web.service agency-saas-worker.service \
+  -p WorkingDirectory -p MainPID -p ActiveState
 ```
+
+Vérifier aussi le répertoire courant du processus et le SHA de cette release.
+Ne pas construire ni modifier le répertoire utilisé par les services actifs.
 
 Site public :
 
@@ -29,12 +36,12 @@ Les unités de référence sont versionnées dans `infra/systemd/`.
 
 Procédure générale :
 
-1. vérifier que le répertoire Git de production est propre ;
+1. identifier la release effectivement servie et vérifier que son arbre Git est propre ;
 2. récupérer les références distantes et identifier le SHA exact de `origin/main` ;
 3. comparer le SHA actuel et le candidat ;
 4. examiner les migrations nouvelles avant toute exécution ;
 5. installer les dépendances uniquement si le lockfile ou les manifests l'exigent ;
-6. construire le candidat ;
+6. construire le candidat dans une nouvelle release, séparée de la release active ;
 7. appliquer les migrations nécessaires dans leur ordre versionné ;
 8. redémarrer uniquement les services concernés ;
 9. vérifier les journaux ;
@@ -44,7 +51,7 @@ Procédure générale :
 Exemple de contrôles Git non destructifs :
 
 ```bash
-cd /srv/agency-saas
+cd /chemin/du/checkout-de-preparation
 git fetch --prune origin
 git status --short --branch
 git rev-parse HEAD
@@ -155,6 +162,13 @@ L'exploitation doit conserver :
 - les restrictions réseau applicatives ;
 - les limites systemd de mémoire, tâches et fichiers ;
 - la version de navigateur compatible avec la version Playwright du dépôt.
+
+## Nettoyage après suppression de site
+
+Le worker reprend l’effacement des captures via un journal durable. La migration
+0022 doit précéder le nouveau code. Les reprises, les compteurs d’exploitation
+et la compatibilité de retour arrière sont détaillés dans
+[`artifact-cleanup.md`](./artifact-cleanup.md).
 
 ## Retour arrière applicatif
 
