@@ -2,6 +2,11 @@ import type { HttpProbeResult, ProbeCookie } from "../http-probe.js";
 import type { BrowserRuntimeObservation } from "../browser-runtime.js";
 import type { CheckDefinition } from "./check-registry.js";
 import { createEvidence, type CheckEvidence } from "./evidence.js";
+import { assessCookieConsent } from "./cookie-consent-analysis.js";
+
+function checkVersion(id: string): string {
+  return id === "deep-cookies" ? "1.1.0" : "1.0.0";
+}
 
 type Finding = {
   code: string;
@@ -21,7 +26,7 @@ function evidence(
 ): CheckEvidence {
   return createEvidence({
     checkId: id,
-    checkVersion: "1.0.0",
+    checkVersion: checkVersion(id),
     classification: "observation",
     confidence,
     data: {
@@ -46,7 +51,7 @@ function check(
 ): CheckDefinition {
   return {
     id,
-    version: "1.0.0",
+    version: checkVersion(id),
     category,
     authorization: "deep",
     activity: "passive",
@@ -491,12 +496,17 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
             recommendation: "Ajouter Secure.",
           });
       }
+      const browser = input.browser as BrowserRuntimeObservation | undefined;
+      const consent = assessCookieConsent(
+        browser?.deep?.cookieConsent,
+        browser?.deep?.excludedThirdPartyRequests ?? 0,
+      );
       return evidence(
         "deep-cookies",
-        "Cookies",
-        `${cookies.length} cookies observés sans stocker leurs valeurs.`,
-        findings,
-        { cookies },
+        "Cookies et consentement",
+        `${cookies.length} cookie(s) déclaré(s) dans les en-têtes. ${consent.summary} Aucune valeur de cookie conservée.`,
+        [...findings, ...consent.findings],
+        { cookies, cookieConsent: consent.details },
         0.9,
       );
     }),

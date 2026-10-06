@@ -125,7 +125,10 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       else missingOther = true;
       continue;
     }
-    completedControls++;
+    const consent =
+      checkId === "deep-cookies" ? record(data.cookieConsent) : null;
+    if (consent && consent.status !== "observed") missingOther = true;
+    else completedControls++;
     const checkPenalty = deepFindings(
       run,
       dedicatedCspCompleted,

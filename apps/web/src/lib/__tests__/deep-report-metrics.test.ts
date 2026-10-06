@@ -159,3 +159,37 @@ describe("Deep report metrics", () => {
     expect(scoreDeepAudit(incompleteEvidence).value).toBe(74);
   });
 });
+
+describe("Cookie consent coverage in Deep scores", () => {
+  it.each(["limited", "unavailable"])(
+    "caps the score for a %s observation while retaining positive findings",
+    (status) => {
+      const runs = completeRuns();
+      runs[3] = run(
+        "deep-cookies",
+        [{ code: "cookie-tracker-before-consent", level: "review" }],
+        {
+          cookieConsent: { status },
+        },
+      );
+      expect(scoreDeepAudit(runs)).toMatchObject({
+        value: 89,
+        completedControls: 7,
+        limitedCoverage: true,
+      });
+    },
+  );
+
+  it("keeps historical scores and completed cookie observations compatible", () => {
+    const runs = completeRuns();
+    runs[3] = run("deep-cookies", [], {
+      cookieConsent: { status: "observed" },
+    });
+    expect(scoreDeepAudit(runs)).toMatchObject({
+      value: 100,
+      completedControls: 8,
+      limitedCoverage: false,
+    });
+    expect(scoreDeepAudit(completeRuns()).value).toBe(100);
+  });
+});
