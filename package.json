@@ -29,7 +29,8 @@
       "unrs-resolver"
     ],
     "overrides": {
-      "@esbuild-kit/core-utils>esbuild": "0.25.12"
+      "@esbuild-kit/core-utils>esbuild": "0.25.12",
+      "source-map-js": "1.2.2"
     }
   },
   "license": "AGPL-3.0-only"
