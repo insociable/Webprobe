@@ -1,6 +1,10 @@
-import { unlink } from "node:fs/promises";
-import path from "node:path";
-import { scanArtifacts, scanSchedules, scans, sites } from "@agency-saas/db";
+import {
+  artifactCleanupTasks,
+  scanArtifacts,
+  scanSchedules,
+  scans,
+  sites,
+} from "@agency-saas/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
@@ -22,67 +26,24 @@ export class SiteDeletionError extends Error {
   }
 }
 
-function repositoryRootFromCwd(): string {
-  const cwd = process.cwd();
-  return path.basename(path.dirname(cwd)) === "apps"
-    ? path.resolve(cwd, "../..")
-    : cwd;
-}
-
-function artifactRoot(): string {
-  const configured = process.env.SCAN_ARTIFACTS_DIR?.trim();
-  if (configured && path.isAbsolute(configured)) {
-    return configured;
-  }
-
-  return path.resolve(
-    /* turbopackIgnore: true */ repositoryRootFromCwd(),
-    configured || "storage/scan-artifacts",
-  );
-}
-
-function resolveSiteArtifactPath(
+function validSiteArtifactKey(
   storageKey: string,
   organizationId: string,
   siteId: string,
-): string | null {
+): boolean {
   const segments = storageKey.split("/");
-  if (
-    segments.length !== 4 ||
-    segments[0]?.toLowerCase() !== organizationId.toLowerCase() ||
-    segments[1]?.toLowerCase() !== siteId.toLowerCase() ||
-    !segments[2] ||
-    !uuidPattern.test(segments[2]) ||
-    segments[3] !== "primary.jpg"
-  ) {
-    return null;
-  }
-
-  const root = artifactRoot();
-  const resolved = path.resolve(root, ...segments);
-  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-  return resolved.startsWith(prefix) ? resolved : null;
-}
-
-async function removeArtifact(filePath: string): Promise<void> {
-  try {
-    await unlink(/* turbopackIgnore: true */ filePath);
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      return;
-    }
-    throw error;
-  }
+  return (
+    segments.length === 4 &&
+    segments[0]?.toLowerCase() === organizationId.toLowerCase() &&
+    segments[1]?.toLowerCase() === siteId.toLowerCase() &&
+    segments.slice(0, 3).every((segment) => uuidPattern.test(segment)) &&
+    segments[3] === "primary.jpg"
+  );
 }
 
 export type SiteDeletionResult = {
   deleted: boolean;
-  artifactCleanupFailures: number;
+  artifactCleanupPending: number;
 };
 
 export async function deleteSiteForOrganization(
@@ -100,7 +61,7 @@ export async function deleteSiteForOrganization(
     );
   }
 
-  const artifactPaths = await db.transaction(async (tx) => {
+  const artifactCount = await db.transaction(async (tx) => {
     // Keep the same lock namespace as manual scans. Scheduled scans are
     // fenced by locking the site row before this transaction checks activity.
     await tx.execute(
@@ -152,20 +113,25 @@ export async function deleteSiteForOrganization(
       .from(scanArtifacts)
       .where(eq(scanArtifacts.siteId, siteId));
 
-    const paths = artifacts.map(({ storageKey }) => {
-      const resolved = resolveSiteArtifactPath(
-        storageKey,
-        organizationId,
-        siteId,
-      );
-      if (!resolved) {
+    for (const artifact of artifacts) {
+      if (!validSiteArtifactKey(artifact.storageKey, organizationId, siteId)) {
         throw new SiteDeletionError(
           "Site artifact storage key is invalid",
           "artifact-invalid",
         );
       }
-      return resolved;
-    });
+    }
+
+    // No task can become visible until both the deletion and the outbox
+    // commit. The worker keeps it until unlink succeeds (including ENOENT).
+    if (artifacts.length > 0) {
+      await tx
+        .insert(artifactCleanupTasks)
+        .values(artifacts)
+        .onConflictDoNothing({
+          target: artifactCleanupTasks.storageKey,
+        });
+    }
 
     const deleted = await tx
       .delete(sites)
@@ -178,21 +144,8 @@ export async function deleteSiteForOrganization(
       throw new SiteDeletionError("Site not found", "site-not-found");
     }
 
-    return paths;
+    return artifacts.length;
   });
 
-  let artifactCleanupFailures = 0;
-  for (const filePath of artifactPaths) {
-    try {
-      await removeArtifact(filePath);
-    } catch (error) {
-      artifactCleanupFailures += 1;
-      console.error("Site artifact cleanup failed", {
-        filePath,
-        errorName: error instanceof Error ? error.name : "UnknownError",
-      });
-    }
-  }
-
-  return { deleted: true, artifactCleanupFailures };
+  return { deleted: true, artifactCleanupPending: artifactCount };
 }

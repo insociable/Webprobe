@@ -619,6 +619,37 @@ export const scanArtifacts = pgTable(
   ],
 );
 
+// No foreign keys: cleanup must survive the deletion of its site and scans.
+export const artifactCleanupTasks = pgTable(
+  "artifact_cleanup_tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    storageKey: text("storage_key").notNull(),
+    attempts: integer("attempts").default(0).notNull(),
+    lastErrorCode: text("last_error_code"),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("artifact_cleanup_tasks_storage_key_unique").on(
+      table.storageKey,
+    ),
+    index("artifact_cleanup_tasks_due_idx").on(table.nextAttemptAt, table.id),
+    check(
+      "artifact_cleanup_tasks_attempts_nonnegative",
+      sql`${table.attempts} >= 0`,
+    ),
+    check(
+      "artifact_cleanup_tasks_storage_key_format",
+      sql`${table.storageKey} ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/primary[.]jpg$'`,
+    ),
+  ],
+);
+
 export const reportShares = pgTable(
   "report_shares",
   {

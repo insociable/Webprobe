@@ -3,6 +3,7 @@ import { Queue, UnrecoverableError, Worker, type JobsOptions } from "bullmq";
 import pino from "pino";
 import { SCAN_QUEUE_NAME, type ScanJob } from "@agency-saas/contracts";
 import { closeDatabase, getDatabase } from "./database.js";
+import { startArtifactCleanupCoordinator } from "./artifact-cleanup.js";
 import { startNotificationDeliveryCoordinator } from "./notification-delivery.js";
 import { sendScanNotificationEmail } from "./notification-email.js";
 import { startWorkerObservability } from "./observability.js";
@@ -280,6 +281,8 @@ const observabilityCoordinator = startWorkerObservability({
   logger,
 });
 
+const artifactCleanupCoordinator = startArtifactCleanupCoordinator({ logger });
+
 const publicAuditRetentionPolicy = getPublicAuditRetentionPolicy();
 const publicAuditRetentionCoordinator = startPublicAuditRetentionCoordinator({
   logger,
@@ -296,6 +299,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, "stopping scanner worker");
   for (const controller of activeDeepJobs) controller.abort();
   await observabilityCoordinator.stop();
+  await artifactCleanupCoordinator.stop();
   await publicAuditRetentionCoordinator.stop();
   await vulnerabilitySyncCoordinator.stop();
   await schedulerCoordinator.stop();
