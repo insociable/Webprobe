@@ -7,6 +7,7 @@ import {
   technologyObservations,
 } from "@agency-saas/db";
 import { and, eq, sql } from "drizzle-orm";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { getDatabase } from "../database.js";
 import type { TechnologyObservationInput } from "../technology-inventory.js";
 import { BudgetLedger } from "./budget-ledger.js";
@@ -126,6 +127,15 @@ export async function persistDeepCheckRuns(input: {
         status: sites.status,
         verifiedAt: sites.verifiedAt,
         canonicalUrl: sites.canonicalUrl,
+        ownershipTokenHash: sites.ownershipTokenHash,
+        ownershipRecordName: sites.ownershipRecordName,
+        ownershipOrigin: sites.ownershipOrigin,
+        ownershipGeneration: sites.ownershipGeneration,
+        ownershipVerifiedAt: sites.ownershipVerifiedAt,
+        ownershipExpiresAt: sites.ownershipExpiresAt,
+        ownershipRevalidatedAt: sites.ownershipRevalidatedAt,
+        ownershipInvalidatedAt: sites.ownershipInvalidatedAt,
+        now: sql<Date>`clock_timestamp()`.mapWith(sites.createdAt),
       })
       .from(sites)
       .where(
@@ -145,9 +155,16 @@ export async function persistDeepCheckRuns(input: {
       throw new Error("Deep site changed before persistence");
     if (input.grantIdentity) {
       if (
+        !hasCurrentSiteOwnershipProof(site, site.now) ||
         site.canonicalUrl !== input.grantIdentity.canonicalUrl ||
         site.verifiedAt.getTime() !==
-          input.grantIdentity.siteVerifiedAt.getTime()
+          input.grantIdentity.siteVerifiedAt.getTime() ||
+        site.ownershipGeneration !== input.grantIdentity.ownershipGeneration ||
+        site.ownershipTokenHash !== input.grantIdentity.ownershipTokenHash ||
+        site.ownershipVerifiedAt?.getTime() !==
+          input.grantIdentity.ownershipVerifiedAt.getTime() ||
+        site.ownershipRevalidatedAt?.getTime() !==
+          input.grantIdentity.ownershipRevalidatedAt.getTime()
       ) {
         throw new Error("Deep site verification changed before persistence");
       }

@@ -233,6 +233,22 @@ export const sites = pgTable(
     canonicalUrl: text("canonical_url").notNull(),
     status: siteStatus("status").default("pending_verification").notNull(),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    ownershipTokenHash: text("ownership_token_hash"),
+    ownershipRecordName: text("ownership_record_name"),
+    ownershipOrigin: text("ownership_origin"),
+    ownershipGeneration: uuid("ownership_generation"),
+    ownershipVerifiedAt: timestamp("ownership_verified_at", {
+      withTimezone: true,
+    }),
+    ownershipExpiresAt: timestamp("ownership_expires_at", {
+      withTimezone: true,
+    }),
+    ownershipRevalidatedAt: timestamp("ownership_revalidated_at", {
+      withTimezone: true,
+    }),
+    ownershipInvalidatedAt: timestamp("ownership_invalidated_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -246,6 +262,27 @@ export const sites = pgTable(
       table.canonicalUrl,
     ),
     index("sites_org_idx").on(table.organizationId),
+    check(
+      "sites_ownership_proof_complete",
+      sql`(${table.ownershipTokenHash} is null and ${table.ownershipRecordName} is null and ${table.ownershipOrigin} is null and ${table.ownershipGeneration} is null and ${table.ownershipVerifiedAt} is null and ${table.ownershipExpiresAt} is null and ${table.ownershipRevalidatedAt} is null)
+          or (${table.ownershipTokenHash} is not null and ${table.ownershipRecordName} is not null and ${table.ownershipOrigin} is not null and ${table.ownershipGeneration} is not null and ${table.ownershipVerifiedAt} is not null and ${table.ownershipExpiresAt} is not null and ${table.ownershipRevalidatedAt} is not null)`,
+    ),
+    check(
+      "sites_ownership_token_hash_valid",
+      sql`${table.ownershipTokenHash} is null or ${table.ownershipTokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
+    check(
+      "sites_ownership_record_name_valid",
+      sql`${table.ownershipRecordName} is null or ${table.ownershipRecordName} ~ '^_agency-monitor[.]'`,
+    ),
+    check(
+      "sites_ownership_origin_valid",
+      sql`${table.ownershipOrigin} is null or ${table.ownershipOrigin} ~ '^https?://[^/?#]+$'`,
+    ),
+    check(
+      "sites_ownership_expiry_after_verification",
+      sql`${table.ownershipExpiresAt} is null or (${table.ownershipVerifiedAt} is not null and ${table.ownershipExpiresAt} > ${table.ownershipVerifiedAt} and ${table.ownershipRevalidatedAt} >= ${table.ownershipVerifiedAt})`,
+    ),
   ],
 );
 
@@ -625,6 +662,10 @@ export const artifactCleanupTasks = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     storageKey: text("storage_key").notNull(),
+    action: text("action").default("delete").notNull(),
+    organizationId: uuid("organization_id"),
+    siteId: uuid("site_id"),
+    scanId: uuid("scan_id"),
     attempts: integer("attempts").default(0).notNull(),
     lastErrorCode: text("last_error_code"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true })
@@ -639,6 +680,17 @@ export const artifactCleanupTasks = pgTable(
       table.storageKey,
     ),
     index("artifact_cleanup_tasks_due_idx").on(table.nextAttemptAt, table.id),
+    index("artifact_cleanup_tasks_scope_idx").on(
+      table.organizationId,
+      table.siteId,
+      table.scanId,
+    ),
+    check(
+      "artifact_cleanup_tasks_action_supported",
+      sql.raw(
+        "\"artifact_cleanup_tasks\".\"action\" in ('delete', 'write_intent')",
+      ),
+    ),
     check(
       "artifact_cleanup_tasks_attempts_nonnegative",
       sql`${table.attempts} >= 0`,

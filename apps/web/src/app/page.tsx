@@ -17,9 +17,9 @@ const webApplicationJsonLd = {
 };
 
 const signals = [
-  { label: "Sites suivis", value: "20 max.", detail: "périmètre pilote" },
-  { label: "Modes", value: "2", detail: "standard + Deep V3" },
-  { label: "Cadence", value: "7 jours", detail: "+ scans manuels" },
+  { label: "Parcours", value: "3", detail: "audit public, standard, Deep" },
+  { label: "Preuve DNS", value: "30 j", detail: "renouvelable par TXT" },
+  { label: "Planning", value: "7 jours", detail: "+ scans manuels vérifiés" },
 ];
 
 const checks = [
@@ -108,8 +108,8 @@ export default function Home() {
             {[
               ["HTTP", "200", "#51d3a5"],
               ["Pages", "16", "#dfe5f2"],
-              ["Findings", "08", "#ffb45f"],
-              ["Critical", "00", "#dfe5f2"],
+              ["Constats", "08", "#ffb45f"],
+              ["Critiques", "00", "#dfe5f2"],
             ].map(([label, value, color]) => (
               <div
                 key={label}
@@ -126,10 +126,10 @@ export default function Home() {
           </div>
           <div className="space-y-1 p-3">
             {[
-              ["CSP absente", "Medium", "Nouveau"],
-              ["Contraste insuffisant", "Medium", "Stable"],
-              ["Heading order", "Low", "Nouveau"],
-              ["Certificat à surveiller", "Low", "Stable"],
+              ["CSP absente", "Moyen", "Nouveau"],
+              ["Contraste insuffisant", "Moyen", "Stable"],
+              ["Ordre des titres", "Faible", "Nouveau"],
+              ["Certificat à surveiller", "Faible", "Stable"],
             ].map(([title, severity, state], index) => (
               <div
                 key={title}
@@ -164,7 +164,19 @@ export default function Home() {
       </section>
 
       <section className="mx-auto w-[min(1240px,calc(100%-32px))] border-t border-[#242d40] py-16">
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-3">
+          <article className="am-panel p-6">
+            <p className="am-kicker">Audit public ponctuel</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
+              Premier diagnostic sans preuve DNS
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#8793a8]">
+              Après connexion, lancez un audit limité de votre site. Il ne
+              débloque ni le planning, ni les alertes de monitoring, ni Deep. Le
+              rapport indique les observations et leurs limites.
+            </p>
+          </article>
+
           <article className="am-panel p-6">
             <p className="am-kicker">Scan standard</p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
@@ -173,7 +185,8 @@ export default function Home() {
             <p className="mt-3 text-sm leading-6 text-[#8793a8]">
               Analyse les principaux signaux sécurité, performance, SEO,
               disponibilité, navigateur et configuration, avec historique,
-              comparaison et remédiations.
+              comparaison et remédiations. Une preuve TXT de propriété valide
+              est requise pour ce suivi.
             </p>
           </article>
 
@@ -187,8 +200,8 @@ export default function Home() {
               navigateur gardés, budgets réseau, protections anti-SSRF,
               contrôles dédiés et preuves techniques. Les technologies observées
               sont régulièrement rapprochées des CVE publiées par NVD et CISA
-              KEV. La vérification DNS existante du domaine suffit pour
-              l’autoriser.
+              KEV. Le TXT de propriété est revérifié juste avant l’accès réseau,
+              sous le même nom DNS que la vérification initiale.
             </p>
           </article>
         </div>
@@ -198,7 +211,7 @@ export default function Home() {
         <div>
           <p className="am-kicker">Du signal à la correction</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
-            Un cockpit, pas une collection de voyants.
+            Comprendre, prioriser, corriger.
           </h2>
           <p className="mt-4 max-w-md leading-7 text-[#8793a8]">
             Le parcours reste linéaire : choisir un site, lancer ou suivre un

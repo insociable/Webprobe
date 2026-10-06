@@ -31,7 +31,7 @@ L'Audit approfondi utilise le mode interne `verified_deep_audit` et un moteur di
 
 L'Audit approfondi reste non destructif : il ne soumet pas de formulaire, ne lance pas de recherche par dictionnaire et n'effectue pas de pentest agressif. Son périmètre réseau est strict, les transports sont protégés contre les SSRF et l'exécution est bornée par des budgets de requêtes, pages, octets, DNS, TLS et durée.
 
-Le code de `main` accepte un Audit approfondi sur un site actif déjà vérifié. Lorsqu'un grant Deep DNS dédié existe, il est revalidé avant l'exécution et son identité participe au fencing de l'exécution.
+Un Audit approfondi exige une preuve TXT de propriété durable et revérifiée juste avant le réseau. Un ancien `verifiedAt` seul ne suffit pas. Lorsqu’un grant Deep DNS dédié existe, il est aussi revalidé et son identité participe au fencing de l’exécution.
 
 WebProbe ne réalise pas de balayage arbitraire de ports TCP ou UDP. Les contrôles réseau restent bornés à la surface HTTP(S) autorisée par l'URL, au DNS nécessaire et aux transports navigateur/HTTP gardés ; une cartographie de ports doit être réalisée séparément avec une autorisation explicite.
 

@@ -1,4 +1,5 @@
 import { scanDispatches, scans } from "@agency-saas/db";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
@@ -8,6 +9,7 @@ import {
   requireOrganizationAccess,
 } from "./organization-site-service";
 import { hasPostgresErrorCode } from "./postgres-error";
+import { revalidateSiteOwnershipProof } from "./site-verification";
 
 export class ManualScanError extends Error {
   constructor(
@@ -77,6 +79,16 @@ async function createManualScanForSiteMode(
   if (site.status !== "active" || !site.verifiedAt) {
     throw new ManualScanError(
       "Site must be verified and active before scanning",
+      "site-not-active",
+    );
+  }
+  const ownership = await revalidateSiteOwnershipProof({
+    organizationId,
+    siteId,
+  });
+  if (!hasCurrentSiteOwnershipProof(ownership)) {
+    throw new ManualScanError(
+      "Site ownership must be reverified",
       "site-not-active",
     );
   }

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  artifactCleanupTasks,
   organizations,
   reportShares,
   scanArtifacts,
@@ -172,6 +173,84 @@ describeDatabase("public audit retention", () => {
       await expect(
         access(path.resolve(root, ...storageKey.split("/"))),
       ).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      if (previousRoot === undefined) delete process.env.SCAN_ARTIFACTS_DIR;
+      else process.env.SCAN_ARTIFACTS_DIR = previousRoot;
+      await cleanupFixture(fixture.organizationId, fixture.userId);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back deletion and cleanup journal when scan deletion fails", async () => {
+    const { db } = getDatabase();
+    const fixture = await createFixture();
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "agency-retention-rollback-"),
+    );
+    const previousRoot = process.env.SCAN_ARTIFACTS_DIR;
+    process.env.SCAN_ARTIFACTS_DIR = root;
+    const now = new Date("2026-09-23T10:00:00.000Z");
+    const scanId = randomUUID();
+
+    try {
+      await db.insert(scans).values({
+        id: scanId,
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        trigger: "manual",
+        scanMode: "public_audit",
+        status: "completed",
+        completedAt: new Date("2026-05-01T10:00:00.000Z"),
+      });
+      const storageKey = primaryScreenshotStorageKey({
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        scanId,
+      });
+      await persistPrimaryScreenshot({
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        scanId,
+        screenshot: {
+          data: Buffer.from("rollback-jpeg"),
+          mediaType: "image/jpeg",
+        },
+      });
+
+      await expect(
+        purgeExpiredPublicAudits(
+          now,
+          {
+            retentionDays: 90,
+            batchSize: 100,
+            intervalMs: 60_000,
+          },
+          {
+            beforeScanDelete: async () => {
+              throw new Error("injected database transaction failure");
+            },
+          },
+        ),
+      ).rejects.toThrow("injected database transaction failure");
+
+      expect(
+        await db.select().from(scans).where(eq(scans.id, scanId)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(scanArtifacts)
+          .where(eq(scanArtifacts.scanId, scanId)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(artifactCleanupTasks)
+          .where(eq(artifactCleanupTasks.storageKey, storageKey)),
+      ).toHaveLength(0);
+      await expect(
+        access(path.resolve(root, ...storageKey.split("/"))),
+      ).resolves.toBeUndefined();
     } finally {
       if (previousRoot === undefined) delete process.env.SCAN_ARTIFACTS_DIR;
       else process.env.SCAN_ARTIFACTS_DIR = previousRoot;

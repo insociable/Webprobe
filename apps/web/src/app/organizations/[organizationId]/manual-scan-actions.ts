@@ -10,6 +10,7 @@ import {
   ManualScanError,
 } from "@/lib/manual-scan";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
+import { SiteVerificationError } from "@/lib/site-verification";
 
 export type ManualScanActionState = {
   error: string | null;
@@ -22,6 +23,16 @@ const initialManualScanActionState: ManualScanActionState = {
 };
 
 function humanScanError(error: unknown): string {
+  if (error instanceof SiteVerificationError) {
+    switch (error.code) {
+      case "dns-unavailable":
+        return "Le DNS ne répond pas pour le moment. La preuve existante n’a pas été annulée ; réessayez plus tard.";
+      case "dns-record-not-found":
+        return "Le TXT de propriété est absent ou différent. Revérifiez le domaine avant de continuer.";
+      case "ownership-reverification-required":
+        return "La preuve de propriété doit être renouvelée. Ouvrez la vérification DNS du site.";
+    }
+  }
   if (error instanceof OrganizationAccessError) {
     return "Vous n’êtes pas autorisé à lancer un scan.";
   }

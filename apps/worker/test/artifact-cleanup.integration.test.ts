@@ -22,6 +22,7 @@ import { eq, inArray } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import { purgePendingArtifacts } from "../src/artifact-cleanup.js";
 import {
+  artifactWriteGraceMs,
   persistPrimaryScreenshot,
   primaryScreenshotStorageKey,
 } from "../src/scan-artifacts.js";
@@ -72,7 +73,7 @@ describeDatabase("durable artifact cleanup", () => {
   it("retains a failed unlink, backs off, and resumes after a worker restart", async () => {
     await withFixture(async ({ storageKey, filePath }) => {
       const now = new Date();
-      await mkdir(filePath, { recursive: true }); // Real EISDIR failure.
+      await mkdir(filePath, { recursive: true }); // Unexpected directory at the file path.
       await getDatabase()
         .db.insert(artifactCleanupTasks)
         .values({
@@ -93,7 +94,7 @@ describeDatabase("durable artifact cleanup", () => {
         .where(eq(artifactCleanupTasks.storageKey, storageKey));
       expect(task).toMatchObject({
         attempts: 1,
-        lastErrorCode: "filesystem-error",
+        lastErrorCode: "unsafe-storage-key",
       });
       expect(task!.nextAttemptAt.getTime()).toBe(now.getTime() + 60_000);
       expect(
@@ -162,6 +163,75 @@ describeDatabase("durable artifact cleanup", () => {
           .db.delete(artifactCleanupTasks)
           .where(inArray(artifactCleanupTasks.storageKey, keys));
       }
+    });
+  });
+
+  it("recovers a renamed screenshot when metadata persistence fails", async () => {
+    await withFixture(async (fixture) => {
+      const { db } = getDatabase();
+      await db
+        .insert(organizations)
+        .values({ id: fixture.organizationId, name: "Cleanup write intent" });
+      await db.insert(sites).values({
+        id: fixture.siteId,
+        organizationId: fixture.organizationId,
+        name: "Write intent site",
+        canonicalUrl: "https://cleanup.example.invalid/",
+      });
+      await db.insert(scans).values({
+        id: fixture.scanId,
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        trigger: "manual",
+        status: "completed",
+      });
+
+      await expect(
+        persistPrimaryScreenshot(
+          {
+            ...fixture,
+            screenshot: {
+              data: Buffer.from("renamed-but-unregistered"),
+              mediaType: "image/jpeg",
+            },
+          },
+          {
+            afterRename: async () => {
+              throw new Error("simulated metadata insert failure");
+            },
+          },
+        ),
+      ).rejects.toThrow("simulated metadata insert failure");
+
+      expect((await readFile(fixture.filePath)).toString()).toBe(
+        "renamed-but-unregistered",
+      );
+      expect(
+        await db
+          .select()
+          .from(scanArtifacts)
+          .where(eq(scanArtifacts.scanId, fixture.scanId)),
+      ).toHaveLength(0);
+      const [intent] = await db
+        .select()
+        .from(artifactCleanupTasks)
+        .where(eq(artifactCleanupTasks.storageKey, fixture.storageKey));
+      expect(intent).toMatchObject({
+        action: "write_intent",
+        organizationId: fixture.organizationId,
+        siteId: fixture.siteId,
+        scanId: fixture.scanId,
+      });
+
+      const cleanupAt = new Date(Date.now() + artifactWriteGraceMs + 1);
+      expect(await purgePendingArtifacts(cleanupAt)).toMatchObject({
+        checked: 1,
+        removed: 1,
+        pending: 0,
+      });
+      await expect(access(fixture.filePath)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
     });
   });
 

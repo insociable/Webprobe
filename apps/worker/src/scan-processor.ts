@@ -29,9 +29,11 @@ import {
   validateScanContext,
 } from "./scan-persistence.js";
 import { detectTechnologyInventory } from "./technology-inventory.js";
+import { ensureSiteOwnershipProof } from "./site-ownership.js";
 import { reconcileScanVulnerabilities } from "./vulnerability-correlation.js";
 
 const vulnerabilityLogger = pino({ name: "scanner-vulnerability-enrichment" });
+const artifactLogger = pino({ name: "scanner-artifacts" });
 
 export type ScanExecutionResult = ScanResult & {
   http: HttpProbeResult;
@@ -73,6 +75,14 @@ export async function processScanJobAttempt(
     dependencies.persistPrimaryScreenshot ?? defaultPersistPrimaryScreenshot;
 
   await markScanRunning(context);
+  if (context.scanMode === "verified_monitoring") {
+    // Renew an expired proof when its retained TXT still matches. A DNS
+    // outage denies this run without revoking the stored proof.
+    await ensureSiteOwnershipProof({
+      organizationId: context.organizationId,
+      siteId: context.siteId,
+    });
+  }
 
   const httpProbe = await probeHttpTarget(context.targetUrl);
   const httpFindings = generateHttpProbeFindings(httpProbe, context.targetUrl);
@@ -164,7 +174,14 @@ export async function processScanJobAttempt(
         scanId: context.scanId,
         screenshot: browserScan.screenshot,
       });
-    } catch {
+    } catch (error) {
+      artifactLogger.warn(
+        {
+          scanId: context.scanId,
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        },
+        "primary screenshot persistence failed",
+      );
       screenshotStored = false;
     }
   }

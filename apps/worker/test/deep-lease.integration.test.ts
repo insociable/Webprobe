@@ -46,6 +46,13 @@ async function fixture() {
     canonicalUrl: "https://deep.example.test/",
     status: "active",
     verifiedAt,
+    ownershipTokenHash: hash,
+    ownershipRecordName: "_agency-monitor.deep.example.test",
+    ownershipOrigin: "https://deep.example.test",
+    ownershipGeneration: generationId,
+    ownershipVerifiedAt: verifiedAt,
+    ownershipRevalidatedAt: verifiedAt,
+    ownershipExpiresAt: new Date(Date.now() + 24 * 60 * 60_000),
   });
   await db.insert(scans).values({
     id: scanId,

@@ -1,8 +1,10 @@
 import { ScanJobSchema, type ScanJob } from "@agency-saas/contracts";
 import { scanDispatches, scanSchedules, scans, sites } from "@agency-saas/db";
 import { and, asc, eq, isNotNull, lte, or } from "drizzle-orm";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
+import { ensureSiteOwnershipProof } from "./site-ownership.js";
 import type { ScanMode } from "./scan-engine/types.js";
 
 export type ScanDispatchEnqueuer = (payload: ScanJob) => Promise<void>;
@@ -50,6 +52,70 @@ function safeErrorCode(error: unknown): string {
   return "scan-dispatch-failed";
 }
 
+async function refreshDueDispatchProofs(
+  now: Date,
+  batchSize: number,
+): Promise<void> {
+  const { db } = getDatabase();
+  const rows = await db
+    .select({
+      organizationId: scans.organizationId,
+      siteId: scans.siteId,
+      mode: scans.scanMode,
+      site: sites,
+    })
+    .from(scanDispatches)
+    .innerJoin(scans, eq(scanDispatches.scanId, scans.id))
+    .innerJoin(
+      sites,
+      and(
+        eq(scans.siteId, sites.id),
+        eq(scans.organizationId, sites.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(scans.status, "queued"),
+        or(
+          and(
+            eq(scanDispatches.status, "pending"),
+            lte(scanDispatches.nextAttemptAt, now),
+          ),
+          and(
+            eq(scanDispatches.status, "dispatching"),
+            isNotNull(scanDispatches.leaseUntil),
+            lte(scanDispatches.leaseUntil, now),
+          ),
+        ),
+      ),
+    )
+    .orderBy(asc(scanDispatches.nextAttemptAt))
+    .limit(batchSize);
+  for (let i = 0; i < rows.length; i += 4) {
+    await Promise.all(
+      rows.slice(i, i + 4).map(async (row) => {
+        if (
+          row.mode === "public_audit" ||
+          row.site.status !== "active" ||
+          !row.site.verifiedAt ||
+          !row.site.ownershipTokenHash ||
+          row.site.ownershipInvalidatedAt ||
+          hasCurrentSiteOwnershipProof(row.site, now)
+        )
+          return;
+        try {
+          await ensureSiteOwnershipProof({
+            organizationId: row.organizationId,
+            siteId: row.siteId,
+          });
+        } catch {
+          // Stale proof is retried or rejected by the locked claim below.
+        }
+      }),
+    );
+  }
+}
+
 export async function claimDueScanDispatches(
   now = new Date(),
   batchSize = 50,
@@ -73,6 +139,7 @@ export async function claimDueScanDispatches(
         siteStatus: sites.status,
         verifiedAt: sites.verifiedAt,
         scheduleEnabled: scanSchedules.enabled,
+        site: sites,
       })
       .from(scanDispatches)
       .innerJoin(scans, eq(scanDispatches.scanId, scans.id))
@@ -132,10 +199,31 @@ export async function claimDueScanDispatches(
         row.scanTrigger === "scheduled" &&
         (!row.scheduleId || row.scheduleEnabled !== true);
 
+      const proofCurrent = hasCurrentSiteOwnershipProof(row.site, now);
+      if (
+        row.scanMode !== "public_audit" &&
+        row.siteStatus === "active" &&
+        row.verifiedAt &&
+        row.site.ownershipTokenHash &&
+        !row.site.ownershipInvalidatedAt &&
+        !proofCurrent
+      ) {
+        await tx
+          .update(scanDispatches)
+          .set({
+            status: "pending",
+            nextAttemptAt: new Date(now.getTime() + 60_000),
+            leaseUntil: null,
+            lastErrorCode: "ownership-proof-retry",
+            updatedAt: now,
+          })
+          .where(eq(scanDispatches.scanId, row.scanId));
+        continue;
+      }
       const invalidSite =
         row.scanMode === "public_audit"
           ? row.siteStatus === "paused"
-          : row.siteStatus !== "active" || !row.verifiedAt;
+          : !proofCurrent;
       const invalidMode =
         row.scanTrigger === "scheduled" &&
         row.scanMode !== "verified_monitoring";
@@ -251,6 +339,7 @@ export async function dispatchDueScanJobs(
   now = new Date(),
   batchSize = 50,
 ): Promise<ScanDispatchResult> {
+  await refreshDueDispatchProofs(now, batchSize);
   const claimed = await claimDueScanDispatches(now, batchSize);
   let dispatched = 0;
   let deferred = 0;

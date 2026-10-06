@@ -1,6 +1,13 @@
-import { createHash, timingSafeEqual } from "node:crypto";
-import { Resolver } from "node:dns/promises";
 import { deepAuditAuthorizations, sites } from "@agency-saas/db";
+import {
+  hasCurrentSiteOwnershipProof,
+  matchesSiteOwnershipToken,
+  siteOwnershipRecordName,
+} from "@agency-saas/security";
+import {
+  ensureSiteOwnershipProof,
+  SiteOwnershipError,
+} from "../site-ownership.js";
 import { and, eq, sql } from "drizzle-orm";
 import { getDatabase } from "../database.js";
 import { authorizeScan, type AuthorizationDecision } from "./authorization.js";
@@ -12,28 +19,14 @@ function abortError(): Error {
 }
 
 export function expectedDeepProofRecord(canonicalUrl: string): string {
-  const url = new URL(canonicalUrl);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Invalid canonical URL for DNS proof");
-  }
-  return `_agency-monitor.${url.hostname.replace(/\.$/, "").toLowerCase()}`;
+  return siteOwnershipRecordName(canonicalUrl);
 }
 
 export function matchesDeepProof(
   answers: readonly (readonly string[])[],
   expectedHash: string,
 ): boolean {
-  if (!/^[a-f0-9]{64}$/.test(expectedHash) || answers.length > 32) {
-    return false;
-  }
-  const expected = Buffer.from(expectedHash, "hex");
-  for (const fragments of answers) {
-    const record = fragments.join("");
-    if (record.length > 1024) return false;
-    const actual = createHash("sha256").update(record).digest();
-    if (timingSafeEqual(actual, expected)) return true;
-  }
-  return false;
+  return matchesSiteOwnershipToken(answers, expectedHash);
 }
 
 /** Rechecks the durable TXT proof immediately before a future Deep Audit run. */
@@ -66,6 +59,35 @@ export async function revalidateDeepAuditAuthorization(input: {
   if (!row.site.verifiedAt)
     return { allowed: false, reason: "site-unverified" };
   const siteVerifiedAt = row.site.verifiedAt;
+  let ownership: typeof row.site;
+  let ownershipAnswers: string[][] = [];
+  try {
+    ownership = await ensureSiteOwnershipProof({
+      organizationId: input.organizationId,
+      siteId: input.siteId,
+      force: true,
+      onResolvedAnswers: (answers) => {
+        ownershipAnswers = answers;
+      },
+      ...(input.resolveTxt ? { resolver: input.resolveTxt } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+  } catch (error) {
+    if (input.signal?.aborted) throw abortError();
+    return {
+      allowed: false,
+      reason:
+        error instanceof SiteOwnershipError && error.code === "dns-unavailable"
+          ? "ownership-dns-unavailable"
+          : "ownership-reverification-required",
+    };
+  }
+  if (
+    row.site.canonicalUrl !== ownership.canonicalUrl ||
+    row.site.ownershipGeneration !== ownership.ownershipGeneration ||
+    row.site.ownershipTokenHash !== ownership.ownershipTokenHash
+  )
+    return { allowed: false, reason: "ownership-reverification-required" };
   const grant = row.grant;
   if (!grant) {
     return db.transaction(async (tx) => {
@@ -90,7 +112,12 @@ export async function revalidateDeepAuditAuthorization(input: {
       }
       if (
         currentSite.canonicalUrl !== row.site.canonicalUrl ||
-        currentSite.verifiedAt.getTime() !== siteVerifiedAt.getTime()
+        currentSite.verifiedAt.getTime() !== siteVerifiedAt.getTime() ||
+        !hasCurrentSiteOwnershipProof(currentSite) ||
+        currentSite.ownershipGeneration !== ownership.ownershipGeneration ||
+        currentSite.ownershipTokenHash !== ownership.ownershipTokenHash ||
+        currentSite.ownershipRevalidatedAt?.getTime() !==
+          ownership.ownershipRevalidatedAt?.getTime()
       ) {
         return { allowed: false, reason: "deep-grant-invalid" } as const;
       }
@@ -107,6 +134,10 @@ export async function revalidateDeepAuditAuthorization(input: {
             grantIdentity: {
               canonicalUrl: currentSite.canonicalUrl,
               siteVerifiedAt: currentSite.verifiedAt,
+              ownershipGeneration: ownership.ownershipGeneration!,
+              ownershipTokenHash: ownership.ownershipTokenHash!,
+              ownershipVerifiedAt: ownership.ownershipVerifiedAt!,
+              ownershipRevalidatedAt: ownership.ownershipRevalidatedAt!,
             },
           }
         : decision;
@@ -132,37 +163,9 @@ export async function revalidateDeepAuditAuthorization(input: {
   }
   if (input.signal?.aborted) throw abortError();
 
-  let valid = false;
-  let timer: NodeJS.Timeout | undefined;
-  const resolver = input.resolveTxt ? undefined : new Resolver();
-  let onAbort: (() => void) | undefined;
-  try {
-    const answers = await Promise.race([
-      (input.resolveTxt ?? ((name) => resolver!.resolveTxt(name)))(recordName),
-      new Promise<never>(
-        (_, reject) =>
-          (timer = setTimeout(
-            () => reject(new Error("DNS proof timeout")),
-            5_000,
-          )),
-      ),
-      new Promise<never>((_, reject) => {
-        onAbort = () => {
-          resolver?.cancel();
-          reject(abortError());
-        };
-        input.signal?.addEventListener("abort", onAbort, { once: true });
-        if (input.signal?.aborted) onAbort();
-      }),
-    ]);
-    valid = matchesDeepProof(answers, grant.proofTokenHash!);
-  } catch {
-    if (input.signal?.aborted) throw abortError();
-    valid = false;
-  } finally {
-    if (timer) clearTimeout(timer);
-    if (onAbort) input.signal?.removeEventListener("abort", onAbort);
-  }
+  // One bounded TXT lookup checks both the durable site proof and an optional
+  // legacy Deep grant under the same DNS record name.
+  const valid = matchesDeepProof(ownershipAnswers, grant.proofTokenHash!);
   // DNS may take five seconds. Lock and re-read both rows with a fresh DB clock.
   return db.transaction(async (tx) => {
     if (input.signal?.aborted) throw abortError();
@@ -217,6 +220,11 @@ export async function revalidateDeepAuditAuthorization(input: {
       currentSite.canonicalUrl !== row.site.canonicalUrl ||
       !row.site.verifiedAt ||
       currentSite.verifiedAt.getTime() !== row.site.verifiedAt.getTime() ||
+      !hasCurrentSiteOwnershipProof(currentSite, clock.now) ||
+      currentSite.ownershipGeneration !== ownership.ownershipGeneration ||
+      currentSite.ownershipTokenHash !== ownership.ownershipTokenHash ||
+      currentSite.ownershipRevalidatedAt?.getTime() !==
+        ownership.ownershipRevalidatedAt?.getTime() ||
       currentGrant.proofRecordName !== recordName ||
       currentGrant.proofRecordName !==
         expectedDeepProofRecord(currentSite.canonicalUrl) ||
@@ -254,6 +262,10 @@ export async function revalidateDeepAuditAuthorization(input: {
             verifiedAt: updated.proofVerifiedAt,
             canonicalUrl: currentSite.canonicalUrl,
             siteVerifiedAt: currentSite.verifiedAt,
+            ownershipGeneration: ownership.ownershipGeneration!,
+            ownershipTokenHash: ownership.ownershipTokenHash!,
+            ownershipVerifiedAt: ownership.ownershipVerifiedAt!,
+            ownershipRevalidatedAt: ownership.ownershipRevalidatedAt!,
           },
         }
       : decision;

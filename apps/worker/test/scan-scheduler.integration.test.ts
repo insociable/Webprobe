@@ -44,6 +44,13 @@ async function createFixture(options?: {
     canonicalUrl: "https://example.com/",
     status: "active",
     verifiedAt: new Date(),
+    ownershipTokenHash: "a".repeat(64),
+    ownershipRecordName: "_agency-monitor.example.com",
+    ownershipOrigin: "https://example.com",
+    ownershipGeneration: randomUUID(),
+    ownershipVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ownershipRevalidatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ownershipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
   });
   await db.insert(scanSchedules).values({
     id: scheduleId,

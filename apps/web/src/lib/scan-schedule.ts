@@ -3,6 +3,7 @@ import {
   type WeeklyScanScheduleInput,
 } from "@agency-saas/contracts";
 import { scanSchedules } from "@agency-saas/db";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "./database";
 import {
@@ -11,6 +12,7 @@ import {
   OrganizationAccessError,
   requireOrganizationAccess,
 } from "./organization-site-service";
+import { revalidateSiteOwnershipProof } from "./site-verification";
 
 export class ScanScheduleError extends Error {
   constructor(
@@ -71,11 +73,23 @@ export async function setWeeklyScanScheduleForSite(
   }
 
   const data = WeeklyScanScheduleInputSchema.parse(input);
-  if (data.enabled && (site.status !== "active" || !site.verifiedAt)) {
-    throw new ScanScheduleError(
-      "Site must be verified and active before enabling a schedule",
-      "site-not-active",
-    );
+  if (data.enabled) {
+    if (site.status !== "active" || !site.verifiedAt) {
+      throw new ScanScheduleError(
+        "Site must be verified and active",
+        "site-not-active",
+      );
+    }
+    const ownership = await revalidateSiteOwnershipProof({
+      organizationId,
+      siteId,
+    });
+    if (!hasCurrentSiteOwnershipProof(ownership)) {
+      throw new ScanScheduleError(
+        "Site ownership must be reverified",
+        "site-not-active",
+      );
+    }
   }
 
   const nextRunAt = data.enabled

@@ -7,8 +7,10 @@ import {
   sites,
 } from "@agency-saas/db";
 import { and, asc, desc, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
+import { ensureSiteOwnershipProof } from "./site-ownership.js";
 import {
   getScanAttemptCount,
   MAX_STALE_RECOVERY_ATTEMPTS,
@@ -89,6 +91,58 @@ export async function initializeMissingScheduleCursors(
   });
 }
 
+async function refreshDueScheduleProofs(
+  now: Date,
+  batchSize = 25,
+): Promise<void> {
+  const { db } = getDatabase();
+  const rows = await db
+    .select({
+      organizationId: scanSchedules.organizationId,
+      siteId: scanSchedules.siteId,
+      site: sites,
+    })
+    .from(scanSchedules)
+    .innerJoin(
+      sites,
+      and(
+        eq(scanSchedules.siteId, sites.id),
+        eq(scanSchedules.organizationId, sites.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(scanSchedules.enabled, true),
+        isNotNull(scanSchedules.nextRunAt),
+        lte(scanSchedules.nextRunAt, now),
+      ),
+    )
+    .orderBy(asc(scanSchedules.nextRunAt))
+    .limit(batchSize);
+  for (let i = 0; i < rows.length; i += 4) {
+    await Promise.all(
+      rows.slice(i, i + 4).map(async (row) => {
+        if (
+          row.site.status !== "active" ||
+          !row.site.verifiedAt ||
+          !row.site.ownershipTokenHash ||
+          row.site.ownershipInvalidatedAt ||
+          hasCurrentSiteOwnershipProof(row.site, now)
+        )
+          return;
+        try {
+          await ensureSiteOwnershipProof({
+            organizationId: row.organizationId,
+            siteId: row.siteId,
+          });
+        } catch {
+          // A transient DNS failure leaves the due cursor for the next tick.
+        }
+      }),
+    );
+  }
+}
+
 export async function claimDueScheduledScans(
   now = new Date(),
   batchSize = 25,
@@ -108,6 +162,7 @@ export async function claimDueScheduledScans(
         siteStatus: sites.status,
         verifiedAt: sites.verifiedAt,
         canonicalUrl: sites.canonicalUrl,
+        site: sites,
       })
       .from(scanSchedules)
       .innerJoin(
@@ -137,6 +192,16 @@ export async function claimDueScheduledScans(
         skipped += 1;
         continue;
       }
+      if (
+        schedule.siteStatus === "active" &&
+        schedule.verifiedAt &&
+        schedule.site.ownershipTokenHash &&
+        !schedule.site.ownershipInvalidatedAt &&
+        !hasCurrentSiteOwnershipProof(schedule.site, now)
+      ) {
+        skipped += 1;
+        continue;
+      }
 
       await tx
         .update(scanSchedules)
@@ -150,7 +215,7 @@ export async function claimDueScheduledScans(
         })
         .where(eq(scanSchedules.id, schedule.scheduleId));
 
-      if (schedule.siteStatus !== "active" || !schedule.verifiedAt) {
+      if (!hasCurrentSiteOwnershipProof(schedule.site, now)) {
         skipped += 1;
         continue;
       }
@@ -619,6 +684,7 @@ export async function runScheduledScanTick(
   const initialized = await initializeMissingScheduleCursors(now);
   const staleRecovery = await recoverOrphanedRunningScans(hasJob, now);
   const cancelled = await cancelInvalidQueuedScheduledScans(now);
+  await refreshDueScheduleProofs(now);
   const claim = await claimDueScheduledScans(now);
 
   return {

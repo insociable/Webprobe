@@ -3,6 +3,7 @@ import {
   createDecipheriv,
   createHash,
   randomBytes,
+  timingSafeEqual,
 } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
@@ -258,5 +259,138 @@ export function decryptReportShareToken(
     return token;
   } catch {
     throw new Error("Invalid encrypted report token");
+  }
+}
+
+export const DEFAULT_SITE_OWNERSHIP_PROOF_TTL_DAYS = 30;
+export const MIN_SITE_OWNERSHIP_PROOF_TTL_DAYS = 1;
+export const MAX_SITE_OWNERSHIP_PROOF_TTL_DAYS = 90;
+
+export type OwnershipDnsFailure = "missing" | "unavailable";
+
+export function canonicalSiteOrigin(canonicalUrl: string): string {
+  const url = new URL(canonicalUrl);
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error("Invalid canonical URL for ownership proof");
+  }
+  const hostname = normalizedHostname(url);
+  if (ipaddr.isValid(hostname)) {
+    throw new Error("DNS ownership proof requires a domain hostname");
+  }
+  return url.origin;
+}
+
+export function siteOwnershipRecordName(canonicalUrl: string): string {
+  const url = new URL(canonicalUrl);
+  canonicalSiteOrigin(canonicalUrl);
+  const hostname = normalizedHostname(url);
+  return `_agency-monitor.${hostname}`;
+}
+
+export function matchesSiteOwnershipToken(
+  answers: readonly (readonly string[])[],
+  expectedHash: string,
+): boolean {
+  if (!/^[a-f0-9]{64}$/.test(expectedHash) || answers.length > 32) {
+    return false;
+  }
+  const expected = Buffer.from(expectedHash, "hex");
+  for (const fragments of answers) {
+    const record = fragments.join("");
+    if (record.length > 1024) continue;
+    const actual = createHash("sha256").update(record, "utf8").digest();
+    if (
+      actual.length === expected.length &&
+      timingSafeEqual(actual, expected)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function classifyOwnershipDnsFailure(
+  error: unknown,
+): OwnershipDnsFailure {
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+      ? error.code
+      : "";
+  return code === "ENODATA" || code === "ENOTFOUND" ? "missing" : "unavailable";
+}
+
+export function getSiteOwnershipProofTtlMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.SITE_OWNERSHIP_PROOF_TTL_DAYS?.trim();
+  if (!raw) return DEFAULT_SITE_OWNERSHIP_PROOF_TTL_DAYS * 24 * 60 * 60 * 1000;
+  if (!/^\d+$/.test(raw)) {
+    throw new Error("SITE_OWNERSHIP_PROOF_TTL_DAYS must be an integer");
+  }
+  const days = Number(raw);
+  if (
+    !Number.isSafeInteger(days) ||
+    days < MIN_SITE_OWNERSHIP_PROOF_TTL_DAYS ||
+    days > MAX_SITE_OWNERSHIP_PROOF_TTL_DAYS
+  ) {
+    throw new Error(
+      `SITE_OWNERSHIP_PROOF_TTL_DAYS must be between ${MIN_SITE_OWNERSHIP_PROOF_TTL_DAYS} and ${MAX_SITE_OWNERSHIP_PROOF_TTL_DAYS}`,
+    );
+  }
+  return days * 24 * 60 * 60 * 1000;
+}
+
+export type SiteOwnershipProof = {
+  canonicalUrl: string;
+  status: string;
+  verifiedAt: Date | null;
+  ownershipTokenHash: string | null;
+  ownershipRecordName: string | null;
+  ownershipOrigin: string | null;
+  ownershipGeneration: string | null;
+  ownershipVerifiedAt: Date | null;
+  ownershipExpiresAt: Date | null;
+  ownershipRevalidatedAt: Date | null;
+  ownershipInvalidatedAt: Date | null;
+};
+
+/** Historical rows without a durable proof never authorize verified scans. */
+export function hasCurrentSiteOwnershipProof(
+  site: SiteOwnershipProof,
+  now = new Date(),
+): boolean {
+  if (
+    site.status !== "active" ||
+    !site.verifiedAt ||
+    !site.ownershipTokenHash ||
+    !/^[a-f0-9]{64}$/.test(site.ownershipTokenHash) ||
+    !site.ownershipRecordName ||
+    !site.ownershipOrigin ||
+    !site.ownershipGeneration ||
+    !site.ownershipVerifiedAt ||
+    !site.ownershipExpiresAt ||
+    !site.ownershipRevalidatedAt ||
+    site.ownershipInvalidatedAt
+  )
+    return false;
+  try {
+    return (
+      site.ownershipOrigin === canonicalSiteOrigin(site.canonicalUrl) &&
+      site.ownershipRecordName === siteOwnershipRecordName(site.canonicalUrl) &&
+      site.ownershipVerifiedAt.getTime() <= now.getTime() &&
+      site.ownershipRevalidatedAt.getTime() >=
+        site.ownershipVerifiedAt.getTime() &&
+      site.ownershipRevalidatedAt.getTime() <= now.getTime() &&
+      site.ownershipExpiresAt.getTime() > now.getTime()
+    );
+  } catch {
+    return false;
   }
 }

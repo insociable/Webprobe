@@ -188,6 +188,13 @@ export function ReportScorecard({
             </div>
           </div>
 
+          <p className="mt-5 text-xs leading-5 text-[#7f8a9f]">
+            Ce score résume les contrôles effectués. Une analyse partielle ou
+            indisponible limite la couverture ; un résultat non évalué ne vaut
+            pas absence de problème. Lisez les constats et leurs preuves avant
+            de prioriser les corrections.
+          </p>
+
           {scorecard.coverageCap !== null &&
           scorecard.coverageCap < 100 &&
           scorecard.rawScore !== null &&

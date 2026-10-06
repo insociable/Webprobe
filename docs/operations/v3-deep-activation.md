@@ -1,6 +1,6 @@
 # Guide d'exploitation de l'Audit approfondi
 
-Ce document décrit l'état actuel du pipeline `verified_deep_audit` de `main`.
+Ce document décrit le pipeline `verified_deep_audit` du candidat de consolidation.
 
 ## Conditions nécessaires
 
@@ -13,18 +13,19 @@ Avant une exécution Deep :
 - le scan doit être manuel et porter le marqueur interne attendu ;
 - `WEBPROBE_RUNTIME_ENV` doit valoir `preproduction` ou `production` ;
 - `WEBPROBE_INTERNAL_DEEP_WORKER` doit valoir `enabled` ;
-- les migrations Deep jusqu'à 0017 doivent être appliquées.
+- les migrations jusqu’à 0023 doivent être appliquées ;
+- la preuve DNS de propriété doit comporter un hash, une génération et une échéance valides.
 
-Le code actuel accepte l'autorisation Deep à partir de la vérification active du site si aucun grant Deep dédié n'est présent.
+Sans grant Deep dédié, l’autorisation repose sur la preuve TXT durable du site, revérifiée juste avant tout transport réseau. Un ancien `verifiedAt` seul ne donne aucune autorisation. Les anciens sites sans hash doivent repasser par la vérification DNS. La preuve dure 30 jours par défaut ; `SITE_OWNERSHIP_PROOF_TTL_DAYS` accepte 1 à 90 jours.
 
-Lorsqu'un grant Deep DNS existe, il doit être cohérent, non révoqué et non expiré. Sa preuve TXT est revalidée avant l'exécution et son identité est ensuite contrôlée pendant le cycle de vie.
+Lorsqu’un grant Deep DNS existe, il doit être cohérent, non révoqué et non expiré. Sa preuve TXT est revalidée en plus de la preuve de propriété, sous le même nom `_agency-monitor.<domaine>` ; génération, hash et horodatages participent au lease et au fencing. Une panne SERVFAIL ou timeout reporte le scan sans invalider la preuve de propriété. Un TXT absent ou différent exige une revérification.
 
 ## Exécution
 
 1. L'application crée un scan `verified_deep_audit` en état `queued` et une entrée de dispatch.
 2. BullMQ remet la tâche au worker.
 3. Le worker relit le mode du scan dans PostgreSQL.
-4. La barrière serveur Deep est vérifié.
+4. La barrière serveur Deep est vérifiée.
 5. Le scan passe en `running`.
 6. Le moteur réclame un lease PostgreSQL avec token de fencing.
 7. L'autorisation et, lorsqu'il existe, le grant DNS sont revalidés.

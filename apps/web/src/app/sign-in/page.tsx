@@ -79,7 +79,7 @@ export default function SignInPage() {
             {[
               ["01", "Sites", "Vue multi-client et statut immédiat"],
               ["02", "Scans", "Suivi live jusqu’au rapport"],
-              ["03", "Remédiation", "Chaque finding mène à une action"],
+              ["03", "Remédiation", "Chaque constat mène à une action"],
             ].map(([index, title, detail]) => (
               <div
                 key={title}
@@ -102,7 +102,7 @@ export default function SignInPage() {
           <Link href="/" className="mb-12 inline-flex lg:hidden">
             <ProductMark />
           </Link>
-          <p className="am-kicker">Session agence</p>
+          <p className="am-kicker">Connexion à WebProbe</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
             {step === "email"
               ? "Connexion ou création de compte"

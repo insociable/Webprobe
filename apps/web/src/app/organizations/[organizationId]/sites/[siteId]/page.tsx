@@ -9,6 +9,7 @@ import { getSiteScanHistory } from "@/lib/scan-history";
 import { OrganizationAccessError } from "@/lib/organization-site-service";
 import { getWeeklyScanScheduleForSite } from "@/lib/scan-schedule";
 import { getMonitoringState } from "@/lib/monitoring-state";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { getSiteVulnerabilityOverview } from "@/lib/vulnerability-intelligence";
 import { ManualScanButton } from "../../manual-scan-button";
 import { PublicAuditButton } from "../../public-audit-button";
@@ -137,9 +138,11 @@ export default async function SitePage({
     latestScan.status === "failed" ||
     latestScan.status === "cancelled";
   const canManage = history.access.role !== "member";
+  const ownershipCurrent = hasCurrentSiteOwnershipProof(history.site);
   const monitoringState = getMonitoringState({
     status: history.site.status,
     verifiedAt: history.site.verifiedAt,
+    ownershipCurrent,
     scheduleEnabled: scheduleState?.schedule?.enabled ?? false,
   });
 
@@ -180,7 +183,7 @@ export default async function SitePage({
         <div className="text-base text-[#8d98ad]">
           {count === null
             ? "Résultat en attente"
-            : count + " finding" + (count > 1 ? "s" : "")}
+            : count + " constat" + (count > 1 ? "s" : "")}
         </div>
         <span className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-[#9aa6ba]">
           {isActive ? (
@@ -273,7 +276,9 @@ export default async function SitePage({
             </Link>
           ) : null}
 
-          {history.site.status === "pending_verification" && canManage ? (
+          {history.site.status !== "paused" &&
+          !ownershipCurrent &&
+          canManage ? (
             <Link
               href={
                 "/organizations/" +
@@ -284,7 +289,9 @@ export default async function SitePage({
               }
               className="am-button-secondary"
             >
-              Activer le monitoring
+              {history.site.verifiedAt
+                ? "Revérifier le domaine"
+                : "Activer le monitoring"}
             </Link>
           ) : null}
 
@@ -299,7 +306,7 @@ export default async function SitePage({
             />
           ) : null}
 
-          {history.site.status === "active" && canManage && !activeScan ? (
+          {ownershipCurrent && canManage && !activeScan ? (
             <ManualScanButton organizationId={organizationId} siteId={siteId} />
           ) : null}
         </div>
@@ -452,9 +459,7 @@ export default async function SitePage({
           organizationId={organizationId}
           siteId={siteId}
           canManage={canManage}
-          siteActive={
-            history.site.status === "active" && Boolean(history.site.verifiedAt)
-          }
+          siteActive={ownershipCurrent}
           schedule={
             scheduleState?.schedule
               ? {

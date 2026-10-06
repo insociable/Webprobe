@@ -45,7 +45,13 @@ function humanVerificationError(error: unknown): string {
       case "dns-record-not-found":
         return "Le TXT attendu n’est pas encore visible dans le DNS.";
       case "already-verified":
-        return "Ce site est déjà vérifié.";
+        return "La preuve DNS est encore valide.";
+      case "dns-unavailable":
+        return "Le DNS ne répond pas pour le moment. Réessayez sans modifier votre TXT.";
+      case "ownership-reverification-required":
+        return "La preuve précédente ne peut plus être utilisée. Générez un nouveau challenge TXT.";
+      case "site-not-active":
+        return "Ce site doit être actif pour renouveler sa preuve DNS.";
       case "site-not-found":
         return "Site introuvable.";
     }

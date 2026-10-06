@@ -1,6 +1,10 @@
-import { unlink } from "node:fs/promises";
-import path from "node:path";
-import { reportShares, scanArtifacts, scans } from "@agency-saas/db";
+import {
+  reportShares,
+  artifactCleanupTasks,
+  scanArtifacts,
+  scans,
+  sites,
+} from "@agency-saas/db";
 import {
   and,
   asc,
@@ -14,11 +18,10 @@ import {
 } from "drizzle-orm";
 import type { Logger } from "pino";
 import { getDatabase } from "./database.js";
-import { scanArtifactStorageRoot } from "./scan-artifacts.js";
+import { purgePendingArtifacts } from "./artifact-cleanup.js";
+import { isValidArtifactStorageKey } from "./scan-artifacts.js";
 
 const terminalStatuses = ["completed", "failed", "cancelled"] as const;
-const storageKeyPattern =
-  /^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f-]{36}\/primary\.jpg$/i;
 
 const DEFAULT_RETENTION_DAYS = 90;
 const DEFAULT_BATCH_SIZE = 100;
@@ -36,6 +39,10 @@ export type PublicAuditRetentionResult = {
   skippedActiveShare: number;
   artifactFailures: number;
   alreadyGone: number;
+};
+
+type RetentionTestHooks = {
+  beforeScanDelete?: () => Promise<void>;
 };
 
 function boundedInteger(
@@ -77,41 +84,25 @@ export function getPublicAuditRetentionPolicy(
   };
 }
 
-function artifactPath(storageKey: string): string {
-  if (!storageKeyPattern.test(storageKey)) {
-    throw new Error("Invalid retained scan artifact storage key");
-  }
-
-  const root = scanArtifactStorageRoot();
-  const resolved = path.resolve(root, ...storageKey.split("/"));
-  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
-
-  if (!resolved.startsWith(prefix)) {
-    throw new Error("Retained scan artifact escaped storage root");
-  }
-
-  return resolved;
-}
-
-async function removeArtifact(storageKey: string): Promise<void> {
-  try {
-    await unlink(artifactPath(storageKey));
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      return;
-    }
-    throw error;
-  }
+function artifactBelongsToScan(
+  storageKey: string,
+  organizationId: string,
+  siteId: string,
+  scanId: string,
+): boolean {
+  if (!isValidArtifactStorageKey(storageKey)) return false;
+  const [keyOrganizationId, keySiteId, keyScanId] = storageKey.split("/");
+  return (
+    keyOrganizationId?.toLowerCase() === organizationId.toLowerCase() &&
+    keySiteId?.toLowerCase() === siteId.toLowerCase() &&
+    keyScanId?.toLowerCase() === scanId.toLowerCase()
+  );
 }
 
 export async function purgeExpiredPublicAudits(
   now = new Date(),
   policy = getPublicAuditRetentionPolicy(),
+  testHooks: RetentionTestHooks = {},
 ): Promise<PublicAuditRetentionResult> {
   const { db } = getDatabase();
   const cutoff = new Date(
@@ -119,7 +110,11 @@ export async function purgeExpiredPublicAudits(
   );
 
   const candidates = await db
-    .select({ id: scans.id })
+    .select({
+      id: scans.id,
+      organizationId: scans.organizationId,
+      siteId: scans.siteId,
+    })
     .from(scans)
     .where(
       and(
@@ -142,9 +137,28 @@ export async function purgeExpiredPublicAudits(
 
   for (const candidate of candidates) {
     const outcome = await db.transaction(async (tx) => {
+      const lockKey = "'report-share:scan:" + candidate.id + "'";
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`report-share:scan:${candidate.id}`}, 0))`,
+        sql.raw(
+          "select pg_advisory_xact_lock(hashtextextended(" + lockKey + ", 0))",
+        ),
       );
+
+      // Match the capture writer and site-deletion lock order: site, then scan,
+      // then artifact rows. A concurrent writer either commits first or sees
+      // the missing scan/site and leaves no late file.
+      const [site] = await tx
+        .select({ id: sites.id })
+        .from(sites)
+        .where(
+          and(
+            eq(sites.id, candidate.siteId),
+            eq(sites.organizationId, candidate.organizationId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!site) return "gone" as const;
 
       const [stillCandidate] = await tx
         .select({ id: scans.id })
@@ -152,12 +166,15 @@ export async function purgeExpiredPublicAudits(
         .where(
           and(
             eq(scans.id, candidate.id),
+            eq(scans.organizationId, candidate.organizationId),
+            eq(scans.siteId, candidate.siteId),
             eq(scans.scanMode, "public_audit"),
             inArray(scans.status, terminalStatuses),
             isNotNull(scans.completedAt),
             lt(scans.completedAt, cutoff),
           ),
         )
+        .for("update")
         .limit(1);
 
       if (!stillCandidate) return "gone" as const;
@@ -177,23 +194,124 @@ export async function purgeExpiredPublicAudits(
       if (activeShare) return "active-share" as const;
 
       const artifacts = await tx
-        .select({ storageKey: scanArtifacts.storageKey })
+        .select({
+          storageKey: scanArtifacts.storageKey,
+          scanId: scanArtifacts.scanId,
+        })
         .from(scanArtifacts)
-        .where(eq(scanArtifacts.scanId, candidate.id));
-
-      try {
-        for (const artifact of artifacts) {
-          await removeArtifact(artifact.storageKey);
-        }
-      } catch {
+        .where(
+          and(
+            eq(scanArtifacts.scanId, candidate.id),
+            eq(scanArtifacts.organizationId, candidate.organizationId),
+            eq(scanArtifacts.siteId, candidate.siteId),
+          ),
+        );
+      if (
+        artifacts.some(
+          (artifact) =>
+            !artifactBelongsToScan(
+              artifact.storageKey,
+              candidate.organizationId,
+              candidate.siteId,
+              candidate.id,
+            ),
+        )
+      ) {
         return "artifact-failure" as const;
       }
+
+      const writeIntents = await tx
+        .select({
+          storageKey: artifactCleanupTasks.storageKey,
+          scanId: artifactCleanupTasks.scanId,
+        })
+        .from(artifactCleanupTasks)
+        .where(
+          and(
+            eq(artifactCleanupTasks.organizationId, candidate.organizationId),
+            eq(artifactCleanupTasks.siteId, candidate.siteId),
+            eq(artifactCleanupTasks.scanId, candidate.id),
+            eq(artifactCleanupTasks.action, "write_intent"),
+          ),
+        )
+        .for("update");
+      if (
+        writeIntents.some(
+          (intent) =>
+            !intent.scanId ||
+            !artifactBelongsToScan(
+              intent.storageKey,
+              candidate.organizationId,
+              candidate.siteId,
+              candidate.id,
+            ),
+        )
+      ) {
+        return "artifact-failure" as const;
+      }
+
+      const cleanupKeys = new Set([
+        ...artifacts.map((artifact) => artifact.storageKey),
+        ...writeIntents.map((intent) => intent.storageKey),
+      ]);
+      if (writeIntents.length > 0) {
+        await tx
+          .update(artifactCleanupTasks)
+          .set({
+            action: "delete",
+            attempts: 0,
+            lastErrorCode: null,
+            nextAttemptAt: now,
+            createdAt: now,
+          })
+          .where(
+            and(
+              eq(artifactCleanupTasks.organizationId, candidate.organizationId),
+              eq(artifactCleanupTasks.siteId, candidate.siteId),
+              eq(artifactCleanupTasks.scanId, candidate.id),
+              eq(artifactCleanupTasks.action, "write_intent"),
+            ),
+          );
+      }
+
+      for (const artifact of artifacts) {
+        await tx
+          .insert(artifactCleanupTasks)
+          .values({
+            storageKey: artifact.storageKey,
+            action: "delete",
+            organizationId: candidate.organizationId,
+            siteId: candidate.siteId,
+            scanId: candidate.id,
+            attempts: 0,
+            lastErrorCode: null,
+            nextAttemptAt: now,
+            createdAt: now,
+          })
+          .onConflictDoUpdate({
+            target: artifactCleanupTasks.storageKey,
+            set: {
+              action: "delete",
+              organizationId: candidate.organizationId,
+              siteId: candidate.siteId,
+              scanId: candidate.id,
+              attempts: 0,
+              lastErrorCode: null,
+              nextAttemptAt: now,
+              createdAt: now,
+            },
+          });
+      }
+
+      await testHooks.beforeScanDelete?.();
 
       const deleted = await tx
         .delete(scans)
         .where(
           and(
             eq(scans.id, candidate.id),
+            eq(scans.organizationId, candidate.organizationId),
+            eq(scans.siteId, candidate.siteId),
             eq(scans.scanMode, "public_audit"),
             inArray(scans.status, terminalStatuses),
             isNotNull(scans.completedAt),
@@ -205,10 +323,23 @@ export async function purgeExpiredPublicAudits(
       return deleted.length === 1 ? ("purged" as const) : ("gone" as const);
     });
 
-    if (outcome === "purged") result.purged += 1;
-    else if (outcome === "active-share") result.skippedActiveShare += 1;
-    else if (outcome === "artifact-failure") result.artifactFailures += 1;
-    else result.alreadyGone += 1;
+    if (outcome === "purged") {
+      result.purged += 1;
+      // The deletion and durable cleanup intent are committed before unlink.
+      try {
+        const cleanup = await purgePendingArtifacts(now, policy.batchSize);
+        result.artifactFailures += cleanup.retried;
+      } catch {
+        // The outbox remains durable; the worker coordinator will retry it.
+        result.artifactFailures += 1;
+      }
+    } else if (outcome === "active-share") {
+      result.skippedActiveShare += 1;
+    } else if (outcome === "artifact-failure") {
+      result.artifactFailures += 1;
+    } else {
+      result.alreadyGone += 1;
+    }
   }
 
   return result;
