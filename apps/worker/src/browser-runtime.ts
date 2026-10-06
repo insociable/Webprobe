@@ -15,6 +15,7 @@ import {
   type SafeBrowserProxy,
 } from "./safe-browser-proxy.js";
 import type { ProbeCookie } from "./http-probe.js";
+import type { CookieConsentObservation } from "./scan-engine/cookie-consent-observation.js";
 
 export type BrowserRuntimeObservation = {
   finalUrl: string;
@@ -59,6 +60,7 @@ export type BrowserRuntimeObservation = {
     consoleWarnings: string[];
     excludedThirdPartyRequests: number;
     cookies?: ProbeCookie[];
+    cookieConsent?: CookieConsentObservation;
   };
 };
 

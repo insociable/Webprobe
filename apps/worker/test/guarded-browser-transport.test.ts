@@ -105,6 +105,18 @@ describe("candidate guarded browser transport", () => {
       route: async () => undefined,
       routeWebSocket: async () => undefined,
       newPage: async () => fakePage,
+      cookies: async () => [
+        {
+          name: "_ga",
+          value: "secret-cookie-value",
+          domain: "example.com",
+          path: "/",
+          secure: true,
+          httpOnly: false,
+          sameSite: "Lax",
+          expires: -1,
+        },
+      ],
       close: async () => undefined,
     } as unknown as BrowserContext;
     const fakeBrowser = {
@@ -150,6 +162,11 @@ describe("candidate guarded browser transport", () => {
     expect(observation.deep?.meta).toEqual(
       expect.arrayContaining([{ name: "refresh", content: "0" }]),
     );
+    expect(observation.deep?.cookieConsent).toMatchObject({
+      method: "fresh-context-no-interaction",
+      status: "observed",
+      cookies: [{ name: "_ga", domain: "example.com" }],
+    });
     expect(JSON.stringify(observation)).not.toContain("secret");
     expect(ledger.snapshot().reasons).not.toContain("scope-denied");
   });

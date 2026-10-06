@@ -12,6 +12,7 @@ import { BudgetLedger } from "./budget-ledger.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { ScanProfile } from "./types.js";
 import { abortable, cancellableDnsResolver, throwIfAborted } from "./abort.js";
+import { observeCookiesBeforeInteraction } from "./cookie-consent-observation.js";
 
 function safeObservedUrl(rawUrl: string): string | null {
   try {
@@ -310,6 +311,17 @@ export async function observeGuardedBrowserTarget(
     const safeUrl = new URL(finalUrl);
     safeUrl.search = "";
     safeUrl.hash = "";
+    const cookieConsent = await observeCookiesBeforeInteraction({
+      context: session.context,
+      remainingDurationMs: () => input.ledger.remainingDurationMs(),
+      beforeObservation: input.beforeNetwork!,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    throwIfAborted(input.signal);
+    if (!input.scope.allows(page.url()).allowed) {
+      input.ledger.markPartial("scope-denied");
+      throw new Error("Browser navigated outside authorized scope");
+    }
     await boundedDomObservation(
       Promise.all(cookieTasks),
       input.signal,
@@ -495,6 +507,7 @@ export async function observeGuardedBrowserTarget(
         consoleWarnings,
         excludedThirdPartyRequests,
         cookies: cookies.slice(0, 120),
+        cookieConsent,
       },
     };
   } finally {

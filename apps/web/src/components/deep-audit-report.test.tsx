@@ -93,3 +93,112 @@ describe("Deep audit report rendering", () => {
     expect(html).toContain("http://assets.example/app.js");
   });
 });
+
+describe("Cookies before interaction in Deep reports", () => {
+  function renderConsent(
+    cookieConsent: Record<string, unknown>,
+    findings: Array<Record<string, unknown>> = [],
+  ) {
+    return renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: [
+          checkRun("deep-cookies", {
+            title: "Cookies et consentement",
+            findings,
+            cookieConsent: {
+              method: "fresh-context-no-interaction",
+              status: "observed",
+              observedWindowMs: 3_000,
+              reasons: [],
+              knownTrackerCount: 0,
+              unknownPurposeCount: 0,
+              cookies: [],
+              ...cookieConsent,
+            },
+          }),
+        ],
+      }),
+    );
+  }
+
+  it("shows purpose hints and actionable consent remediation without certifying the site", () => {
+    const html = renderConsent(
+      {
+        knownTrackerCount: 1,
+        unknownPurposeCount: 1,
+        excludedThirdPartyRequests: 3,
+        cookies: [
+          {
+            name: "_ga",
+            domain: ".example.com",
+            purpose: "analytics",
+            provider: "Google Analytics",
+          },
+          { name: "session", domain: "example.com", purpose: "unknown" },
+        ],
+      },
+      [
+        {
+          code: "cookie-tracker-before-consent",
+          level: "review",
+          summary: "Cookie _ga observé avant toute interaction.",
+        },
+      ],
+    );
+    expect(html).toContain("Cookies avant toute interaction");
+    expect(html).toContain("Session vierge");
+    expect(html).toContain("Google Analytics");
+    expect(html).toContain("Finalité à confirmer");
+    expect(html).toContain("3 requête(s) exclue(s)");
+    expect(html).toContain(
+      "Conditionner les cookies non essentiels au consentement",
+    );
+    expect(html).toContain("Ce contrôle ne certifie pas");
+    expect(html).not.toContain("Aucun point nécessitant une action");
+  });
+
+  it.each(["unavailable", "limited"])(
+    "does not show a green success for %s observation",
+    (status) => {
+      const html = renderConsent({
+        status,
+        reasons: ["time-budget"],
+        observedWindowMs: 0,
+      });
+      expect(html).toContain(
+        status === "limited"
+          ? "Observation limitée"
+          : "Observation indisponible",
+      );
+      expect(html).not.toContain("Aucun point nécessitant une action");
+      expect(html).toContain("Couverture à vérifier");
+    },
+  );
+
+  it("bounds the meaning of no observed known cookies and retains historical reports", () => {
+    const html = renderConsent({});
+    expect(html).toContain(
+      "Aucun cookie de traceur connu observé dans cette fenêtre",
+    );
+    expect(html).toContain("Les domaines tiers restent bloqués");
+    expect(html).toContain("autres stockages ne sont pas évalués");
+    const historical = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: [
+          checkRun("deep-cookies", {
+            title: "Cookies",
+            summary: "Aucun cookie déclaré.",
+            findings: [],
+            cookies: [],
+          }),
+        ],
+      }),
+    );
+    expect(historical).not.toContain("Cookies avant toute interaction");
+    expect(historical).toContain("Aucun cookie déclaré");
+  });
+});

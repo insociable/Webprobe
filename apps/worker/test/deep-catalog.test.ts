@@ -299,3 +299,104 @@ describe("deep catalog", () => {
     });
   });
 });
+
+describe("Cookie consent catalog evidence", () => {
+  const http: HttpProbeResult = {
+    ok: true,
+    finalUrl: "https://example.com/",
+    statusCode: 200,
+    durationMs: 10,
+    redirects: [],
+    headers: {},
+    securityHeaders: [],
+    tls: null,
+    cookies: [
+      {
+        name: "_ga",
+        secure: true,
+        httpOnly: false,
+        sameSite: "Lax",
+        domain: null,
+        path: "/",
+        maxAge: null,
+        expires: null,
+      },
+    ],
+  };
+  const browser: BrowserRuntimeObservation = {
+    finalUrl: "https://example.com/",
+    statusCode: 200,
+    pageCount: 1,
+    durationMs: 10,
+    deep: {
+      resources: [],
+      endpoints: [],
+      forms: [],
+      meta: [],
+      iframeSandboxes: [],
+      sri: [],
+      pageErrors: [],
+      consoleWarnings: [],
+      excludedThirdPartyRequests: 1,
+      cookieConsent: {
+        method: "fresh-context-no-interaction",
+        status: "observed",
+        requestedWindowMs: 3_000,
+        observedWindowMs: 3_001,
+        sampleCount: 7,
+        reasons: [],
+        cookies: [
+          {
+            name: "_clck",
+            domain: "example.com",
+            path: "/",
+            secure: true,
+            httpOnly: false,
+            sameSite: "Lax",
+            firstObservedAfterLoadMs: 500,
+          },
+        ],
+      },
+    },
+  };
+
+  it("signals only accepted browser cookies, and versions the changed check", async () => {
+    const runs = await catalogRuns(http, browser);
+    const run = runs.find((item) => item.checkId === "deep-cookies");
+    expect(run?.checkVersion).toBe("1.1.0");
+    expect(run?.evidence[0]).toMatchObject({
+      checkVersion: "1.1.0",
+      data: {
+        cookieConsent: {
+          status: "observed",
+          knownTrackerCount: 1,
+          excludedThirdPartyRequests: 1,
+        },
+        findings: [
+          {
+            code: "cookie-tracker-before-consent",
+            level: "review",
+            observed: "_clck · example.com/",
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(run?.evidence[0]?.data.findings)).not.toContain(
+      "_ga",
+    );
+  });
+
+  it("preserves header checks but records consent as unavailable without browser storage", async () => {
+    const runs = await catalogRuns(http, {
+      ...browser,
+      deep: undefined,
+    } as unknown as BrowserRuntimeObservation);
+    const data = runs.find((item) => item.checkId === "deep-cookies")
+      ?.evidence[0]?.data;
+    expect(data).toMatchObject({
+      cookieConsent: { status: "unavailable" },
+      cookies: [{ name: "_ga" }],
+      findings: [],
+    });
+  });
+});

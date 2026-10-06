@@ -478,6 +478,20 @@ function scannerV2Remediation(code: string): FindingRemediation | null {
 }
 
 export function getFindingRemediation(code: string): FindingRemediation | null {
+  if (code === "cookie-tracker-before-consent") {
+    return {
+      title: "Conditionner les cookies non essentiels au consentement",
+      summary:
+        "Un cookie dont le nom est associé à un traceur a été observé en session vierge, avant toute interaction. Confirmez sa finalité et son éventuelle exemption avant de conclure.",
+      steps: [
+        "Repérez le cookie et le script ou la réponse HTTP qui le dépose. Vérifiez sa finalité réelle, son fournisseur et sa configuration ; le nom seul ne prouve pas l'usage.",
+        "Pour les cookies non exemptés, bloquez le dépôt côté serveur et l'exécution des balises concernées jusqu'à une action de consentement positive. Afficher un bandeau seul ne suffit pas.",
+        "Contrôlez aussi le refus et le retrait du consentement, et documentez les éventuelles exemptions selon les règles de la CNIL.",
+      ],
+      verification:
+        "Ouvrez une nouvelle session sans données, ne cliquez pas sur le bandeau et contrôlez les cookies et requêtes dans les DevTools. Répétez après un refus, puis un consentement. Relancez l'audit Deep ; les tiers bloqués et les autres traceurs demandent une vérification manuelle.",
+    };
+  }
   const exact = exactRemediations[code];
   if (exact) {
     return exact;

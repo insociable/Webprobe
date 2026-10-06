@@ -5,6 +5,7 @@ import {
 } from "../lib/deep-report-metrics";
 import { getFindingRemediation } from "../lib/finding-remediation";
 import { RemediationDetails } from "./remediation-details";
+import { CookieConsentDetails } from "./cookie-consent-details";
 
 type DeepCheckRunView = {
   id: string;
@@ -390,6 +391,10 @@ export function DeepAuditReport({
                       dedicatedCspCompleted,
                       httpObservationFailed,
                     );
+                    const cookieConsent =
+                      run.checkId === "deep-cookies"
+                        ? asRecord(evidenceData?.cookieConsent)
+                        : null;
                     const cspUnavailable =
                       run.checkId === "deep-csp" &&
                       (evidenceData?.httpObserved === false ||
@@ -430,6 +435,8 @@ export function DeepAuditReport({
                             {skipCopy.detail}
                           </p>
                         ) : null}
+
+                        <CookieConsentDetails observation={cookieConsent} />
 
                         {findings.length > 0 ? (
                           <div className="mt-4 space-y-2">
@@ -534,7 +541,8 @@ export function DeepAuditReport({
                             Le diagnostic de la CSP figure dans le contrôle
                             Politique CSP.
                           </p>
-                        ) : run.status === "completed" ? (
+                        ) : cookieConsent ? null : run.status ===
+                          "completed" ? (
                           <p className="mt-4 text-base text-emerald-100 opacity-75">
                             Aucun point nécessitant une action n’a été relevé
                             par ce contrôle.
