@@ -30,6 +30,7 @@ describeDatabase("V3 schema compatibility", () => {
     const scanId = randomUUID();
     const now = new Date();
     const token = "agency-monitor-deep=integration-token";
+    const ownershipToken = "agency-monitor-verification=integration-ownership";
     try {
       await db
         .insert(organizations)
@@ -41,6 +42,15 @@ describeDatabase("V3 schema compatibility", () => {
         canonicalUrl: "https://deep.example.test/",
         status: "active",
         verifiedAt: now,
+        ownershipTokenHash: createHash("sha256")
+          .update(ownershipToken)
+          .digest("hex"),
+        ownershipRecordName: "_agency-monitor.deep.example.test",
+        ownershipOrigin: "https://deep.example.test",
+        ownershipGeneration: randomUUID(),
+        ownershipVerifiedAt: now,
+        ownershipRevalidatedAt: now,
+        ownershipExpiresAt: new Date(now.getTime() + 24 * 60 * 60_000),
       });
       await db.insert(scans).values({
         id: scanId,
@@ -96,7 +106,7 @@ describeDatabase("V3 schema compatibility", () => {
         siteId,
         targetUrl: "https://deep.example.test/",
         profile,
-        resolveTxt: async () => [[token]],
+        resolveTxt: async () => [[ownershipToken], [token]],
         resolver: async () => [
           { address: "93.184.216.34", family: 4 as const },
         ],
@@ -153,7 +163,7 @@ describeDatabase("V3 schema compatibility", () => {
         runDeepAuditCandidate({
           ...input,
           scanId: deniedScanId,
-          resolveTxt: async () => [["wrong"]],
+          resolveTxt: async () => [[ownershipToken]],
         }),
       ).rejects.toMatchObject({ code: "deep-authorization-denied" });
       const deniedRuns = await db
@@ -229,6 +239,8 @@ describeDatabase("V3 schema compatibility", () => {
     const organizationId = randomUUID();
     const siteId = randomUUID();
     const scanId = randomUUID();
+    const token = "agency-monitor-verification=verified-deep-fixture";
+    const verifiedAt = new Date();
 
     try {
       await db.insert(organizations).values({
@@ -241,7 +253,14 @@ describeDatabase("V3 schema compatibility", () => {
         name: "Verified Deep target",
         canonicalUrl: "https://verified-deep.example.test/",
         status: "active",
-        verifiedAt: new Date(),
+        verifiedAt,
+        ownershipTokenHash: createHash("sha256").update(token).digest("hex"),
+        ownershipRecordName: "_agency-monitor.verified-deep.example.test",
+        ownershipOrigin: "https://verified-deep.example.test",
+        ownershipGeneration: randomUUID(),
+        ownershipVerifiedAt: verifiedAt,
+        ownershipRevalidatedAt: verifiedAt,
+        ownershipExpiresAt: new Date(verifiedAt.getTime() + 24 * 60 * 60_000),
       });
       await db.insert(scans).values({
         id: scanId,
@@ -258,6 +277,7 @@ describeDatabase("V3 schema compatibility", () => {
         organizationId,
         siteId,
         targetUrl: "https://verified-deep.example.test/",
+        resolveTxt: async () => [[token]],
         profile: {
           ...resolveScanProfile("verified_deep_audit"),
           allowedChecks: ["deep-http-observation"],

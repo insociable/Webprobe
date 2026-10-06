@@ -7,6 +7,7 @@ import {
   sites,
 } from "@agency-saas/db";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { getDatabase } from "../database.js";
 import { expectedDeepProofRecord } from "./deep-proof.js";
 
@@ -29,6 +30,10 @@ export type DeepGrantIdentity = Readonly<{
   verifiedAt?: Date;
   canonicalUrl: string;
   siteVerifiedAt: Date;
+  ownershipGeneration: string;
+  ownershipTokenHash: string;
+  ownershipVerifiedAt: Date;
+  ownershipRevalidatedAt: Date;
 }>;
 
 export type DeepLeaseMonitor = {
@@ -172,6 +177,14 @@ export async function assertDeepLease(
       siteStatus: sites.status,
       siteVerifiedAt: sites.verifiedAt,
       canonicalUrl: sites.canonicalUrl,
+      ownershipTokenHash: sites.ownershipTokenHash,
+      ownershipRecordName: sites.ownershipRecordName,
+      ownershipOrigin: sites.ownershipOrigin,
+      ownershipGeneration: sites.ownershipGeneration,
+      ownershipVerifiedAt: sites.ownershipVerifiedAt,
+      ownershipExpiresAt: sites.ownershipExpiresAt,
+      ownershipRevalidatedAt: sites.ownershipRevalidatedAt,
+      ownershipInvalidatedAt: sites.ownershipInvalidatedAt,
       proofType: deepAuditAuthorizations.proofType,
       recordName: deepAuditAuthorizations.proofRecordName,
       tokenHash: deepAuditAuthorizations.proofTokenHash,
@@ -210,10 +223,36 @@ export async function assertDeepLease(
     throw new DeepLeaseError();
   if (row.siteStatus !== "active" || !row.siteVerifiedAt)
     throw new DeepLeaseError("Deep site is inactive or unverified");
+  if (
+    grant &&
+    !hasCurrentSiteOwnershipProof(
+      {
+        canonicalUrl: row.canonicalUrl,
+        status: row.siteStatus,
+        verifiedAt: row.siteVerifiedAt,
+        ownershipTokenHash: row.ownershipTokenHash,
+        ownershipRecordName: row.ownershipRecordName,
+        ownershipOrigin: row.ownershipOrigin,
+        ownershipGeneration: row.ownershipGeneration,
+        ownershipVerifiedAt: row.ownershipVerifiedAt,
+        ownershipExpiresAt: row.ownershipExpiresAt,
+        ownershipRevalidatedAt: row.ownershipRevalidatedAt,
+        ownershipInvalidatedAt: row.ownershipInvalidatedAt,
+      },
+      row.now,
+    )
+  )
+    throw new DeepLeaseError("Deep site ownership proof is stale");
   if (grant) {
     if (
       row.canonicalUrl !== grant.canonicalUrl ||
-      row.siteVerifiedAt.getTime() !== grant.siteVerifiedAt.getTime()
+      row.siteVerifiedAt!.getTime() !== grant.siteVerifiedAt.getTime() ||
+      row.ownershipGeneration !== grant.ownershipGeneration ||
+      row.ownershipTokenHash !== grant.ownershipTokenHash ||
+      row.ownershipVerifiedAt?.getTime() !==
+        grant.ownershipVerifiedAt.getTime() ||
+      row.ownershipRevalidatedAt?.getTime() !==
+        grant.ownershipRevalidatedAt.getTime()
     ) {
       throw new DeepLeaseError("Deep site verification changed");
     }

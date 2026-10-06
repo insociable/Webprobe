@@ -22,6 +22,10 @@ export type AuthorizationDecision =
         verifiedAt?: Date;
         canonicalUrl: string;
         siteVerifiedAt: Date;
+        ownershipGeneration: string;
+        ownershipTokenHash: string;
+        ownershipVerifiedAt: Date;
+        ownershipRevalidatedAt: Date;
       };
     }
   | {
@@ -29,6 +33,8 @@ export type AuthorizationDecision =
       reason:
         | "site-inactive"
         | "site-unverified"
+        | "ownership-reverification-required"
+        | "ownership-dns-unavailable"
         | "deep-grant-missing"
         | "deep-grant-invalid"
         | "deep-grant-expired"

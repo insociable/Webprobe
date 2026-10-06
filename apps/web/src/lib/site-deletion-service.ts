@@ -109,7 +109,10 @@ export async function deleteSiteForOrganization(
     }
 
     const artifacts = await tx
-      .select({ storageKey: scanArtifacts.storageKey })
+      .select({
+        storageKey: scanArtifacts.storageKey,
+        scanId: scanArtifacts.scanId,
+      })
       .from(scanArtifacts)
       .where(eq(scanArtifacts.siteId, siteId));
 
@@ -122,14 +125,87 @@ export async function deleteSiteForOrganization(
       }
     }
 
-    // No task can become visible until both the deletion and the outbox
-    // commit. The worker keeps it until unlink succeeds (including ENOENT).
-    if (artifacts.length > 0) {
+    const pendingWrites = await tx
+      .select({
+        storageKey: artifactCleanupTasks.storageKey,
+        scanId: artifactCleanupTasks.scanId,
+      })
+      .from(artifactCleanupTasks)
+      .where(
+        and(
+          eq(artifactCleanupTasks.organizationId, organizationId),
+          eq(artifactCleanupTasks.siteId, siteId),
+          eq(artifactCleanupTasks.action, "write_intent"),
+        ),
+      )
+      .for("update");
+
+    for (const intent of pendingWrites) {
+      if (
+        !intent.scanId ||
+        !validSiteArtifactKey(intent.storageKey, organizationId, siteId)
+      ) {
+        throw new SiteDeletionError(
+          "Pending site artifact storage key is invalid",
+          "artifact-invalid",
+        );
+      }
+    }
+
+    const cleanupKeys = new Set([
+      ...artifacts.map((artifact) => artifact.storageKey),
+      ...pendingWrites.map((intent) => intent.storageKey),
+    ]);
+    const now = new Date();
+
+    // Convert in-flight reservations before the site cascades away. The
+    // capture writer holds this site's row lock while it writes and registers
+    // metadata, so deletion either waits for it or fences it before any write.
+    if (pendingWrites.length > 0) {
+      await tx
+        .update(artifactCleanupTasks)
+        .set({
+          action: "delete",
+          attempts: 0,
+          lastErrorCode: null,
+          nextAttemptAt: now,
+          createdAt: now,
+        })
+        .where(
+          and(
+            eq(artifactCleanupTasks.organizationId, organizationId),
+            eq(artifactCleanupTasks.siteId, siteId),
+            eq(artifactCleanupTasks.action, "write_intent"),
+          ),
+        );
+    }
+
+    for (const artifact of artifacts) {
       await tx
         .insert(artifactCleanupTasks)
-        .values(artifacts)
-        .onConflictDoNothing({
+        .values({
+          storageKey: artifact.storageKey,
+          action: "delete",
+          organizationId,
+          siteId,
+          scanId: artifact.scanId,
+          attempts: 0,
+          lastErrorCode: null,
+          nextAttemptAt: now,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
           target: artifactCleanupTasks.storageKey,
+          set: {
+            action: "delete",
+            organizationId,
+            siteId,
+            scanId: artifact.scanId,
+            attempts: 0,
+            lastErrorCode: null,
+            nextAttemptAt: now,
+            createdAt: now,
+          },
         });
     }
 
@@ -144,7 +220,7 @@ export async function deleteSiteForOrganization(
       throw new SiteDeletionError("Site not found", "site-not-found");
     }
 
-    return artifacts.length;
+    return cleanupKeys.size;
   });
 
   return { deleted: true, artifactCleanupPending: artifactCount };

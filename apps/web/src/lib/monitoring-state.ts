@@ -14,13 +14,23 @@ type MonitoringStateInput = {
   status: string;
   verifiedAt: Date | string | null;
   scheduleEnabled: boolean;
+  ownershipCurrent?: boolean;
 };
 
 export function getMonitoringState({
   status,
   verifiedAt,
   scheduleEnabled,
+  ownershipCurrent,
 }: MonitoringStateInput): MonitoringState {
+  if (verifiedAt && status === "active" && ownershipCurrent === false) {
+    return {
+      key: "verification_required",
+      label: "À revérifier",
+      detail:
+        "La preuve DNS doit être renouvelée avant les prochains scans vérifiés.",
+    };
+  }
   if (!verifiedAt || status === "pending_verification") {
     return {
       key: "verification_required",

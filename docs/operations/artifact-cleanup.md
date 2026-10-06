@@ -1,65 +1,76 @@
-# Nettoyage des captures après suppression d’un site
+# Nettoyage des captures et reprise des écritures
 
-La suppression du site et l’enregistrement des captures à effacer sont validés
-dans une seule transaction PostgreSQL. Les métadonnées, rapports et liens de
-partage du site sont supprimés immédiatement ; les fichiers de capture restent
-hors du répertoire public et sont effacés par le worker.
+Chaque écriture de capture commence par une tâche durable `write_intent` avant
+l’accès au disque. Le worker conserve le verrou du site et de cette tâche
+pendant le renommage atomique et le commit de la métadonnée. Une suppression
+du site ou une rétention concurrente attend ce commit, puis inscrit une tâche
+`delete` dans sa propre transaction. Un échec après renommage laisse
+l’intention à traiter. Le nettoyage n’efface jamais une capture encore
+référencée par `scan_artifacts`.
+
+La table `artifact_cleanup_tasks` n’a aucune clé étrangère vers site, scan
+ou organisation : les cascades ne peuvent pas perdre une demande de nettoyage.
+Les anciennes lignes de la migration 0022 restent des suppressions `delete`.
+La migration 0023 ajoute l’action et les identifiants de portée sans inventer
+de nouvelles tâches pour des fichiers historiques.
 
 ## Reprise automatique
 
-La table `artifact_cleanup_tasks` conserve chaque clé de capture jusqu’à
-l’effacement réussi. Elle ne possède aucune clé étrangère vers un site, un
-scan ou une organisation : une suppression en cascade ne doit pas détruire
-le travail de nettoyage.
+Le worker passe au démarrage, puis chaque minute, par lots de 100.
+`FOR UPDATE SKIP LOCKED` distribue les tâches entre workers. Un arrêt avant
+commit libère le verrou et la tâche demeure. Une intention récente attend le
+délai de grâce de 10 minutes ; une capture encore liée à un scan actif est
+différée. Un fichier absent est un succès idempotent.
 
-Le worker lance un passage au démarrage, puis chaque minute, par lots de
-100 tâches. Deux passages concurrents se répartissent les tâches avec
-`FOR UPDATE SKIP LOCKED`. Un arrêt avant validation remet les tâches à
-disposition ; un fichier déjà absent est traité comme un succès.
+Un échec d’`unlink` reste dans la table et réessaie après 1, 2, 4, 8, 16,
+32 puis au maximum 60 minutes. Les clés invalides, liens symboliques et
+répertoires inattendus sont rejetés. Aucun répertoire n’est supprimé
+récursivement. Les compteurs worker `checked`, `removed`, `released`,
+`deferred`, `retried`, `pending` et `oldestPendingAgeMs` ne contiennent
+ni clé de stockage ni URL. Une erreur ou une tâche de plus de 24 heures
+produit un avertissement local.
 
-Une erreur d’effacement conserve la tâche et programme une nouvelle tentative :
-1, 2, 4, 8, 16, 32 puis 60 minutes au maximum entre tentatives. Les tentatives
-continuent jusqu’au succès. Le worker refuse les clés invalides, les captures
-encore référencées et les répertoires de site liés symboliquement. Il ne supprime
-jamais un répertoire récursivement.
-
-## Surveillance
-
-L’objectif en fonctionnement normal est un effacement au passage suivant,
-environ une minute après la suppression, sous réserve du volume en attente.
-Une erreur persistante de permissions ou de disque peut dépasser ce délai.
-
-Le worker journalise les compteurs `checked`, `removed`, `retried`,
-`pending` et `oldestPendingAgeMs`, sans chemin, clé de stockage ou URL.
-Toute nouvelle erreur ou tâche en attente depuis 24 heures produit un
-avertissement d’exploitation. Cet avertissement figure dans les journaux du
-worker ; il n’envoie pas de message externe.
-
-Diagnostic agrégé sur la base de l’environnement concerné :
+Diagnostic agrégé de l’environnement concerné :
 
 ```sql
-SELECT count(*) AS en_attente,
+SELECT action, count(*) AS en_attente,
        count(*) FILTER (WHERE attempts > 0) AS en_erreur,
        min(created_at) AS plus_ancienne,
        min(next_attempt_at) AS prochaine_tentative
-FROM artifact_cleanup_tasks;
+FROM artifact_cleanup_tasks
+GROUP BY action;
 ```
 
-Après correction de la cause système, attendre la prochaine tentative et
-vérifier que le nombre de tâches diminue. Ne pas supprimer les lignes pour
-masquer un échec : elles portent la preuve de nettoyage restant à effectuer.
+## Inventaire hors ligne des orphelins
 
-## Migration et retour arrière
+L’inventaire est manuel et commence toujours en lecture seule. Il inspecte
+les clés de capture reconnues, refuse les chemins symboliques et ne retient
+que les fichiers de plus de 24 heures, sans métadonnée ni tâche et sans scan
+en attente ou actif. Le manifeste contient les identifiants internes : le
+conserver en emplacement privé, ne pas le joindre aux journaux ou tickets.
 
-La migration additive `0022_artifact_cleanup_tasks` doit précéder le nouveau
-Web et le nouveau worker. Le schéma précédent demeure compatible avec cette
-table supplémentaire.
+Depuis une release de l’environnement cible, avec son accès base habituel :
 
-Un retour au code précédent peut conserver la table et ses tâches. Il suspend
-leur traitement et rétablit l’ancien mécanisme de suppression : réactiver le
-worker corrigé pour reprendre les tâches conservées. Ne pas retirer la table
-lors d’un retour arrière applicatif.
+```sh
+corepack pnpm@10.17.1 --filter @agency-saas/worker exec tsx scripts/artifact-orphan-inventory.ts --inventory /chemin/prive/orphelins.json
+```
 
-Les captures orphelines créées avant cette migration ne sont pas découvertes
-automatiquement. Cette modification ne parcourt pas le disque et n’efface pas
-les fichiers dépourvus d’une tâche explicitement enregistrée.
+Examiner le nombre et le hash du manifeste, puis approuver explicitement les
+clés candidates dans ce fichier. La commande suivante n’efface aucun octet :
+elle revérifie la taille, la date, les références et les verrous en base, et
+inscrit seulement des tâches `delete` :
+
+```sh
+corepack pnpm@10.17.1 --filter @agency-saas/worker exec tsx scripts/artifact-orphan-inventory.ts --stage /chemin/prive/orphelins.json
+```
+
+Le worker traitera ensuite ces tâches selon la procédure normale. Ne jamais
+lancer ce staging ni une purge sur la production dans le cadre de cette
+consolidation. Supprimer le manifeste privé selon la politique locale une
+fois la revue achevée.
+
+## Retour arrière
+
+Un retour au code précédent peut conserver la table et ses tâches, mais
+suspend le traitement des `write_intent` tant que le worker corrigé n’est pas
+rétabli. Ne pas retirer la table lors d’un retour applicatif.

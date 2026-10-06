@@ -67,7 +67,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
     siteId,
   );
 
-  if (state.site.status === "active" && state.site.verifiedAt) {
+  if (state.ownershipState === "current" && state.site.status === "active") {
     redirect("/organizations/" + organizationId + "/sites/" + siteId);
   }
 
@@ -84,10 +84,9 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           {state.site.canonicalUrl}
         </p>
         <p className="mt-5 max-w-2xl leading-7 text-[#8793a8]">
-          Ajoutez le TXT demandé dans la zone DNS pour prouver le contrôle du
-          domaine. Les audits publics restent possibles sans cette étape, mais
-          le monitoring planifié, les alertes et les automatisations restent
-          désactivés tant que le challenge n’est pas validé.
+          {state.site.verifiedAt
+            ? "La preuve DNS doit être renouvelée avant les prochains scans vérifiés. Si le TXT précédent est encore publié, essayez d’abord de le revérifier. Une panne DNS temporaire ne vous demande pas de modifier le TXT."
+            : "Ajoutez le TXT demandé dans la zone DNS pour prouver le contrôle du domaine. L’audit ponctuel reste possible sans cette étape ; le monitoring et Deep demandent une preuve valide."}
         </p>
       </section>
 
@@ -149,6 +148,7 @@ export default async function VerifySitePage({ params }: VerifySitePageProps) {
           siteId={siteId}
           recordName={state.recordName}
           existingExpiresAt={state.challenge?.expiresAt.toISOString() ?? null}
+          ownershipState={state.ownershipState}
         />
       </section>
     </WorkspaceShell>

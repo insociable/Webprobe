@@ -94,6 +94,17 @@ async function createFixture(
     canonicalUrl: "https://example.com/",
     status: scanMode === "public_audit" ? "pending_verification" : "active",
     verifiedAt: scanMode === "public_audit" ? null : new Date(),
+    ...(scanMode === "verified_monitoring"
+      ? {
+          ownershipTokenHash: "a".repeat(64),
+          ownershipRecordName: "_agency-monitor.example.com",
+          ownershipOrigin: "https://example.com",
+          ownershipGeneration: randomUUID(),
+          ownershipVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
+          ownershipRevalidatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          ownershipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
+        }
+      : {}),
   });
   await db.insert(scans).values({
     id: scanId,

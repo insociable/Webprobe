@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { WorkspaceShell } from "@/components/product-shell";
 import { getMonitoringState } from "@/lib/monitoring-state";
+import { hasCurrentSiteOwnershipProof } from "@agency-saas/security";
 import { getWorkspaceOverview } from "@/lib/workspace-overview";
 import { SiteActionsMenu } from "./site-actions-menu";
 
@@ -81,6 +82,7 @@ export default async function SitesPage() {
               const monitoringState = getMonitoringState({
                 status: site.status,
                 verifiedAt: site.verifiedAt,
+                ownershipCurrent: hasCurrentSiteOwnershipProof(site),
                 scheduleEnabled: site.monitoringScheduleEnabled,
               });
 
@@ -127,7 +129,7 @@ export default async function SitesPage() {
 
                   <div>
                     <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#5f6b81]">
-                      Findings
+                      Constats
                     </p>
                     <p className="mt-2 text-sm text-[#cdd5e4]">
                       {site.latestScan?.findingCount ?? "—"}

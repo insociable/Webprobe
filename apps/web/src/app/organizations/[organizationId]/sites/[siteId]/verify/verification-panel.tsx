@@ -19,6 +19,7 @@ type VerificationPanelProps = {
   siteId: string;
   recordName: string;
   existingExpiresAt: string | null;
+  ownershipState: "missing" | "invalidated" | "expired" | "current";
 };
 
 export function VerificationPanel({
@@ -26,6 +27,7 @@ export function VerificationPanel({
   siteId,
   recordName,
   existingExpiresAt,
+  ownershipState,
 }: VerificationPanelProps) {
   const generateAction = generateVerificationChallengeAction.bind(
     null,
@@ -53,6 +55,18 @@ export function VerificationPanel({
 
   return (
     <div className="space-y-6">
+      {ownershipState === "expired" ? (
+        <p className="border-l-2 border-amber-300 bg-amber-300/[0.06] p-4 text-sm leading-6 text-amber-100">
+          La preuve précédente a expiré. Gardez le même TXT et choisissez «
+          Revérifier le TXT » ci-dessous. Si sa valeur a été retirée, générez un
+          nouveau challenge.
+        </p>
+      ) : ownershipState === "missing" || ownershipState === "invalidated" ? (
+        <p className="border-l-2 border-amber-300 bg-amber-300/[0.06] p-4 text-sm leading-6 text-amber-100">
+          Une nouvelle preuve DNS est nécessaire. Générez un challenge, publiez
+          sa valeur, puis vérifiez le TXT.
+        </p>
+      ) : null}
       <div className="am-panel p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
           Étape 1 · Préparer le TXT
@@ -197,7 +211,11 @@ export function VerificationPanel({
             disabled={verifying}
             className="am-button-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {verifying ? "Vérification…" : "Vérifier le TXT"}
+            {verifying
+              ? "Vérification…"
+              : ownershipState === "expired" && !activeExpiresAt
+                ? "Revérifier le TXT"
+                : "Vérifier le TXT"}
           </button>
         </form>
 

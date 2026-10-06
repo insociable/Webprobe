@@ -49,6 +49,13 @@ async function createFixture() {
     canonicalUrl: "https://example.com/",
     status: "active",
     verifiedAt: new Date(),
+    ownershipTokenHash: "a".repeat(64),
+    ownershipRecordName: "_agency-monitor.example.com",
+    ownershipOrigin: "https://example.com",
+    ownershipGeneration: randomUUID(),
+    ownershipVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ownershipRevalidatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ownershipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
   });
   const [scan] = await db
     .insert(scans)
@@ -187,6 +194,13 @@ describeIntegration("scan dispatch transactional outbox", () => {
       canonicalUrl: "https://deep-dispatch.example/",
       status: "active",
       verifiedAt: new Date(),
+      ownershipTokenHash: "a".repeat(64),
+      ownershipRecordName: "_agency-monitor.deep-dispatch.example",
+      ownershipOrigin: "https://deep-dispatch.example",
+      ownershipGeneration: randomUUID(),
+      ownershipVerifiedAt: new Date("2026-01-01T00:00:00.000Z"),
+      ownershipRevalidatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      ownershipExpiresAt: new Date("2027-01-01T00:00:00.000Z"),
     });
     const [scan] = await db
       .insert(scans)
