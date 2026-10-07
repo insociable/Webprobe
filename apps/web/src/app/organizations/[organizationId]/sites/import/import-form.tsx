@@ -1,7 +1,14 @@
 "use client";
 
 import { useActionState } from "react";
-import { importSitesAction, initialImportState } from "./actions";
+import { importSitesAction, type ImportActionState } from "./actions";
+
+const initialImportState: ImportActionState = {
+  error: null,
+  source: null,
+  rows: [],
+  result: null,
+};
 
 const statusLabel = {
   ready: "À importer",

@@ -17,7 +17,7 @@ export type ImportActionState = {
   result: { imported: number; skipped: number } | null;
 };
 
-export const initialImportState: ImportActionState = {
+const initialImportState: ImportActionState = {
   error: null,
   source: null,
   rows: [],
