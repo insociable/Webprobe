@@ -169,6 +169,13 @@
       "when": 1791308915932,
       "tag": "0023_remarkable_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791363480116,
+      "tag": "0024_lethal_thunderball",
+      "breakpoints": true
     }
   ]
 }
