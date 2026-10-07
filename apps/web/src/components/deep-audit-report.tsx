@@ -436,7 +436,10 @@ export function DeepAuditReport({
                           </p>
                         ) : null}
 
-                        <CookieConsentDetails observation={cookieConsent} />
+                        <CookieConsentDetails
+                          observation={cookieConsent}
+                          observedAt={run.startedAt}
+                        />
 
                         {findings.length > 0 ? (
                           <div className="mt-4 space-y-2">

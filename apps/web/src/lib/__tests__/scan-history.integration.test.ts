@@ -286,4 +286,68 @@ describeDatabase("scan history tenant scoping", () => {
       await cleanupFixture(fixture.organizationId, fixture.userId);
     }
   });
+  it("keeps an explicit baseline and reports its removal without substituting another", async () => {
+    const fixture = await createFixture();
+    const middle = randomUUID(),
+      current = randomUUID();
+    try {
+      await db.insert(scans).values([
+        {
+          id: middle,
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteIds[0]!,
+          status: "completed",
+          trigger: "manual",
+          queuedAt: new Date("2026-09-23T05:00:00Z"),
+          completedAt: new Date("2026-09-23T05:00:02Z"),
+        },
+        {
+          id: current,
+          organizationId: fixture.organizationId,
+          siteId: fixture.siteIds[0]!,
+          status: "completed",
+          trigger: "manual",
+          queuedAt: new Date("2026-09-24T05:00:00Z"),
+          completedAt: new Date("2026-09-24T05:00:02Z"),
+        },
+      ]);
+      const selected = await getScanDetailsForSite(
+        fixture.userId,
+        fixture.organizationId,
+        fixture.siteIds[0]!,
+        current,
+        fixture.scanIds[0]!,
+      );
+      expect(selected?.comparison?.previousScanId).toBe(fixture.scanIds[0]);
+      expect(selected?.comparison?.selected).toBe(true);
+      const foreign = await getScanDetailsForSite(
+        fixture.userId,
+        fixture.organizationId,
+        fixture.siteIds[0]!,
+        current,
+        fixture.scanIds[1]!,
+      );
+      expect(foreign?.comparison).toBeNull();
+      expect(foreign?.comparisonError).toMatch(/indisponible/);
+      await db.delete(scans).where(eq(scans.id, fixture.scanIds[0]!));
+      const removed = await getScanDetailsForSite(
+        fixture.userId,
+        fixture.organizationId,
+        fixture.siteIds[0]!,
+        current,
+        fixture.scanIds[0]!,
+      );
+      expect(removed?.comparison).toBeNull();
+      expect(removed?.comparisonError).toMatch(/indisponible/);
+      const automatic = await getScanDetailsForSite(
+        fixture.userId,
+        fixture.organizationId,
+        fixture.siteIds[0]!,
+        current,
+      );
+      expect(automatic?.comparison?.previousScanId).toBe(middle);
+    } finally {
+      await cleanupFixture(fixture.organizationId, fixture.userId);
+    }
+  });
 });

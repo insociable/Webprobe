@@ -1,4 +1,6 @@
 import {
+  findingRemediationEvents,
+  findingRemediations,
   findings,
   memberships,
   notificationDeliveries,
@@ -27,6 +29,7 @@ import {
 } from "./scan-alerts.js";
 import type { ScanMode } from "./scan-engine/types.js";
 import type { TechnologyObservationInput } from "./technology-inventory.js";
+import { decideFindingFollowup } from "./finding-followup-state.js";
 
 export class ScanContextError extends Error {
   constructor(
@@ -376,6 +379,83 @@ export async function persistScanCompletion(
           observedAt: new Date(result.completedAt),
         })),
       );
+    }
+
+    const tracked = await tx
+      .select()
+      .from(findingRemediations)
+      .where(
+        and(
+          eq(findingRemediations.organizationId, context.organizationId),
+          eq(findingRemediations.siteId, context.siteId),
+          eq(findingRemediations.scanMode, context.scanMode),
+        ),
+      );
+    const currentByFingerprint = new Map(
+      generatedFindings.map((finding) => [finding.fingerprint, finding]),
+    );
+    const coverageSummary = scannerV2 ? { scannerV2 } : {};
+    for (const item of tracked) {
+      const observed = currentByFingerprint.get(item.fingerprint);
+      const decision = decideFindingFollowup({
+        status: item.status,
+        code: item.code,
+        observed: Boolean(observed),
+        summary: coverageSummary,
+      });
+      if (observed) {
+        const reopened = decision.event === "reopened";
+        const nextStatus = decision.status;
+        await tx
+          .update(findingRemediations)
+          .set({
+            lastSeenScanId: context.scanId,
+            suggestedScanId: null,
+            code: observed.code,
+            title: observed.title,
+            severity: observed.severity,
+            ...(reopened
+              ? {
+                  status: nextStatus,
+                  updatedAt: new Date(),
+                  updatedByUserId: null,
+                  ...(item.status === "fixed"
+                    ? { reopenedAt: new Date() }
+                    : {}),
+                }
+              : {}),
+          })
+          .where(eq(findingRemediations.id, item.id));
+        if (reopened)
+          await tx.insert(findingRemediationEvents).values({
+            remediationId: item.id,
+            organizationId: context.organizationId,
+            scanId: context.scanId,
+            eventType: "reopened",
+            fromStatus: item.status,
+            toStatus: nextStatus,
+            note: "Constat retrouvé dans un scan ultérieur.",
+          });
+      } else if (decision.event === "suggested") {
+        await tx
+          .update(findingRemediations)
+          .set({
+            status: "to_verify",
+            suggestedScanId: context.scanId,
+            updatedAt: new Date(),
+            updatedByUserId: null,
+          })
+          .where(eq(findingRemediations.id, item.id));
+        await tx.insert(findingRemediationEvents).values({
+          remediationId: item.id,
+          organizationId: context.organizationId,
+          scanId: context.scanId,
+          eventType: "suggested",
+          fromStatus: item.status,
+          toStatus: "to_verify",
+          note: "Constat non retrouvé ; confirmation manuelle requise.",
+        });
+      }
     }
 
     if (context.scanMode === "public_audit") {

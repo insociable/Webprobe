@@ -609,6 +609,126 @@ export const findings = pgTable(
   ],
 );
 
+export const findingRemediations = pgTable(
+  "finding_remediations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanMode: scanMode("scan_mode").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    code: text("code").notNull(),
+    title: text("title").notNull(),
+    severity: severity("severity").notNull(),
+    status: text("status").default("todo").notNull(),
+    assigneeUserId: uuid("assignee_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    acceptanceReason: text("acceptance_reason"),
+    updatedByUserId: uuid("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    lastSeenScanId: uuid("last_seen_scan_id").references(() => scans.id, {
+      onDelete: "set null",
+    }),
+    suggestedScanId: uuid("suggested_scan_id").references(() => scans.id, {
+      onDelete: "set null",
+    }),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("finding_remediations_site_mode_fingerprint_unique").on(
+      table.siteId,
+      table.scanMode,
+      table.fingerprint,
+    ),
+    index("finding_remediations_org_status_idx").on(
+      table.organizationId,
+      table.status,
+    ),
+    check(
+      "finding_remediations_status_valid",
+      sql`${table.status} in ('todo', 'in_progress', 'to_verify', 'fixed', 'accepted')`,
+    ),
+    check(
+      "finding_remediations_acceptance_reason",
+      sql`${table.status} <> 'accepted' or length(btrim(${table.acceptanceReason})) > 0`,
+    ),
+  ],
+);
+
+export const findingRemediationEvents = pgTable(
+  "finding_remediation_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    remediationId: uuid("remediation_id")
+      .notNull()
+      .references(() => findingRemediations.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    scanId: uuid("scan_id").references(() => scans.id, {
+      onDelete: "set null",
+    }),
+    eventType: text("event_type").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("finding_remediation_events_remediation_time_idx").on(
+      table.remediationId,
+      table.createdAt,
+    ),
+    index("finding_remediation_events_org_idx").on(table.organizationId),
+  ],
+);
+
+export const siteImportEvents = pgTable(
+  "site_import_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    importedCount: integer("imported_count").notNull(),
+    skippedCount: integer("skipped_count").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("site_import_events_org_time_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    check(
+      "site_import_events_counts_nonnegative",
+      sql`${table.importedCount} >= 0 and ${table.skippedCount} >= 0`,
+    ),
+  ],
+);
+
 export const scanArtifacts = pgTable(
   "scan_artifacts",
   {

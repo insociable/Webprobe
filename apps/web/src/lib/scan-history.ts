@@ -50,6 +50,7 @@ export async function getScanDetailsForSite(
   organizationId: string,
   siteId: string,
   scanId: string,
+  baselineScanId?: string,
 ) {
   const access = await requireOrganizationAccess(userId, organizationId);
 
@@ -106,13 +107,27 @@ export async function getScanDetailsForSite(
     .limit(1);
 
   let comparison = null;
+  let comparisonError: string | null = null;
+  let availableBaselines: {
+    id: string;
+    completedAt: Date | null;
+    status: string;
+  }[] = [];
+  const validBaselineId =
+    !baselineScanId ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      baselineScanId,
+    );
+  if (!validBaselineId) {
+    comparisonError = "Identifiant de scan de référence invalide.";
+  }
 
   if (scan.status === "completed" && scan.completedAt) {
-    const [previousScan] = await db
+    availableBaselines = await db
       .select({
         id: scans.id,
         completedAt: scans.completedAt,
-        summary: scans.summary,
+        status: scans.status,
       })
       .from(scans)
       .where(
@@ -126,9 +141,35 @@ export async function getScanDetailsForSite(
         ),
       )
       .orderBy(desc(scans.completedAt), desc(scans.queuedAt))
-      .limit(1);
+      .limit(50);
+    const [previousScan] = validBaselineId
+      ? await db
+          .select({
+            id: scans.id,
+            completedAt: scans.completedAt,
+            summary: scans.summary,
+            status: scans.status,
+          })
+          .from(scans)
+          .where(
+            and(
+              ...(baselineScanId ? [eq(scans.id, baselineScanId)] : []),
+              eq(scans.organizationId, organizationId),
+              eq(scans.siteId, siteId),
+              eq(scans.scanMode, scan.scanMode),
+              eq(scans.status, "completed"),
+              isNotNull(scans.completedAt),
+              lt(scans.completedAt, scan.completedAt),
+            ),
+          )
+          .orderBy(desc(scans.completedAt), desc(scans.queuedAt))
+          .limit(1)
+      : [];
 
-    if (previousScan) {
+    if (validBaselineId && baselineScanId && !previousScan) {
+      comparisonError =
+        "Le scan de référence sélectionné est indisponible ou non comparable. Choisissez un autre scan ou revenez au scan précédent.";
+    } else if (previousScan) {
       const previousFindings = await db
         .select()
         .from(findings)
@@ -143,6 +184,8 @@ export async function getScanDetailsForSite(
       comparison = {
         previousScanId: previousScan.id,
         previousCompletedAt: previousScan.completedAt,
+        previousStatus: previousScan.status,
+        selected: Boolean(baselineScanId),
         ...compareScanFindings(scanFindings, previousFindings, {
           current: scan.summary,
           previous: previousScan.summary,
@@ -158,6 +201,8 @@ export async function getScanDetailsForSite(
     findings: scanFindings,
     checkRuns,
     comparison,
+    comparisonError,
+    availableBaselines,
     screenshotAvailable: Boolean(screenshotArtifact),
   };
 }
