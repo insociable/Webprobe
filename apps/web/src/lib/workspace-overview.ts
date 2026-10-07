@@ -32,6 +32,7 @@ export async function getWorkspaceOverview() {
     overviews[index]!.sites.map((site) => ({
       ...site,
       organizationId: membership.organizationId,
+      organizationName: overviews[index]!.access.organizationName,
       canManage: canManageOrganization(overviews[index]!.access.role),
     })),
   );

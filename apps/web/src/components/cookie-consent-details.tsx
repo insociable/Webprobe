@@ -19,8 +19,10 @@ const purposeLabels: Record<string, string> = {
 
 export function CookieConsentDetails({
   observation,
+  observedAt,
 }: {
   observation: unknown;
+  observedAt?: Date;
 }) {
   const data = record(observation);
   if (data?.method !== "fresh-context-no-interaction") return null;
@@ -43,6 +45,17 @@ export function CookieConsentDetails({
         {(count(data.observedWindowMs) / 1_000).toFixed(1)} s après le
         chargement initial. Les valeurs des cookies ne sont pas conservées.
       </p>
+      {observedAt ? (
+        <p className="mt-1 text-xs text-white/45">
+          Contrôle démarré le{" "}
+          {new Intl.DateTimeFormat("fr-FR", {
+            dateStyle: "short",
+            timeStyle: "short",
+            timeZone: "Europe/Paris",
+          }).format(observedAt)}{" "}
+          · Source : stockage cookies du navigateur de ce scan.
+        </p>
+      ) : null}
       {unavailable ? (
         <p className="mt-3 text-sm leading-6 text-amber-100 opacity-80">
           Observation indisponible. Le dépôt avant consentement n’a pas pu être
@@ -80,7 +93,7 @@ export function CookieConsentDetails({
                       Cookie et domaine
                     </th>
                     <th scope="col" className="py-2">
-                      Indice de finalité
+                      Source et portée de l’indice
                     </th>
                   </tr>
                 </thead>
@@ -98,6 +111,10 @@ export function CookieConsentDetails({
                       typeof cookie.provider === "string"
                         ? cookie.provider
                         : null;
+                    const firstObserved =
+                      typeof cookie.firstObservedAfterLoadMs === "number"
+                        ? cookie.firstObservedAfterLoadMs
+                        : null;
                     return (
                       <tr
                         key={index}
@@ -110,9 +127,19 @@ export function CookieConsentDetails({
                           <span className="mt-1 block break-all text-white/40">
                             {domain}
                           </span>
+                          <span className="mt-1 block text-xs text-white/35">
+                            {firstObserved !== null
+                              ? `Premier relevé : +${(firstObserved / 1000).toFixed(1)} s après le chargement.`
+                              : "Moment du relevé indisponible."}
+                          </span>
                         </td>
                         <td className="py-3 text-white/60">
                           {purposeLabels[purpose] ?? purposeLabels.unknown}
+                          <span className="mt-1 block text-xs text-white/40">
+                            {provider
+                              ? "Reconnu par une signature de nom ; finalité réelle à vérifier."
+                              : "Aucune signature reconnue ; finalité inconnue."}
+                          </span>
                           {provider ? (
                             <span className="mt-1 block text-white/40">
                               {provider}

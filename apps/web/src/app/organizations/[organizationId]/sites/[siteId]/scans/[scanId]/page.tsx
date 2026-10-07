@@ -8,6 +8,8 @@ import { notFound } from "next/navigation";
 import { WorkspaceShell } from "@/components/product-shell";
 import { requireCurrentSession } from "@/lib/current-session";
 import { getFindingRemediation } from "@/lib/finding-remediation";
+import { getFindingFollowups } from "@/lib/finding-followup";
+import { canManageOrganization } from "@/lib/organization-permissions";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
 import {
   getFindingBusinessContext,
@@ -40,6 +42,7 @@ import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
 import { ReportScorecard } from "@/components/report-scorecard";
 import { ReportSharePanel } from "./report-share-panel";
+import { FollowupPanel } from "./followup-panel";
 
 type ScanPageProps = {
   params: Promise<{
@@ -47,6 +50,7 @@ type ScanPageProps = {
     siteId: string;
     scanId: string;
   }>;
+  searchParams: Promise<{ baseline?: string }>;
 };
 
 const scanStatusLabels = {
@@ -166,9 +170,16 @@ async function loadScan(
   organizationId: string,
   siteId: string,
   scanId: string,
+  baselineScanId?: string,
 ) {
   try {
-    return await getScanDetailsForSite(userId, organizationId, siteId, scanId);
+    return await getScanDetailsForSite(
+      userId,
+      organizationId,
+      siteId,
+      scanId,
+      baselineScanId,
+    );
   } catch (error) {
     if (error instanceof OrganizationAccessError) {
       notFound();
@@ -177,8 +188,12 @@ async function loadScan(
   }
 }
 
-export default async function ScanPage({ params }: ScanPageProps) {
+export default async function ScanPage({
+  params,
+  searchParams,
+}: ScanPageProps) {
   const { organizationId, siteId, scanId } = await params;
+  const { baseline } = await searchParams;
 
   if (
     !OrganizationReadSchema.shape.id.safeParse(organizationId).success ||
@@ -194,6 +209,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
     organizationId,
     siteId,
     scanId,
+    baseline,
   );
 
   if (!details) {
@@ -204,6 +220,19 @@ export default async function ScanPage({ params }: ScanPageProps) {
     details.scan.status === "queued" || details.scan.status === "running";
   const orderedFindings = [...details.findings].sort(
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
+  );
+  const followups =
+    details.scan.scanMode !== "verified_deep_audit"
+      ? await getFindingFollowups(
+          session.user.id,
+          organizationId,
+          siteId,
+          details.scan.scanMode,
+          orderedFindings.map((finding) => finding.fingerprint),
+        )
+      : null;
+  const followupByFingerprint = new Map(
+    followups?.rows.map((row) => [row.fingerprint, row]) ?? [],
   );
   const findingGroups = groupFindingsForDisplay(orderedFindings);
   const distinctFindings = findingGroups.map((group) => group.primary);
@@ -610,17 +639,73 @@ export default async function ScanPage({ params }: ScanPageProps) {
         </section>
       ) : null}
 
+      {details.scan.status === "completed" && !isDeepAudit ? (
+        <section
+          className="border-b border-white/10 py-8"
+          aria-label="Choix du scan de référence"
+        >
+          <h2 className="text-xl font-semibold">Scan de référence</h2>
+          <p className="mt-2 text-sm text-white/45">
+            Site : {details.site.name} · Scan comparé : terminé le{" "}
+            {formatDate(details.scan.completedAt)}
+          </p>
+          <form className="mt-4 flex flex-wrap items-end gap-3" method="get">
+            <label className="min-w-[16rem] flex-1 text-sm text-white/65">
+              Référence comparable
+              <select
+                className="am-field mt-2"
+                name="baseline"
+                defaultValue={baseline ?? ""}
+              >
+                <option value="">Scan précédent (par défaut)</option>
+                {details.availableBaselines.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    Terminé le {formatDate(candidate.completedAt)} ·{" "}
+                    {candidate.id.slice(0, 8)}
+                  </option>
+                ))}
+                {comparison?.selected &&
+                !details.availableBaselines.some(
+                  (candidate) => candidate.id === comparison.previousScanId,
+                ) ? (
+                  <option value={comparison.previousScanId}>
+                    Terminé le {formatDate(comparison.previousCompletedAt)} ·{" "}
+                    {comparison.previousScanId.slice(0, 8)}
+                  </option>
+                ) : null}
+              </select>
+            </label>
+            <button className="am-button-secondary">Comparer</button>
+            {baseline ? (
+              <Link
+                className="text-sm text-[#8793ff]"
+                href={`/organizations/${organizationId}/sites/${siteId}/scans/${scanId}`}
+              >
+                Revenir au scan précédent
+              </Link>
+            ) : null}
+          </form>
+          {details.comparisonError ? (
+            <p role="alert" className="mt-3 text-sm text-amber-200">
+              {details.comparisonError}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
       {comparison && !isDeepAudit ? (
         <section className="border-b border-white/10 py-10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-sm text-white/45">Évolution</p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">
-                Depuis le scan précédent
+                {comparison.selected
+                  ? "Depuis le scan de référence"
+                  : "Depuis le scan précédent"}
               </h2>
               <p className="mt-2 text-sm text-white/40">
-                Baseline terminée le{" "}
-                {formatDate(comparison.previousCompletedAt)}
+                {details.site.name} · Référence terminée le{" "}
+                {formatDate(comparison.previousCompletedAt)} · Scan comparé
+                terminé le {formatDate(details.scan.completedAt)}
               </p>
             </div>
             <Link
@@ -848,6 +933,24 @@ export default async function ScanPage({ params }: ScanPageProps) {
                         </p>
                       </div>
                     ) : null}
+                    {followups ? (
+                      <FollowupPanel
+                        organizationId={organizationId}
+                        siteId={siteId}
+                        scanId={scanId}
+                        fingerprint={finding.fingerprint}
+                        followup={
+                          followupByFingerprint.get(finding.fingerprint) ?? null
+                        }
+                        members={followups.members}
+                        events={followups.events.filter(
+                          (event) =>
+                            event.remediationId ===
+                            followupByFingerprint.get(finding.fingerprint)?.id,
+                        )}
+                        canManage={canManageOrganization(details.access.role)}
+                      />
+                    ) : null}
                   </article>
                 );
               })}
@@ -871,7 +974,7 @@ export default async function ScanPage({ params }: ScanPageProps) {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#72c6a5]">
-                          Résolu · {finding.code}
+                          Non retrouvé · {finding.code}
                         </p>
                         <h3 className="mt-2 font-medium">{finding.title}</h3>
                         {finding.pageUrl ? (
