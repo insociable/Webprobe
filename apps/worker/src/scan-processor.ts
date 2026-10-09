@@ -149,9 +149,9 @@ export async function processScanJobAttempt(
     ? detectThirdPartyServices({
         headers: httpProbe.headers,
         resources:
-          browserScan?.scannerV2.network.resources.map(
-            (item) => item.resourceUrl,
-          ) ?? [],
+          browserScan?.scannerV2.network.resources
+            .filter((item) => item.statusCode >= 200 && item.statusCode < 400)
+            .map((item) => item.resourceUrl) ?? [],
       })
     : [];
 

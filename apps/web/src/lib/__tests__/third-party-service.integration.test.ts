@@ -14,6 +14,7 @@ import { db } from "../database";
 import {
   decideThirdParty,
   getThirdPartyOverview,
+  resetThirdPartyDecision,
 } from "../third-party-service";
 import { fetchStackLegalProvider } from "../stacklegal";
 
@@ -136,6 +137,11 @@ describeDatabase("third-party decisions and snapshots", () => {
       expect(
         (await getThirdPartyOverview(owner, org, site))[0]?.provider?.name,
       ).toBe("Cloudflare");
+      vi.mocked(fetchStackLegalProvider).mockResolvedValueOnce(null);
+      await decideThirdParty(owner, org, site, "cloudflare", "confirmed");
+      expect(
+        (await getThirdPartyOverview(owner, org, site))[0]?.provider?.name,
+      ).toBe("Cloudflare");
       expect(await getThirdPartyOverview(owner, org, sibling)).toEqual([]);
       await decideThirdParty(owner, org, site, "cloudflare", "ignored");
       expect((await getThirdPartyOverview(owner, org, site))[0]?.status).toBe(
@@ -147,6 +153,16 @@ describeDatabase("third-party decisions and snapshots", () => {
       expect(
         (await getThirdPartyOverview(owner, org, site))[0]?.provider,
       ).toBeNull();
+      await expect(
+        resetThirdPartyDecision(member, org, site, "cloudflare"),
+      ).rejects.toThrow();
+      await expect(
+        resetThirdPartyDecision(foreign, otherOrg, site, "cloudflare"),
+      ).rejects.toThrow();
+      await resetThirdPartyDecision(owner, org, site, "cloudflare");
+      expect((await getThirdPartyOverview(owner, org, site))[0]?.status).toBe(
+        "pending",
+      );
       await decideThirdParty(owner, org, site, "cloudflare", "confirmed");
       await db.insert(scans).values({
         id: nextScan,

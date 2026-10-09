@@ -71,6 +71,7 @@ describe("third-party site panel", () => {
     );
     const ignored = render({ ...base, status: "ignored" });
     expect(ignored).toContain("ignoré par votre organisation");
+    expect(ignored).toContain("Revenir à confirmer");
     expect(ignored).not.toContain(
       "Enrichissement StackLégal temporairement indisponible",
     );

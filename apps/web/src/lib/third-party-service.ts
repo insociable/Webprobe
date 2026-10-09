@@ -167,7 +167,24 @@ export async function decideThirdParty(
       )
       .limit(1);
     if (!site) throw new OrganizationAccessError("Site not found");
-    let snapshotId: string | null = null;
+    const [previous] = await tx
+      .select({
+        status: thirdPartyDecisions.status,
+        snapshotId: thirdPartyDecisions.snapshotId,
+      })
+      .from(thirdPartyDecisions)
+      .where(
+        and(
+          eq(thirdPartyDecisions.organizationId, organizationId),
+          eq(thirdPartyDecisions.siteId, siteId),
+          eq(thirdPartyDecisions.providerId, providerId),
+        ),
+      )
+      .limit(1);
+    let snapshotId: string | null =
+      status === "confirmed" && !provider && previous?.status === "confirmed"
+        ? previous.snapshotId
+        : null;
     if (provider) {
       const [snapshot] = await tx
         .insert(thirdPartySnapshots)
@@ -203,4 +220,27 @@ export async function decideThirdParty(
         set: { status, snapshotId, decidedBy: userId, decidedAt: new Date() },
       });
   });
+}
+
+export async function resetThirdPartyDecision(
+  userId: string,
+  organizationId: string,
+  siteId: string,
+  providerId: unknown,
+): Promise<void> {
+  if (!isStackLegalProviderId(providerId)) {
+    throw new Error("Invalid third-party provider");
+  }
+  const access = await requireOrganizationAccess(userId, organizationId);
+  if (!canManageOrganization(access.role)) throw new OrganizationAccessError();
+  await requireSite(organizationId, siteId);
+  await db
+    .delete(thirdPartyDecisions)
+    .where(
+      and(
+        eq(thirdPartyDecisions.organizationId, organizationId),
+        eq(thirdPartyDecisions.siteId, siteId),
+        eq(thirdPartyDecisions.providerId, providerId),
+      ),
+    );
 }

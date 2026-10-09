@@ -115,7 +115,9 @@ export function ThirdPartyPanel({
                       />
                       <input type="hidden" name="status" value="confirmed" />
                       <button className="am-button-secondary" type="submit">
-                        Réessayer l’enrichissement
+                        {row.provider
+                          ? "Rafraîchir les informations"
+                          : "Réessayer l’enrichissement"}
                       </button>
                     </form>
                   )}
@@ -129,6 +131,19 @@ export function ThirdPartyPanel({
                       <input type="hidden" name="status" value="ignored" />
                       <button className="am-button-secondary" type="submit">
                         Ignorer
+                      </button>
+                    </form>
+                  ) : null}
+                  {row.status !== "pending" ? (
+                    <form action={action}>
+                      <input
+                        type="hidden"
+                        name="providerId"
+                        value={row.providerId}
+                      />
+                      <input type="hidden" name="status" value="reset" />
+                      <button className="am-button-secondary" type="submit">
+                        Revenir à confirmer
                       </button>
                     </form>
                   ) : null}
