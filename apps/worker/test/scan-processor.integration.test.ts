@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
-import { findings, organizations, scans, sites } from "@agency-saas/db";
+import {
+  findings,
+  organizations,
+  scans,
+  sites,
+  thirdPartyObservations,
+} from "@agency-saas/db";
 import { and, eq } from "drizzle-orm";
 import { closeDatabase, getDatabase } from "../src/database.js";
 import type { HttpProbeResult } from "../src/http-probe.js";
@@ -167,6 +173,58 @@ describeDatabase("scan processor browser findings", () => {
         maxPages: 15,
         navigationTimeoutMs: 20_000,
       });
+    } finally {
+      await cleanup(fixture.organizationId);
+    }
+  });
+
+  it("does not claim a provider from a failed network response", async () => {
+    const fixture = await createFixture("public_audit");
+    try {
+      await processScanJob(fixture.payload, {
+        probeHttpTarget: async () => successfulProbe(),
+        runBrowserScan: async () => {
+          const scannerV2 = emptyScannerV2();
+          const resource = {
+            pageUrl: "https://example.com/",
+            resourceKey: "observed-resource",
+            resourceType: "script" as const,
+            party: "third-party" as const,
+            transferBytes: 200,
+            cacheControlled: false,
+            contentEncoding: null,
+          };
+          return {
+            pagesVisited: 1,
+            screenshot: null,
+            observations: [],
+            scannerV2: {
+              ...scannerV2,
+              network: {
+                ...scannerV2.network,
+                resources: [
+                  {
+                    ...resource,
+                    resourceUrl: "https://js.stripe.com/v3/",
+                    statusCode: 404,
+                  },
+                  {
+                    ...resource,
+                    resourceUrl: "https://plausible.io/js/script.js",
+                    statusCode: 200,
+                  },
+                ],
+              },
+            },
+          };
+        },
+      });
+      const { db } = getDatabase();
+      const observed = await db
+        .select({ providerId: thirdPartyObservations.providerId })
+        .from(thirdPartyObservations)
+        .where(eq(thirdPartyObservations.scanId, fixture.scanId));
+      expect(observed).toEqual([{ providerId: "plausible" }]);
     } finally {
       await cleanup(fixture.organizationId);
     }

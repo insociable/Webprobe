@@ -9,6 +9,7 @@ import {
   scans,
   sites,
   technologyObservations,
+  thirdPartyObservations,
   users,
 } from "@agency-saas/db";
 import {
@@ -29,6 +30,7 @@ import {
 } from "./scan-alerts.js";
 import type { ScanMode } from "./scan-engine/types.js";
 import type { TechnologyObservationInput } from "./technology-inventory.js";
+import type { ThirdPartyObservationInput } from "./third-party-detection.js";
 import { decideFindingFollowup } from "./finding-followup-state.js";
 
 export class ScanContextError extends Error {
@@ -298,6 +300,7 @@ export async function persistScanCompletion(
   generatedFindings: GeneratedFinding[],
   scannerV2: ScannerV2PersistentSummary | null = null,
   technologies: TechnologyObservationInput[] = [],
+  thirdParties: ThirdPartyObservationInput[] = [],
 ): Promise<void> {
   const { db } = getDatabase();
 
@@ -377,6 +380,23 @@ export async function persistScanCompletion(
           source: technology.source,
           evidence: technology.evidence,
           observedAt: new Date(result.completedAt),
+        })),
+      );
+    }
+
+    await tx
+      .delete(thirdPartyObservations)
+      .where(eq(thirdPartyObservations.scanId, context.scanId));
+    if (thirdParties.length > 0) {
+      await tx.insert(thirdPartyObservations).values(
+        thirdParties.map((item) => ({
+          organizationId: context.organizationId,
+          siteId: context.siteId,
+          scanId: context.scanId,
+          providerId: item.providerId,
+          confidence: item.confidence,
+          evidence: item.evidence,
+          detectedAt: new Date(result.completedAt),
         })),
       );
     }

@@ -29,6 +29,7 @@ import {
   validateScanContext,
 } from "./scan-persistence.js";
 import { detectTechnologyInventory } from "./technology-inventory.js";
+import { detectThirdPartyServices } from "./third-party-detection.js";
 import { ensureSiteOwnershipProof } from "./site-ownership.js";
 import { reconcileScanVulnerabilities } from "./vulnerability-correlation.js";
 
@@ -144,6 +145,16 @@ export async function processScanJobAttempt(
       })
     : [];
 
+  const thirdParties = httpProbe.ok
+    ? detectThirdPartyServices({
+        headers: httpProbe.headers,
+        resources:
+          browserScan?.scannerV2.network.resources
+            .filter((item) => item.statusCode >= 200 && item.statusCode < 400)
+            .map((item) => item.resourceUrl) ?? [],
+      })
+    : [];
+
   await persistScanCompletion(
     context,
     result,
@@ -151,6 +162,7 @@ export async function processScanJobAttempt(
     generatedFindings,
     scannerV2Summary,
     technologies,
+    thirdParties,
   );
 
   try {
