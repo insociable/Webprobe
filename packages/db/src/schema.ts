@@ -1097,6 +1097,116 @@ export const technologyObservations = pgTable(
   ],
 );
 
+export const thirdPartyObservations = pgTable(
+  "third_party_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    scanId: uuid("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    confidence: text("confidence").notNull(),
+    evidence: jsonb("evidence").$type<string[]>().notNull(),
+    detectedAt: timestamp("detected_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("third_party_observations_scan_provider_unique").on(
+      table.scanId,
+      table.providerId,
+    ),
+    index("third_party_observations_org_site_scan_idx").on(
+      table.organizationId,
+      table.siteId,
+      table.scanId,
+    ),
+    check(
+      "third_party_observations_confidence_valid",
+      sql`${table.confidence} in ('high', 'medium')`,
+    ),
+    check(
+      "third_party_observations_provider_valid",
+      sql`${table.providerId} ~ '^[a-z][a-z0-9-]{0,63}$'`,
+    ),
+  ],
+);
+
+export const thirdPartySnapshots = pgTable(
+  "third_party_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    apiVersion: text("api_version").notNull(),
+    providerData: jsonb("provider_data")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    lastVerified: text("last_verified"),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("third_party_snapshots_org_site_provider_idx").on(
+      table.organizationId,
+      table.siteId,
+      table.providerId,
+      table.fetchedAt,
+    ),
+    check(
+      "third_party_snapshots_api_version_valid",
+      sql`${table.apiVersion} = '1'`,
+    ),
+  ],
+);
+
+export const thirdPartyDecisions = pgTable(
+  "third_party_decisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    siteId: uuid("site_id")
+      .notNull()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    status: text("status").notNull(),
+    snapshotId: uuid("snapshot_id").references(() => thirdPartySnapshots.id, {
+      onDelete: "set null",
+    }),
+    decidedBy: uuid("decided_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    decidedAt: timestamp("decided_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("third_party_decisions_org_site_provider_unique").on(
+      table.organizationId,
+      table.siteId,
+      table.providerId,
+    ),
+    check(
+      "third_party_decisions_status_valid",
+      sql`${table.status} in ('confirmed', 'ignored')`,
+    ),
+  ],
+);
+
 export const siteTechnologyVersions = pgTable(
   "site_technology_versions",
   {

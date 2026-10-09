@@ -16,6 +16,8 @@ import { PublicAuditButton } from "../../public-audit-button";
 import { ScanSchedulePanel } from "./scan-schedule-panel";
 import { AlertPreferencePanel } from "../../alert-preference-panel";
 import { ReportBrandingPanel } from "../../report-branding-panel";
+import { getThirdPartyOverview } from "@/lib/third-party-service";
+import { ThirdPartyPanel } from "./third-party-panel";
 
 type SitePageProps = {
   params: Promise<{
@@ -117,10 +119,12 @@ export default async function SitePage({
     notFound();
   }
 
-  const [scheduleState, vulnerabilityOverview] = await Promise.all([
-    loadSiteSchedule(session.user.id, organizationId, siteId),
-    loadVulnerabilityOverview(session.user.id, organizationId, siteId),
-  ]);
+  const [scheduleState, vulnerabilityOverview, thirdParties] =
+    await Promise.all([
+      loadSiteSchedule(session.user.id, organizationId, siteId),
+      loadVulnerabilityOverview(session.user.id, organizationId, siteId),
+      getThirdPartyOverview(session.user.id, organizationId, siteId),
+    ]);
 
   if (!vulnerabilityOverview) {
     notFound();
@@ -383,6 +387,13 @@ export default async function SitePage({
           ) : null}
         </section>
       ) : null}
+
+      <ThirdPartyPanel
+        rows={thirdParties}
+        organizationId={organizationId}
+        siteId={siteId}
+        canManage={canManage}
+      />
 
       <div className="py-10">
         <SiteVulnerabilityOverview
