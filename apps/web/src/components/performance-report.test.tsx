@@ -45,7 +45,12 @@ describe("performance report", () => {
     expect(html).toContain("Mesures de laboratoire");
     expect(html).toContain("Non mesuré");
     expect(html).toContain("INP : non mesuré");
-    expect(html).toContain("Couverture partielle");
+    expect(html).toContain("Mesures partielles");
+    expect(html).toContain("Certaines ressources ou mesures");
+    expect(html).toContain("Limites des ressources observées");
+    expect(html).not.toContain(
+      "aucun résultat favorable ne peut en être déduit",
+    );
     expect(html).toContain("Poids inconnu");
     expect(html).toContain("0/2 tailles connues");
     expect(html).not.toContain("token=secret");

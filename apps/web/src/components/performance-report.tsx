@@ -21,6 +21,11 @@ function bytes(v: unknown) {
         " Ko connus"
     : "Poids inconnu";
 }
+const resourceReasonCodes = new Set([
+  "resource-size-unavailable",
+  "resource-collection-limit",
+  "blocked-resources",
+]);
 const reasonLabels: Record<string, string> = {
   "resource-size-unavailable":
     "Certaines tailles ou réponses ne sont pas disponibles",
@@ -48,7 +53,17 @@ export function PerformanceReport({ observation }: { observation: unknown }) {
     metrics = record(data.metrics),
     resources = record(data.resources);
   const viewport = record(context.viewport);
-  const partial = data.coverage !== "observed";
+  const partial = data.coverage === "limited";
+  const unavailable = data.coverage === "unavailable";
+  const reasons = (Array.isArray(data.reasons) ? data.reasons : [])
+    .filter((reason): reason is string => typeof reason === "string")
+    .slice(0, 10);
+  const measurementReasons = reasons.filter(
+    (reason) => !resourceReasonCodes.has(reason),
+  );
+  const resourceReasons = reasons.filter((reason) =>
+    resourceReasonCodes.has(reason),
+  );
   return (
     <div className="mt-4 min-w-0 space-y-4">
       <p className="text-sm text-white/60">
@@ -65,6 +80,24 @@ export function PerformanceReport({ observation }: { observation: unknown }) {
           : "état inconnu"}
         .
       </p>
+      {partial ? (
+        <div className="rounded-md border border-[#303a50] bg-[#111827]/50 p-3">
+          <p className="text-sm font-medium text-white/80">
+            Mesures partielles
+          </p>
+          <p className="mt-1 text-sm leading-6 text-white/60">
+            Les résultats présentés correspondent aux données observées pendant
+            le chargement de la page. Certaines ressources ou mesures n’ont pas
+            pu être analysées entièrement.
+          </p>
+        </div>
+      ) : null}
+      {unavailable ? (
+        <p className="text-sm text-amber-100">
+          Observation indisponible : aucune conclusion favorable ne peut être
+          tirée des mesures absentes.
+        </p>
+      ) : null}
       <div className="grid grid-cols-2 gap-3">
         {[
           ["TTFB", "ttfbMs", " ms"],
@@ -93,41 +126,40 @@ export function PerformanceReport({ observation }: { observation: unknown }) {
       <p className="text-sm text-white/60">
         INP : non mesuré — aucune interaction utilisateur.
       </p>
+      {measurementReasons.length > 0 ? (
+        <div className="text-sm text-white/60">
+          <p>Limites des mesures :</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {measurementReasons.map((reason, index) => (
+              <li key={index}>
+                {reasonLabels[reason] ?? "Observation incomplète"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <p className="text-sm leading-6 text-white/50">
         {text(context.ttfbDefinition)}. {text(context.clsDefinition)}{" "}
         {text(context.blockingDefinition)}
       </p>
-      <p
-        className={
-          partial
-            ? "text-sm leading-6 text-amber-100"
-            : "text-sm leading-6 text-white/50"
-        }
-      >
-        {text(context.network)}
-      </p>
-      {partial ? (
-        <p className="text-sm text-amber-100">
-          Couverture{" "}
-          {data.coverage === "unavailable" ? "indisponible" : "partielle"} : ces
-          mesures ne permettent pas de conclure que le chargement complet est
-          rapide.
-        </p>
-      ) : null}
-      <ul className="list-disc space-y-1 pl-5 text-sm text-amber-100/80">
-        {(Array.isArray(data.reasons) ? data.reasons : [])
-          .slice(0, 10)
-          .map((reason, index) => (
-            <li key={index}>
-              {reasonLabels[text(reason)] ?? "Observation incomplète"}
-            </li>
-          ))}
-      </ul>
+      <p className="text-sm leading-6 text-white/50">{text(context.network)}</p>
       <p className="text-sm text-white/60">
         {value(resources.observedCount)} ressources observées ·{" "}
         {value(resources.blockedCount)} bloquées/échouées ·{" "}
         {value(data.excludedThirdPartyRequests)} requêtes tierces exclues.
       </p>
+      {resourceReasons.length > 0 ? (
+        <div className="text-sm text-white/60">
+          <p>Limites des ressources observées :</p>
+          <ul className="mt-1 list-disc space-y-1 pl-5">
+            {resourceReasons.map((reason, index) => (
+              <li key={index}>
+                {reasonLabels[reason] ?? "Observation incomplète"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <dl className="grid grid-cols-2 gap-3 text-sm">
         {[
           ["Transfert (en-têtes inclus)", "transfer"],

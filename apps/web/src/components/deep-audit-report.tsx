@@ -482,8 +482,9 @@ export function DeepAuditReport({
                           </p>
                         ) : null}
 
-                        {evidenceCoverage === "limited" ||
-                        evidenceCoverage === "unavailable" ? (
+                        {run.checkId !== "deep-performance" &&
+                        (evidenceCoverage === "limited" ||
+                          evidenceCoverage === "unavailable") ? (
                           <p className="mt-4 text-base leading-6 text-amber-100 opacity-75">
                             {evidenceCoverage === "limited"
                               ? "Couverture partielle : certaines preuves sont tronquées ou hors limite ; aucun résultat favorable ne peut en être déduit."

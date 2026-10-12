@@ -23,6 +23,34 @@ function checkRun(
 }
 
 describe("Deep audit report rendering", () => {
+  it("shows neutral partial performance coverage without the generic Deep warning", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: [
+          checkRun("deep-performance", {
+            title: "Performance observée",
+            summary: "Observation de laboratoire",
+            metricVersion: "2.0.0",
+            coverage: "limited",
+            pageUrl: "https://example.test/",
+            metrics: { ttfbMs: { value: 103 }, fcpMs: { value: 384 } },
+            reasons: ["resource-size-unavailable"],
+            resources: { observedCount: 3, blockedCount: 0 },
+          }),
+        ],
+      }),
+    );
+    expect(html).toContain("Mesures partielles");
+    expect(html).toContain("Certaines ressources ou mesures");
+    expect(html).toContain("103");
+    expect(html).toContain("Limites des ressources observées");
+    expect(html).not.toContain("Couverture partielle : certaines preuves");
+    expect(html).not.toContain(
+      "aucun résultat favorable ne peut en être déduit",
+    );
+  });
   it("shows one actionable CSP diagnosis on historical evidence", () => {
     const html = renderToStaticMarkup(
       createElement(DeepAuditReport, {
