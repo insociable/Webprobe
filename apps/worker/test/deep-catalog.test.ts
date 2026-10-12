@@ -246,7 +246,7 @@ describe("deep catalog", () => {
       expect.arrayContaining([
         "csp-script-unsafe-inline",
         "csp-script-wildcard-source",
-        "csp-default-src-absent",
+        "csp-base-uri-absent",
       ]),
     );
     expect(codes("deep-cookies")).toEqual(
@@ -363,9 +363,9 @@ describe("Cookie consent catalog evidence", () => {
   it("signals only accepted browser cookies, and versions the changed check", async () => {
     const runs = await catalogRuns(http, browser);
     const run = runs.find((item) => item.checkId === "deep-cookies");
-    expect(run?.checkVersion).toBe("1.1.0");
+    expect(run?.checkVersion).toBe("2.0.0");
     expect(run?.evidence[0]).toMatchObject({
-      checkVersion: "1.1.0",
+      checkVersion: "2.0.0",
       data: {
         cookieConsent: {
           status: "observed",

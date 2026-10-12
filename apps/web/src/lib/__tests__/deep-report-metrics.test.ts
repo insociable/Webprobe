@@ -193,3 +193,59 @@ describe("Cookie consent coverage in Deep scores", () => {
     expect(scoreDeepAudit(completeRuns()).value).toBe(100);
   });
 });
+
+describe("versioned passive-rule coverage", () => {
+  it("keeps historical evidence on v1 and caps incomplete v2 CSP", () => {
+    const historical = completeRuns();
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 100,
+      rulesVersion: "1.0.0",
+    });
+    const current = completeRuns();
+    current[1] = {
+      ...current[1]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            applied: true,
+            httpObserved: true,
+            coverage: "limited",
+            findings: [{ code: "csp-policy-limited", level: "information" }],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(current)).toMatchObject({
+      value: 74,
+      rulesVersion: "2.0.0",
+      limitedCoverage: true,
+    });
+    const missingHttp = completeRuns();
+    missingHttp[2] = {
+      ...missingHttp[2]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            httpObserved: false,
+            coverage: "unavailable",
+            findings: [],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(missingHttp)).toMatchObject({
+      value: 74,
+      limitedCoverage: true,
+    });
+    const partialWithoutCsp = run(
+      "deep-csp",
+      [{ code: "csp-policy-limited", level: "information" }],
+      { applied: false, coverage: "limited", httpObserved: true },
+    );
+    expect(
+      deepFindings(partialWithoutCsp, true).map((item) => item.code),
+    ).toEqual(["csp-policy-limited"]);
+  });
+});

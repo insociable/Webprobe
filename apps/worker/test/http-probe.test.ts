@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DnsResolver } from "@agency-saas/security";
 import {
+  collectCspPolicies,
   inspectSecurityHeaders,
   probeHttpTarget,
   type HttpRequester,
@@ -242,5 +243,72 @@ describe("probe failure classification", () => {
       redirects: [],
       error: { kind: "tls", code: "CERT_NOT_YET_VALID" },
     });
+  });
+});
+
+describe("bounded CSP transport metadata", () => {
+  it("keeps repeated fields separate and removes nonce and URL parameters", async () => {
+    let requests = 0;
+    const result = await probeHttpTarget("https://example.com/", {
+      resolver: publicResolver,
+      collectDeepMetadata: true,
+      requester: async () => {
+        requests++;
+        return {
+          statusCode: 200,
+          durationMs: 1,
+          tls: null,
+          headers: {
+            "content-security-policy":
+              "script-src 'nonce-secret123'; report-uri https://report.example/path?token=secret /local?key=private",
+            "set-cookie": ["session=private; Secure"],
+          },
+          rawHeaders: [
+            "Content-Security-Policy",
+            "script-src 'nonce-secret123'; report-uri https://report.example/path?token=secret /local?key=private",
+            "Content-Security-Policy",
+            "frame-ancestors 'self'",
+            "Content-Security-Policy-Report-Only",
+            "default-src *",
+          ],
+        };
+      },
+    });
+    expect(requests).toBe(1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.cspPolicies).toMatchObject({
+      enforced: [
+        "script-src 'nonce-[redacted]'; report-uri https://report.example/path /local",
+        "frame-ancestors 'self'",
+      ],
+      reportOnly: ["default-src *"],
+      limited: false,
+    });
+    expect(JSON.stringify(result)).not.toContain("secret123");
+    expect(JSON.stringify(result)).not.toContain("token=secret");
+    expect(JSON.stringify(result)).not.toContain("key=private");
+    expect(JSON.stringify(result)).not.toContain("session=private");
+  });
+
+  it("marks missing field boundaries and excess occurrences as limited", () => {
+    expect(
+      collectCspPolicies({
+        "content-security-policy": "default-src 'self', script-src 'none'",
+      }).limited,
+    ).toBe(true);
+    const rawHeaders = Array.from({ length: 5 }, (_, index) => [
+      "Content-Security-Policy",
+      "default-src " + index,
+    ]).flat();
+    const collected = collectCspPolicies({}, rawHeaders);
+    expect(collected.enforced).toHaveLength(4);
+    expect(collected.limited).toBe(true);
+    const truncated = collectCspPolicies({}, [
+      "Content-Security-Policy",
+      "a".repeat(8200),
+    ]);
+    expect(truncated.limited).toBe(true);
+    expect(truncated.enforced[0]?.length).toBeLessThanOrEqual(8192);
   });
 });

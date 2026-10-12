@@ -4,6 +4,10 @@ import {
   scoreDeepAudit,
 } from "../lib/deep-report-metrics";
 import { getFindingRemediation } from "../lib/finding-remediation";
+import {
+  sanitizeReportHeaderValue,
+  sanitizeReportUrl,
+} from "../lib/report-technical-details";
 import { RemediationDetails } from "./remediation-details";
 import { CookieConsentDetails } from "./cookie-consent-details";
 
@@ -36,6 +40,21 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function safeDisplayText(value: string): string {
+  return sanitizeReportHeaderValue(value).replace(
+    /\x27nonce-[^\x27]*\x27/gi,
+    "\x27nonce-[redacted]\x27",
+  );
+}
+
+function safeEvidenceText(value: unknown): string {
+  const text = JSON.stringify(value, null, 2) ?? "";
+  return text
+    .replace(/\x27nonce-[^\x27]*\x27/gi, "\x27nonce-[redacted]\x27")
+    .replace(/https?:\/\/[^\s;,"\x27<>]+/gi, (url) => sanitizeReportUrl(url))
+    .slice(0, 16_384);
 }
 
 function humanizeIdentifier(value: string): string {
@@ -254,7 +273,7 @@ export function DeepAuditReport({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.12em] text-white/40">
-              Score Deep
+              Score Deep · règles v{score.rulesVersion}
             </p>
             <p className="mt-1 text-3xl font-semibold tracking-[-0.04em]">
               {status === "completed" && score.value !== null
@@ -271,7 +290,8 @@ export function DeepAuditReport({
         </div>
         <p className="max-w-xl text-base leading-7 text-white/50 sm:text-right">
           Indice des constats observés, ni pourcentage de sécurité ni
-          certification. Les contrôles détaillés font foi.
+          certification. Les contrôles détaillés font foi. Comparez uniquement
+          des scans utilisant la même version de règles.
         </p>
       </div>
 
@@ -395,6 +415,10 @@ export function DeepAuditReport({
                       run.checkId === "deep-cookies"
                         ? asRecord(evidenceData?.cookieConsent)
                         : null;
+                    const evidenceCoverage =
+                      typeof evidenceData?.coverage === "string"
+                        ? evidenceData.coverage
+                        : null;
                     const cspUnavailable =
                       run.checkId === "deep-csp" &&
                       (evidenceData?.httpObserved === false ||
@@ -408,7 +432,7 @@ export function DeepAuditReport({
                           <div>
                             <h4 className="font-semibold">{userTitle}</h4>
                             <p className="mt-2 text-base leading-6 text-white/45">
-                              {userSummary}
+                              {safeDisplayText(userSummary)}
                             </p>
                           </div>
                           <span className="shrink-0 rounded-md border border-[#39445d] px-2.5 py-1 font-mono text-xs uppercase tracking-[0.1em] text-[#b6c0d1]">
@@ -436,6 +460,15 @@ export function DeepAuditReport({
                           </p>
                         ) : null}
 
+                        {evidenceCoverage === "limited" ||
+                        evidenceCoverage === "unavailable" ? (
+                          <p className="mt-4 text-base leading-6 text-amber-100 opacity-75">
+                            {evidenceCoverage === "limited"
+                              ? "Couverture partielle : certaines preuves sont tronquées ou hors limite ; aucun résultat favorable ne peut en être déduit."
+                              : "Observation indisponible : ce contrôle ne conclut pas sur les éléments absents."}
+                          </p>
+                        ) : null}
+
                         <CookieConsentDetails
                           observation={cookieConsent}
                           observedAt={run.startedAt}
@@ -452,7 +485,7 @@ export function DeepAuditReport({
                                   : "information";
                               const summary =
                                 typeof finding.summary === "string"
-                                  ? finding.summary
+                                  ? safeDisplayText(finding.summary)
                                   : "Observation technique";
                               const code =
                                 typeof finding.code === "string"
@@ -460,13 +493,13 @@ export function DeepAuditReport({
                                   : "finding";
                               const recommendation =
                                 typeof finding.recommendation === "string"
-                                  ? finding.recommendation
+                                  ? safeDisplayText(finding.recommendation)
                                   : null;
                               const observed =
                                 typeof finding.observed === "string" ||
                                 typeof finding.observed === "number" ||
                                 typeof finding.observed === "boolean"
-                                  ? String(finding.observed)
+                                  ? safeDisplayText(String(finding.observed))
                                   : null;
                               const remediation = getFindingRemediation(code);
                               return (
@@ -526,7 +559,7 @@ export function DeepAuditReport({
                                       </div>
                                     </dl>
                                     <pre className="mx-3 mb-3 overflow-x-auto rounded-md bg-black/20 p-3 text-sm leading-5 text-white/55">
-                                      {JSON.stringify(finding, null, 2)}
+                                      {safeEvidenceText(finding)}
                                     </pre>
                                   </details>
                                 </div>
@@ -544,7 +577,10 @@ export function DeepAuditReport({
                             Le diagnostic de la CSP figure dans le contrôle
                             Politique CSP.
                           </p>
-                        ) : cookieConsent ? null : run.status ===
+                        ) : cookieConsent ||
+                          evidenceCoverage === "limited" ||
+                          evidenceCoverage ===
+                            "unavailable" ? null : run.status ===
                           "completed" ? (
                           <p className="mt-4 text-base text-emerald-100 opacity-75">
                             Aucun point nécessitant une action n’a été relevé
@@ -566,6 +602,25 @@ export function DeepAuditReport({
                               </dd>
                             </div>
                             <div>
+                              <dt className="text-sm text-white/30">
+                                Page observée
+                              </dt>
+                              <dd className="mt-1 break-all text-sm text-white/55">
+                                {typeof evidenceData?.pageUrl === "string"
+                                  ? sanitizeReportUrl(evidenceData.pageUrl)
+                                  : "—"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt className="text-sm text-white/30">Date</dt>
+                              <dd className="mt-1 text-sm text-white/55">
+                                {run.startedAt.toLocaleString("fr-FR", {
+                                  timeZone: "UTC",
+                                })}{" "}
+                                UTC
+                              </dd>
+                            </div>
+                            <div>
                               <dt className="text-sm text-white/30">Durée</dt>
                               <dd className="mt-1 text-sm text-white/55">
                                 {run.durationMs === null
@@ -581,7 +636,7 @@ export function DeepAuditReport({
                           ) : null}
                           {run.evidence.length > 0 ? (
                             <pre className="mt-3 overflow-x-auto rounded-md bg-black/20 p-3 text-sm leading-5 text-white/55">
-                              {JSON.stringify(run.evidence, null, 2)}
+                              {safeEvidenceText(run.evidence)}
                             </pre>
                           ) : null}
                         </details>
