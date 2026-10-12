@@ -19,11 +19,24 @@ export const metadata: Metadata = {
     siteName: "WebProbe",
     type: "website",
     locale: "fr_FR",
+    images: [
+      {
+        url: "/og/webprobe-share.png",
+        width: 1200,
+        height: 630,
+        alt: "WebProbe — audit, monitoring, sécurité, performances et SEO",
+        type: "image/png",
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
+    images: ["/og/webprobe-share.png"],
+  },
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
   },
 };
 
