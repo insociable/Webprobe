@@ -15,6 +15,7 @@ import {
   type SafeBrowserProxy,
 } from "./safe-browser-proxy.js";
 import type { ProbeCookie } from "./http-probe.js";
+import type { analyzeObservedPerformance } from "./scanner-v2/performance-analysis.js";
 import type { CookieConsentObservation } from "./scan-engine/cookie-consent-observation.js";
 
 export type BrowserRuntimeObservation = {
@@ -23,6 +24,8 @@ export type BrowserRuntimeObservation = {
   pageCount: number;
   durationMs: number;
   deep?: {
+    performance?: ReturnType<typeof analyzeObservedPerformance>;
+    performanceCollectionEnabled?: boolean;
     resources: Array<{
       url: string;
       type: string;

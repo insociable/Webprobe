@@ -41,6 +41,7 @@ const candidateChecks = new Set([
   "deep-endpoints",
   "deep-forms",
   "deep-browser-meta",
+  "deep-performance",
 ]);
 
 function checkedProfile(profile: ScanProfile): ScanProfile {
@@ -205,6 +206,7 @@ export async function runDeepAuditCandidate(input: {
         "deep-endpoints",
         "deep-forms",
         "deep-browser-meta",
+        "deep-performance",
       ].includes(id),
     );
 

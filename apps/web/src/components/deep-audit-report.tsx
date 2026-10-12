@@ -10,6 +10,7 @@ import {
 } from "../lib/report-technical-details";
 import { RemediationDetails } from "./remediation-details";
 import { CookieConsentDetails } from "./cookie-consent-details";
+import { PerformanceReport } from "./performance-report";
 
 type DeepCheckRunView = {
   id: string;
@@ -87,6 +88,13 @@ function presentationFor(checkId: string): CheckPresentation {
     };
   }
 
+  if (checkId === "deep-performance")
+    return {
+      category: "Performance",
+      title: "Performance observée",
+      description:
+        "Mesures de laboratoire, indépendantes du Score Deep de sécurité.",
+    };
   const id = checkId.toLowerCase();
   const candidates: Array<[string[], string]> = [
     [["tls", "certificate"], "TLS avancé"],
@@ -483,6 +491,9 @@ export function DeepAuditReport({
                           </p>
                         ) : null}
 
+                        {run.checkId === "deep-performance" ? (
+                          <PerformanceReport observation={evidenceData} />
+                        ) : null}
                         <CookieConsentDetails
                           observation={cookieConsent}
                           observedAt={run.startedAt}

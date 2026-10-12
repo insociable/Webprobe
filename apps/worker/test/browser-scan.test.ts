@@ -664,7 +664,7 @@ describe("browser crawl", () => {
         }),
       }),
       allHeaders: async () => ({
-        "cache-control": "public, max-age=60",
+        "cache-control": "public, max-age=60, custom=private-header",
         "content-encoding": "br",
       }),
       url: () => "https://example.com/assets/app.js",
@@ -779,7 +779,10 @@ describe("browser crawl", () => {
     ]);
     expect(JSON.stringify(result)).not.toContain("Accueil Example");
     expect(JSON.stringify(result)).not.toContain("Description test");
-    expect(JSON.stringify(result)).not.toContain("max-age=60");
+    expect(JSON.stringify(result)).not.toContain("private-header");
+    expect(result.scannerV2.network.resources[0]?.cacheControl).toBe(
+      "public, max-age=60",
+    );
     expect(JSON.stringify(result)).not.toContain("googlebot:");
   });
 

@@ -40,9 +40,15 @@ export function scannerV2AnalyzerStatusFromSummary(
 export function canResolveFindingFromSummary(
   code: string,
   currentSummary: unknown,
+  previousSummary?: unknown,
 ): boolean {
   const analyzer = scannerV2AnalyzerForFindingCode(code);
   if (!analyzer) return true;
+  if (
+    analyzer === "performance" &&
+    !performanceMetricsComparable(currentSummary, previousSummary)
+  )
+    return false;
   return (
     scannerV2AnalyzerStatusFromSummary(currentSummary, analyzer) === "complete"
   );
@@ -67,9 +73,32 @@ export function canCompareMissingFinding(
 ): boolean {
   const analyzer = scannerV2AnalyzerForFindingCode(code);
   if (!analyzer) return true;
+  if (
+    analyzer === "performance" &&
+    !performanceMetricsComparable(currentSummary, previousSummary)
+  )
+    return false;
   return (
     scannerV2AnalyzerStatusFromSummary(currentSummary, analyzer) ===
       "complete" &&
     scannerV2AnalyzerStatusFromSummary(previousSummary, analyzer) === "complete"
+  );
+}
+
+export function performanceMetricVersion(summary: unknown): string {
+  if (!summary || typeof summary !== "object") return "1.0.0";
+  const scanner = (summary as { scannerV2?: unknown }).scannerV2;
+  if (!scanner || typeof scanner !== "object") return "1.0.0";
+  const performance = (scanner as { performance?: unknown }).performance;
+  if (!performance || typeof performance !== "object") return "1.0.0";
+  const version = (performance as { metricVersion?: unknown }).metricVersion;
+  return typeof version === "string" ? version.slice(0, 32) : "1.0.0";
+}
+export function performanceMetricsComparable(
+  current: unknown,
+  previous: unknown,
+): boolean {
+  return (
+    performanceMetricVersion(current) === performanceMetricVersion(previous)
   );
 }

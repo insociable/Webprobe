@@ -1,3 +1,4 @@
+import { compressionAccepted } from "./scanner-v2/performance-metadata.js";
 import { AxeBuilder } from "@axe-core/playwright";
 import {
   assertPublicHttpUrl,
@@ -414,6 +415,20 @@ async function recordNetworkResponse(
         : null,
       cacheControl: headers?.["cache-control"] ?? null,
       contentEncoding: headers?.["content-encoding"] ?? null,
+      encodedBodyBytes: sizes?.responseBodySize ?? null,
+      declaredBodyBytes:
+        headers?.["content-length"] &&
+        /^[0-9]{1,15}$/.test(headers["content-length"]!)
+          ? Number(headers["content-length"])
+          : null,
+      contentType:
+        headers?.["content-type"]?.split(";")[0]?.slice(0, 128) ?? null,
+      etagPresent: headers ? typeof headers.etag === "string" : null,
+      expires: headers?.expires ?? null,
+      compressionNegotiated:
+        typeof request.headers === "function"
+          ? compressionAccepted(request.headers()["accept-encoding"])
+          : null,
     },
     true,
   );
@@ -919,9 +934,16 @@ export async function runBrowserScan(
           measuredAt: new Date().toISOString(),
           scanProfile: { maxPages, navigationTimeoutMs },
           cacheState: "unknown",
-          engineVersion: "scanner-v2-browser-1",
+          engineVersion: snapshot.details
+            ? "scanner-v2-browser-2"
+            : "scanner-v2-browser-1",
         },
         timing: snapshot.timing,
+        snapshot,
+        collectionLimited: network.collection.truncated,
+        failedResources: network.failedRequests.filter(
+          (r) => r.pageUrl === observedUrl.displayUrl,
+        ),
         resources: network.resources.filter(
           (resource) => resource.pageUrl === observedUrl.displayUrl,
         ),
@@ -982,7 +1004,10 @@ export async function runBrowserScan(
               (!performanceObserverInstalled ||
                 networkCaptureFailureCount > 0 ||
                 network.collection.truncated ||
-                requestBudgetExhausted)
+                requestBudgetExhausted ||
+                performance.some(
+                  (p) => p.measurement && p.measurement.coverage !== "observed",
+                ))
                 ? "partial"
                 : performanceStatus,
             eligiblePageCount: performanceEligiblePageCount,

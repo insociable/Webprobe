@@ -1,4 +1,10 @@
 /// <reference lib="dom" />
+import {
+  performanceContentType,
+  performanceCacheControl,
+  performanceExpires,
+  compressionAccepted,
+} from "../scanner-v2/performance-metadata.js";
 import type { DnsResolver } from "@agency-saas/security";
 import type { Browser, LaunchOptions } from "playwright";
 import { observeCookies, type ProbeCookie } from "../http-probe.js";
@@ -13,6 +19,15 @@ import { ScopeGuard } from "./scope-guard.js";
 import type { ScanProfile } from "./types.js";
 import { abortable, cancellableDnsResolver, throwIfAborted } from "./abort.js";
 import { observeCookiesBeforeInteraction } from "./cookie-consent-observation.js";
+import {
+  installLabPerformanceObserver,
+  performanceCollectionEnabled,
+  readLabPerformanceSnapshot,
+} from "../scanner-v2/performance-runtime.js";
+import {
+  analyzeObservedPerformance,
+  type PerformanceResource,
+} from "../scanner-v2/performance-analysis.js";
 
 function safeObservedUrl(rawUrl: string): string | null {
   try {
@@ -202,6 +217,18 @@ export async function observeGuardedBrowserTarget(
   });
   try {
     const page = await abortable(session.context.newPage(), input.signal);
+    const performanceObserverInstalled = await boundedDomObservation(
+      installLabPerformanceObserver(page),
+      input.signal,
+      Math.max(1, Math.min(2000, input.ledger.remainingDurationMs())),
+    );
+    const collectionEnabled = performanceCollectionEnabled();
+    const performanceResources: PerformanceResource[] = [];
+    const performanceRequests = new WeakMap<object, PerformanceResource>();
+    const responseTasks: Promise<void>[] = [];
+    const sizeTasks: Promise<void>[] = [];
+    let performanceResourcesTruncated = false;
+    let observedResourceCount = 0;
     const resources = new Map<
       string,
       NonNullable<BrowserRuntimeObservation["deep"]>["resources"][number]
@@ -216,6 +243,31 @@ export async function observeGuardedBrowserTarget(
     const cookieTasks: Promise<void>[] = [];
     page.on("request", (request) => {
       const url = safeObservedUrl(request.url());
+      if (url && collectionEnabled) {
+        observedResourceCount++;
+        if (performanceResources.length < 120) {
+          const inScope = input.scope.allows(request.url()).allowed;
+          const item: PerformanceResource = {
+            url,
+            type: request.resourceType().slice(0, 32),
+            inScope,
+            blocked: !inScope,
+            failure: inScope ? null : "outside-scope",
+            statusCode: null,
+            transferBytes: null,
+            encodedBodyBytes: null,
+            declaredBodyBytes: null,
+            contentType: null,
+            contentEncoding: null,
+            compressionNegotiated: null,
+            cacheControl: null,
+            etagPresent: null,
+            expires: null,
+          };
+          performanceResources.push(item);
+          performanceRequests.set(request, item);
+        } else performanceResourcesTruncated = true;
+      }
       if (!url || resources.size >= 120) return;
       const inScope = input.scope.allows(request.url()).allowed;
       resources.set(url, {
@@ -235,7 +287,64 @@ export async function observeGuardedBrowserTarget(
           statusCode: null,
         });
     });
+    page.on("requestfinished", (request) => {
+      const item = performanceRequests.get(request);
+      if (!item || sizeTasks.length >= 120) return;
+      sizeTasks.push(
+        request
+          .sizes()
+          .then((s) => {
+            const body = s.responseBodySize,
+              headers = s.responseHeadersSize;
+            if (
+              Number.isSafeInteger(body) &&
+              body >= 0 &&
+              Number.isSafeInteger(headers) &&
+              headers >= 0 &&
+              body + headers > 0 &&
+              body + headers <= 1e12
+            ) {
+              item.encodedBodyBytes = body;
+              item.transferBytes = body + headers;
+            }
+          })
+          .catch(() => undefined),
+      );
+    });
     page.on("response", (response) => {
+      const request =
+        typeof response.request === "function" ? response.request() : null;
+      const item = request ? performanceRequests.get(request) : undefined;
+      if (item && request && responseTasks.length < 120) {
+        item.statusCode = response.status();
+        responseTasks.push(
+          Promise.all([response.allHeaders(), request.allHeaders()])
+            .then(([h, sent]) => {
+              const text = (value: string | undefined, max = 256) =>
+                typeof value === "string"
+                  ? value.replace(/[\r\n\x00-\x1f]/g, "").slice(0, max)
+                  : null;
+              const length = h["content-length"];
+              item.declaredBodyBytes =
+                length !== undefined &&
+                /^[0-9]{1,15}$/.test(length) &&
+                Number(length) <= 1e12
+                  ? Number(length)
+                  : null;
+              item.contentType = performanceContentType(h["content-type"]);
+              item.contentEncoding = text(h["content-encoding"], 32);
+              item.cacheControl = performanceCacheControl(h["cache-control"]);
+              item.etagPresent = typeof h.etag === "string";
+              item.expires = performanceExpires(h.expires);
+              item.compressionNegotiated = compressionAccepted(
+                sent["accept-encoding"],
+              );
+            })
+            .catch(() => {
+              performanceResourcesTruncated = true;
+            }),
+        );
+      }
       const url = safeObservedUrl(response.url());
       if (!url) return;
       const resource = resources.get(url);
@@ -273,6 +382,11 @@ export async function observeGuardedBrowserTarget(
       const url = safeObservedUrl(request.url());
       const resource = url ? resources.get(url) : undefined;
       if (resource) resource.blocked = true;
+      const item = performanceRequests.get(request);
+      if (item) {
+        item.blocked = true;
+        item.failure ??= "request-failed";
+      }
     });
     page.on("pageerror", (error) => {
       if (pageErrors.length < 20) pageErrors.push(error.name.slice(0, 80));
@@ -327,6 +441,36 @@ export async function observeGuardedBrowserTarget(
       input.signal,
       Math.max(1, Math.min(2_000, input.ledger.remainingDurationMs())),
     );
+    const metadataReady = await boundedDomObservation(
+      Promise.all([...responseTasks, ...sizeTasks]),
+      input.signal,
+      Math.max(1, Math.min(2000, input.ledger.remainingDurationMs())),
+    );
+    if (metadataReady === null) performanceResourcesTruncated = true;
+    const labSnapshot =
+      performanceObserverInstalled === true
+        ? await boundedDomObservation(
+            readLabPerformanceSnapshot(page),
+            input.signal,
+            Math.max(1, Math.min(2000, input.ledger.remainingDurationMs())),
+          )
+        : null;
+    throwIfAborted(input.signal);
+    const performance = collectionEnabled
+      ? analyzeObservedPerformance({
+          snapshot: labSnapshot,
+          resources: performanceResources,
+          context: {
+            pageUrl: finalUrl,
+            measuredAt: new Date().toISOString(),
+            viewport: page.viewportSize?.() ?? { width: 1280, height: 720 },
+            cacheState: "cold",
+            excludedThirdPartyRequests,
+            resourcesTruncated: performanceResourcesTruncated,
+            observedResourceCount,
+          },
+        })
+      : undefined;
     const dom =
       typeof page.evaluate === "function"
         ? await boundedDomObservation(
@@ -480,6 +624,8 @@ export async function observeGuardedBrowserTarget(
       pageCount: session.pageCount(),
       durationMs: Date.now() - startedAt,
       deep: {
+        performanceCollectionEnabled: collectionEnabled,
+        ...(performance ? { performance } : {}),
         resources: [...resources.values()],
         endpoints: [...endpoints.values()],
         forms,

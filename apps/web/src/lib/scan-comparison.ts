@@ -1,5 +1,6 @@
 import {
   canCompareMissingFinding,
+  performanceMetricsComparable,
   type Severity,
 } from "@agency-saas/contracts";
 
@@ -18,6 +19,7 @@ export type CurrentFindingChange =
   | { change: "unchanged"; previousSeverity: Severity };
 
 export type ScanComparison = {
+  performanceComparable: boolean;
   changesByFingerprint: Record<string, CurrentFindingChange>;
   resolvedFindings: ComparableFinding[];
   counts: {
@@ -60,7 +62,13 @@ export function compareScanFindings(
     resolved: 0,
   };
 
+  const performanceComparable = performanceMetricsComparable(
+    summaries.current,
+    summaries.previous,
+  );
   for (const finding of current) {
+    if (finding.code.startsWith("performance.") && !performanceComparable)
+      continue;
     const prior = previousByFingerprint.get(finding.fingerprint);
     if (!prior) {
       if (
@@ -120,6 +128,7 @@ export function compareScanFindings(
   counts.resolved = resolvedFindings.length;
 
   return {
+    performanceComparable,
     changesByFingerprint,
     resolvedFindings,
     counts,

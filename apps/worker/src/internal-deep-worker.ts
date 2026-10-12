@@ -219,6 +219,7 @@ export async function runInternalDeepWorkerJob(input: {
               "deep-endpoints",
               "deep-forms",
               "deep-browser-meta",
+              "deep-performance",
             ],
           },
           signal: input.signal,

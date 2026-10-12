@@ -1,3 +1,8 @@
+import {
+  performanceContentType,
+  performanceCacheControl,
+  performanceExpires,
+} from "./performance-metadata.js";
 import { createHash } from "node:crypto";
 import { observeUrl } from "./url.js";
 
@@ -49,6 +54,13 @@ export type NetworkResourceObservation = {
   party: NetworkParty;
   statusCode: number;
   transferBytes: number | null;
+  encodedBodyBytes?: number | null;
+  declaredBodyBytes?: number | null;
+  contentType?: string | null;
+  compressionNegotiated?: boolean | null;
+  cacheControl?: string | null;
+  etagPresent?: boolean | null;
+  expires?: string | null;
   cacheControlled: boolean;
   contentEncoding: NetworkContentEncoding | null;
 };
@@ -256,6 +268,13 @@ export class NetworkObservationCollector {
       statusCode: input.statusCode,
       transferBytes: boundedBytes(input.transferBytes),
       cacheControlled: Boolean(input.cacheControl?.slice(0, 64).trim()),
+      encodedBodyBytes: boundedBytes(input.encodedBodyBytes),
+      declaredBodyBytes: boundedBytes(input.declaredBodyBytes),
+      contentType: performanceContentType(input.contentType),
+      compressionNegotiated: input.compressionNegotiated ?? null,
+      cacheControl: performanceCacheControl(input.cacheControl),
+      etagPresent: input.etagPresent ?? null,
+      expires: performanceExpires(input.expires),
       contentEncoding: contentEncoding(input.contentEncoding),
     });
   }

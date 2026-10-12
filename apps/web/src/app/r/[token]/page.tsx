@@ -8,6 +8,7 @@ import { ReportCoverageDetails } from "@/components/report-coverage-details";
 import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
 import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
+import { StandardPerformanceReport } from "@/components/standard-performance-report";
 import { ReportScorecard } from "@/components/report-scorecard";
 import { getFindingRemediation } from "@/lib/finding-remediation";
 import { groupFindingsForDisplay } from "@/lib/finding-display";
@@ -208,6 +209,13 @@ export default async function PublicReportPage({
         <ReportSecurityHttp summary={report.scan.summary} />
 
         <ReportCorrelations correlations={correlations} />
+        {report.comparison && !report.comparison.performanceComparable ? (
+          <p className="mt-4 text-sm text-amber-100">
+            Les versions des mesures de performance diffèrent : leurs évolutions
+            sont exclues de la comparaison, sans modification des rapports
+            historiques.
+          </p>
+        ) : null}
 
         {counts ? (
           <section className="border-t border-[#242d40] py-9">
@@ -260,6 +268,7 @@ export default async function PublicReportPage({
 
         <ReportCoverageDetails summary={report.scan.summary} />
 
+        <StandardPerformanceReport summary={report.scan.summary} />
         <ReportTechnicalDetails summary={report.scan.summary} />
 
         <section className="border-t border-[#242d40] py-9">

@@ -1,5 +1,7 @@
 import type { NetworkResourceObservation } from "./network.js";
 import { observeUrl } from "./url.js";
+import { analyzeObservedPerformance } from "./performance-analysis.js";
+import type { BrowserLabRuntimeSnapshot } from "./performance-runtime.js";
 
 export type LabResourceCategory =
   | "javascript"
@@ -24,6 +26,7 @@ export type BrowserLabTiming = {
   largestContentfulPaint: number | null;
   cumulativeLayoutShift: number | null;
   totalBlockingTime: number | null;
+  observedThreadBlockingTime?: number | null;
 };
 
 export type LabPerformanceObservation = {
@@ -35,6 +38,9 @@ export type LabPerformanceObservation = {
   cumulativeLayoutShift: number | null;
   totalBlockingTimeMs: number | null;
   navigationDurationMs: number | null;
+  observedThreadBlockingTimeMs?: number | null;
+  metricVersion?: "2.0.0";
+  measurement?: ReturnType<typeof analyzeObservedPerformance>;
   totalRequestCount: number;
   transferBytes: number | null;
   transferBytesByCategory: Record<LabResourceCategory, number>;
@@ -77,6 +83,9 @@ export function createLabPerformanceObservation(input: {
   context: LabPerformanceContext;
   timing: BrowserLabTiming;
   resources: NetworkResourceObservation[];
+  snapshot?: BrowserLabRuntimeSnapshot;
+  collectionLimited?: boolean;
+  failedResources?: Array<{ resourceUrl: string; resourceType: string }>;
 }): LabPerformanceObservation | null {
   const observedUrl = observeUrl(input.url);
   if (!observedUrl) {
@@ -112,6 +121,61 @@ export function createLabPerformanceObservation(input: {
 
   return {
     url: observedUrl.displayUrl,
+    ...(input.snapshot?.details
+      ? {
+          metricVersion: "2.0.0" as const,
+          observedThreadBlockingTimeMs: roundedNonNegative(
+            input.timing.observedThreadBlockingTime ?? null,
+          ),
+          measurement: analyzeObservedPerformance({
+            snapshot: input.snapshot,
+            resources: [
+              ...input.resources.map((r) => ({
+                url: r.resourceUrl,
+                type: r.resourceType,
+                inScope: true,
+                blocked: false,
+                failure: null,
+                statusCode: r.statusCode,
+                transferBytes: r.transferBytes,
+                encodedBodyBytes: r.encodedBodyBytes ?? null,
+                declaredBodyBytes: r.declaredBodyBytes ?? null,
+                contentType: r.contentType ?? null,
+                contentEncoding: r.contentEncoding,
+                compressionNegotiated: r.compressionNegotiated ?? null,
+                cacheControl: r.cacheControl ?? null,
+                etagPresent: r.etagPresent ?? null,
+                expires: r.expires ?? null,
+              })),
+              ...(input.failedResources ?? []).slice(0, 120).map((r) => ({
+                url: r.resourceUrl,
+                type: r.resourceType,
+                inScope: true,
+                blocked: true,
+                failure: "request-failed" as const,
+                statusCode: null,
+                transferBytes: null,
+                encodedBodyBytes: null,
+                declaredBodyBytes: null,
+                contentType: null,
+                contentEncoding: null,
+                compressionNegotiated: null,
+                cacheControl: null,
+                etagPresent: null,
+                expires: null,
+              })),
+            ],
+            context: {
+              pageUrl: observedUrl.displayUrl,
+              measuredAt: input.context.measuredAt,
+              viewport: input.context.viewport,
+              cacheState: "unknown",
+              excludedThirdPartyRequests: 0,
+              resourcesTruncated: input.collectionLimited === true,
+            },
+          }),
+        }
+      : {}),
     context: input.context,
     ttfbMs: difference(input.timing.responseStart, input.timing.requestStart),
     firstContentfulPaintMs: roundedNonNegative(
@@ -120,9 +184,13 @@ export function createLabPerformanceObservation(input: {
     largestContentfulPaintMs: roundedNonNegative(
       input.timing.largestContentfulPaint,
     ),
-    cumulativeLayoutShift: roundedNonNegative(
-      input.timing.cumulativeLayoutShift,
-    ),
+    cumulativeLayoutShift:
+      input.snapshot?.details &&
+      typeof input.timing.cumulativeLayoutShift === "number" &&
+      Number.isFinite(input.timing.cumulativeLayoutShift) &&
+      input.timing.cumulativeLayoutShift >= 0
+        ? Math.round(input.timing.cumulativeLayoutShift * 1_000_000) / 1_000_000
+        : roundedNonNegative(input.timing.cumulativeLayoutShift),
     totalBlockingTimeMs: roundedNonNegative(input.timing.totalBlockingTime),
     navigationDurationMs: difference(
       input.timing.domContentLoadedEventEnd,
