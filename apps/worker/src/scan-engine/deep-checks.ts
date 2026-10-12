@@ -7,6 +7,7 @@ import { CheckRegistry } from "./check-registry.js";
 import { persistDeepCheckRuns } from "./check-persistence.js";
 import { runChecks, type CheckRun } from "./engine.js";
 import { createEvidence } from "./evidence.js";
+import { createPerformanceCheck } from "./performance-check.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { DeepLease } from "./deep-lease.js";
 import type { ScanProfile } from "./types.js";
@@ -84,6 +85,7 @@ export function createDeepCheckRegistry(): CheckRegistry {
   for (const check of [
     ...createHttpCatalogChecks(),
     ...createBrowserCatalogChecks(),
+    createPerformanceCheck(),
   ])
     registry.register(check);
   return registry;

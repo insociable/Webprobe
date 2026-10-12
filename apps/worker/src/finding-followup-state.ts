@@ -5,6 +5,7 @@ export function decideFindingFollowup(input: {
   code: string;
   observed: boolean;
   summary: unknown;
+  previousSummary?: unknown;
 }): { status: string; event: "reopened" | "suggested" | null } {
   if (input.observed) {
     if (input.status === "fixed") return { status: "todo", event: "reopened" };
@@ -16,7 +17,11 @@ export function decideFindingFollowup(input: {
     input.status !== "fixed" &&
     input.status !== "accepted" &&
     input.status !== "to_verify" &&
-    canResolveFindingFromSummary(input.code, input.summary)
+    canResolveFindingFromSummary(
+      input.code,
+      input.summary,
+      input.previousSummary,
+    )
   ) {
     return { status: "to_verify", event: "suggested" };
   }

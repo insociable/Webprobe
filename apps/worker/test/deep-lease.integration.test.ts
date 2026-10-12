@@ -209,7 +209,7 @@ describeDatabase("Deep execution lease on PostgreSQL", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, f.scanId));
-      expect(runs).toHaveLength(10);
+      expect(runs).toHaveLength(11);
       await expect(runDeepAuditCandidate(input)).rejects.toThrow("not running");
       expect(requests).toHaveBeenCalledOnce();
     } finally {
@@ -280,7 +280,7 @@ describeDatabase("Deep execution lease on PostgreSQL", () => {
           .select()
           .from(scanCheckRuns)
           .where(eq(scanCheckRuns.scanId, f.scanId)),
-      ).toHaveLength(10);
+      ).toHaveLength(11);
     } finally {
       finish?.();
       await f.cleanup();

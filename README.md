@@ -16,7 +16,7 @@ Les sites vérifiés peuvent être suivis dans le temps afin de comparer les ré
 
 ### Audit approfondi
 
-L'Audit approfondi utilise le mode interne `verified_deep_audit` et un moteur distinct du parcours standard. Il analyse actuellement dix contrôles :
+L'Audit approfondi utilise le mode interne `verified_deep_audit` et un moteur distinct du parcours standard. Il analyse actuellement onze contrôles :
 
 - observation HTTP ;
 - observation navigateur ;
@@ -27,7 +27,8 @@ L'Audit approfondi utilise le mode interne `verified_deep_audit` et un moteur di
 - ressources ;
 - endpoints observés ;
 - formulaires ;
-- métadonnées navigateur.
+- métadonnées navigateur ;
+- performance observée en laboratoire, indépendante du Score Deep de sécurité.
 
 L'Audit approfondi reste non destructif : il ne soumet pas de formulaire, ne lance pas de recherche par dictionnaire et n'effectue pas de pentest agressif. Son périmètre réseau est strict, les transports sont protégés contre les SSRF et l'exécution est bornée par des budgets de requêtes, pages, octets, DNS, TLS et durée.
 

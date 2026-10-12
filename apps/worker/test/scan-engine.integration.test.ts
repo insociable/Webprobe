@@ -126,7 +126,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, scanId));
-      expect(persisted).toHaveLength(10);
+      expect(persisted).toHaveLength(11);
       expect(
         persisted.filter((run) => run.status === "completed"),
       ).toHaveLength(2);
@@ -140,7 +140,7 @@ describeDatabase("V3 schema compatibility", () => {
         .from(scans)
         .where(eq(scans.id, scanId));
       expect(scan?.summary.v3Coverage).toMatchObject({
-        totalChecks: 10,
+        totalChecks: 11,
         completedChecks: 2,
         partial: false,
       });
@@ -170,7 +170,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, deniedScanId));
-      expect(deniedRuns).toHaveLength(10);
+      expect(deniedRuns).toHaveLength(11);
       expect(
         deniedRuns.every(
           (run) =>
@@ -216,7 +216,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, limitedScanId));
-      expect(limitedRuns).toHaveLength(10);
+      expect(limitedRuns).toHaveLength(11);
       expect(
         limitedRuns
           .filter((run) => profile.allowedChecks.includes(run.checkId))
@@ -302,7 +302,7 @@ describeDatabase("V3 schema compatibility", () => {
         .select()
         .from(scanCheckRuns)
         .where(eq(scanCheckRuns.scanId, scanId));
-      expect(runs).toHaveLength(10);
+      expect(runs).toHaveLength(11);
       expect(runs).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -328,9 +328,9 @@ describeDatabase("V3 schema compatibility", () => {
         .where(eq(scans.id, scanId));
       expect(persisted?.status).toBe("completed");
       expect(persisted?.summary.v3Coverage).toMatchObject({
-        totalChecks: 10,
+        totalChecks: 11,
         completedChecks: 1,
-        skippedChecks: 9,
+        skippedChecks: 10,
       });
     } finally {
       await db

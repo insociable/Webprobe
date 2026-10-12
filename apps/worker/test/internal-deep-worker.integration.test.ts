@@ -9,7 +9,7 @@ import {
   sites,
   technologyObservations,
 } from "@agency-saas/db";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Queue, Worker } from "bullmq";
 import type { ScanJob } from "@agency-saas/contracts";
 import type { Browser, BrowserContext, Page, Response } from "playwright";
@@ -258,7 +258,28 @@ describeDatabase("internal Deep worker lifecycle", () => {
           .select()
           .from(scanCheckRuns)
           .where(eq(scanCheckRuns.scanId, f.scanId)),
-      ).toHaveLength(10);
+      ).toHaveLength(11);
+      const [performanceRun] = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(
+          and(
+            eq(scanCheckRuns.scanId, f.scanId),
+            eq(scanCheckRuns.checkId, "deep-performance"),
+          ),
+        );
+      expect(performanceRun?.evidence[0]).toMatchObject({
+        checkVersion: "1.0.0",
+        data: { metricVersion: "2.0.0", coverage: "unavailable" },
+      });
+      const [coverageScan] = await db
+        .select({ summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, f.scanId));
+      expect(coverageScan?.summary.v3Coverage).toMatchObject({
+        partial: true,
+        reasons: expect.arrayContaining(["observation-evidence-unavailable"]),
+      });
       const attempts = await db
         .select()
         .from(scanAttempts)

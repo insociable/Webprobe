@@ -15,11 +15,21 @@ import {
 import {
   canCompareMissingFinding,
   canResolveFindingFromSummary,
+  performanceMetricsComparable,
   type ScanJob,
   type ScanResult,
   type Severity,
 } from "@agency-saas/contracts";
-import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  getTableColumns,
+  inArray,
+  isNotNull,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { getDatabase } from "./database.js";
 import type { GeneratedFinding } from "./findings.js";
 import type { HttpProbeResult } from "./http-probe.js";
@@ -402,8 +412,19 @@ export async function persistScanCompletion(
     }
 
     const tracked = await tx
-      .select()
+      .select({
+        ...getTableColumns(findingRemediations),
+        previousSummary: scans.summary,
+      })
       .from(findingRemediations)
+      .leftJoin(
+        scans,
+        and(
+          eq(scans.id, findingRemediations.lastSeenScanId),
+          eq(scans.organizationId, context.organizationId),
+          eq(scans.siteId, context.siteId),
+        ),
+      )
       .where(
         and(
           eq(findingRemediations.organizationId, context.organizationId),
@@ -422,6 +443,7 @@ export async function persistScanCompletion(
         code: item.code,
         observed: Boolean(observed),
         summary: coverageSummary,
+        previousSummary: item.previousSummary,
       });
       if (observed) {
         const reopened = decision.event === "reopened";
@@ -522,12 +544,17 @@ export async function persistScanCompletion(
           previousScan.summary,
         ).filter(
           (degradation) =>
-            degradation.change === "worsened" ||
-            canCompareMissingFinding(
-              degradation.code,
-              currentSummary,
-              previousScan.summary,
-            ),
+            (!degradation.code.startsWith("performance.") ||
+              performanceMetricsComparable(
+                currentSummary,
+                previousScan.summary,
+              )) &&
+            (degradation.change === "worsened" ||
+              canCompareMissingFinding(
+                degradation.code,
+                currentSummary,
+                previousScan.summary,
+              )),
         )
       : [];
 
@@ -594,8 +621,17 @@ export async function persistScanCompletion(
               code: recipientFindingIncidents.code,
               title: recipientFindingIncidents.title,
               pageUrl: recipientFindingIncidents.pageUrl,
+              previousSummary: scans.summary,
             })
             .from(recipientFindingIncidents)
+            .leftJoin(
+              scans,
+              and(
+                eq(scans.id, recipientFindingIncidents.openedScanId),
+                eq(scans.organizationId, context.organizationId),
+                eq(scans.siteId, context.siteId),
+              ),
+            )
             .where(
               and(
                 eq(
@@ -660,7 +696,13 @@ export async function persistScanCompletion(
         continue;
       }
 
-      if (!canResolveFindingFromSummary(incident.code, currentSummary)) {
+      if (
+        !canResolveFindingFromSummary(
+          incident.code,
+          currentSummary,
+          incident.previousSummary,
+        )
+      ) {
         continue;
       }
 

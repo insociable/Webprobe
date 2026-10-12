@@ -68,7 +68,8 @@ export async function persistDeepCheckRuns(input: {
       reasons.add(run.skipReason ?? "check-failed");
     for (const item of run.evidence) {
       if (
-        run.checkVersion.startsWith("2.") &&
+        (run.checkVersion.startsWith("2.") ||
+          run.checkId === "deep-performance") &&
         (item.data.coverage === "limited" ||
           item.data.coverage === "unavailable")
       )

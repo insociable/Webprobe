@@ -96,7 +96,7 @@ describe("deep check registry", () => {
       targetUrl: "https://example.com/",
       observations: {},
     });
-    expect(runs).toHaveLength(10);
+    expect(runs).toHaveLength(11);
     expect(
       runs.every(
         (run) =>

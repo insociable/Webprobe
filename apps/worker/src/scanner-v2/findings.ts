@@ -38,6 +38,8 @@ export type ScannerV2PersistentSummary = {
   };
   performance: {
     observedPageCount: number;
+    metricVersion?: "2.0.0";
+    pages?: Array<NonNullable<LabPerformanceObservation["measurement"]>>;
   };
   seo: {
     observedPageCount: number;
@@ -181,6 +183,12 @@ function performanceRuleFinding(
     pageUrl: page.url,
     evidence: {
       observedValue: rule.value,
+      ...(page.metricVersion
+        ? {
+            metricVersion: page.metricVersion,
+            measurementCoverage: page.measurement?.coverage,
+          }
+        : {}),
       warningThreshold: rule.warning,
       ...(rule.high === undefined ? {} : { highThreshold: rule.high }),
       unit: rule.unit,
@@ -226,9 +234,18 @@ function performanceFindings(
         unit: "ratio",
       },
       {
-        code: "performance.tbt.high",
-        title: "Temps de blocage JavaScript élevé",
-        value: page.totalBlockingTimeMs,
+        code:
+          page.metricVersion === "2.0.0"
+            ? "performance.thread-blocking.high"
+            : "performance.tbt.high",
+        title:
+          page.metricVersion === "2.0.0"
+            ? "Blocage du thread observé élevé"
+            : "Temps de blocage JavaScript élevé",
+        value:
+          page.metricVersion === "2.0.0"
+            ? (page.observedThreadBlockingTimeMs ?? null)
+            : page.totalBlockingTimeMs,
         warning: 200,
         high: 600,
         unit: "ms",
@@ -300,6 +317,14 @@ export function summarizeScannerV2(
     },
     performance: {
       observedPageCount: scannerV2.performance.length,
+      ...(scannerV2.performance.some((p) => p.metricVersion === "2.0.0")
+        ? {
+            metricVersion: "2.0.0" as const,
+            pages: scannerV2.performance
+              .flatMap((p) => (p.measurement ? [p.measurement] : []))
+              .slice(0, 5),
+          }
+        : {}),
     },
     seo: {
       observedPageCount: scannerV2.completeness.seo.observedPageCount,

@@ -89,7 +89,7 @@ Une tentative Deep expirée peut être reprise, dans la limite du nombre maximal
 
 ## Collecte et contrôles
 
-Le pipeline actuel raccorde dix contrôles :
+Le pipeline actuel raccorde onze contrôles :
 
 1. `deep-http-observation` — résultat HTTP de base ;
 2. `deep-browser-observation` — résultat de navigation et nombre de pages observées ;
@@ -101,6 +101,9 @@ Le pipeline actuel raccorde dix contrôles :
 8. `deep-endpoints` — endpoints observés sans exploration par dictionnaire ;
 9. `deep-forms` — formulaires observés sans soumission ;
 10. `deep-browser-meta` — métadonnées navigateur, iframes, SRI et erreurs bornées.
+11. `deep-performance` — mesures de laboratoire, ressources, cache/compression et images sur la page gardée, sans nouvelle requête.
+
+Les détails et limites de performance sont décrits dans [performance-observed.md](performance-observed.md). Ce contrôle ne participe pas au Score Deep de sécurité.
 
 Les contrôles sont passifs : ils consomment les observations produites par les transports et ne reçoivent pas un client réseau arbitraire.
 

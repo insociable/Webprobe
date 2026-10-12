@@ -40,6 +40,7 @@ import { ReportCoverageDetails } from "@/components/report-coverage-details";
 import { ReportRecommendationCounts } from "@/components/report-recommendation-counts";
 import { ReportSecurityHttp } from "@/components/report-security-http";
 import { ReportTechnicalDetails } from "@/components/report-technical-details";
+import { StandardPerformanceReport } from "@/components/standard-performance-report";
 import { ReportScorecard } from "@/components/report-scorecard";
 import { ReportSharePanel } from "./report-share-panel";
 import { FollowupPanel } from "./followup-panel";
@@ -716,6 +717,13 @@ export default async function ScanPage({
             </Link>
           </div>
 
+          {!comparison.performanceComparable ? (
+            <p className="mt-4 text-sm text-amber-100">
+              Les versions des mesures de performance diffèrent. Leurs
+              évolutions sont exclues de cette comparaison ; les rapports
+              historiques restent inchangés.
+            </p>
+          ) : null}
           <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {[
               ["Nouveaux", comparison.counts.new],
@@ -777,7 +785,10 @@ export default async function ScanPage({
       ) : null}
 
       {details.scan.status === "completed" && !isDeepAudit ? (
-        <ReportTechnicalDetails summary={details.scan.summary} />
+        <>
+          <StandardPerformanceReport summary={details.scan.summary} />
+          <ReportTechnicalDetails summary={details.scan.summary} />
+        </>
       ) : null}
 
       {!isDeepAudit ? (
