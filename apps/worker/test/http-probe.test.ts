@@ -279,7 +279,7 @@ describe("bounded CSP transport metadata", () => {
     if (!result.ok) return;
     expect(result.cspPolicies).toMatchObject({
       enforced: [
-        "script-src 'nonce-[redacted]'; report-uri https://report.example/path /local",
+        "script-src 'nonce-redacted'; report-uri https://report.example/path /local",
         "frame-ancestors 'self'",
       ],
       reportOnly: ["default-src *"],
@@ -295,8 +295,11 @@ describe("bounded CSP transport metadata", () => {
     expect(
       collectCspPolicies({
         "content-security-policy": "default-src 'self', script-src 'none'",
-      }).limited,
-    ).toBe(true);
+      }),
+    ).toMatchObject({
+      enforced: ["default-src 'self'", "script-src 'none'"],
+      limited: false,
+    });
     const rawHeaders = Array.from({ length: 5 }, (_, index) => [
       "Content-Security-Policy",
       "default-src " + index,
@@ -310,5 +313,25 @@ describe("bounded CSP transport metadata", () => {
     ]);
     expect(truncated.limited).toBe(true);
     expect(truncated.enforced[0]?.length).toBeLessThanOrEqual(8192);
+  });
+});
+
+describe("CSP confidentiality counterexamples", () => {
+  it("redacts credentials and incomplete or invalid nonce expressions", () => {
+    const collected = collectCspPolicies({}, [
+      "Content-Security-Policy",
+      "script-src 'nonce-!!!' 'unsafe-inline'; report-uri https://user:password@report.example/collect?token=secret /local?key=private collect?secret=bare //user:password@report.example/collect?secret=relative; script-src-elem 'nonce-incomplete",
+    ]);
+    expect(collected.enforced[0]).toContain("'nonce-[invalid]'");
+    for (const value of [
+      "user:password",
+      "token=secret",
+      "key=private",
+      "secret=bare",
+      "secret=relative",
+      "nonce-incomplete",
+      "nonce-!!!",
+    ])
+      expect(JSON.stringify(collected)).not.toContain(value);
   });
 });

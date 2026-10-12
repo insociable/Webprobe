@@ -146,26 +146,51 @@ function reportSafeUrl(input: URL): string {
   return safeUrl.toString();
 }
 
+export function redactCspNonceSources(value: string): string {
+  return value.replace(/'nonce-[^\s;,'"]*'?/gi, (source) =>
+    /^'nonce-[A-Za-z0-9+/_-]+={0,2}'$/i.test(source)
+      ? "'nonce-redacted'"
+      : "'nonce-[invalid]'",
+  );
+}
+
 export function safeHeaderValue(name: string, value: string): string {
   const bounded = (
     name.startsWith("content-security-policy")
-      ? value.replace(/'nonce-[^']*'/gi, "'nonce-[redacted]'")
+      ? redactCspNonceSources(value)
       : value
   ).slice(0, 8192);
   if (!name.startsWith("content-security-policy")) return bounded;
   return bounded
-    .replace(/'nonce-[^']*'/gi, "'nonce-[redacted]'")
+    .replace(/'nonce-[^\s;,\'"]*\'?/gi, (source) =>
+      redactCspNonceSources(source),
+    )
     .replace(/https?:\/\/[^\s;]+/gi, (source) => {
       try {
-        const url = new URL(source);
-        url.search = "";
-        url.hash = "";
-        return url.toString();
+        return reportSafeUrl(new URL(source));
       } catch {
         return source.split(/[?#]/, 1)[0] ?? "";
       }
     })
-    .replace(/(^|[\s;])((?:\/|\.\.?\/)[^\s;?#]+)[?#][^\s;]*/g, "$1$2");
+    .replace(/(^|[\s;])((?:\/|\.\.?\/)[^\s;?#]+)[?#][^\s;]*/g, "$1$2")
+    .replace(
+      /(\breport-uri\s+)([^;]*)/gi,
+      (_match, prefix: string, values: string) =>
+        prefix +
+        values
+          .split(/\s+/)
+          .map((source) => {
+            if (source.startsWith("//")) {
+              try {
+                return reportSafeUrl(new URL("https:" + source)).slice(6);
+              } catch {
+                /* redact below */
+              }
+            }
+            return source.split(/[?#]/, 1)[0] ?? "";
+          })
+          .join(" "),
+    );
 }
 
 function reportHeaders(headers: IncomingHttpHeaders): Record<string, string> {
@@ -199,7 +224,15 @@ export function collectCspPolicies(
       result.limited = true;
       if (target.length >= 4) return;
     }
-    target.push(safeHeaderValue(name, value));
+    // CSP fields contain a comma-separated policy list. Each policy is enforced.
+    for (const policy of value.slice(0, 8192).split(",")) {
+      if (!policy.trim()) continue;
+      if (target.length >= 4) {
+        result.limited = true;
+        break;
+      }
+      target.push(safeHeaderValue(name, policy.trim()));
+    }
   };
   if (rawHeaders) {
     if (rawHeaders.length > 400) result.limited = true;
@@ -213,8 +246,6 @@ export function collectCspPolicies(
     ]) {
       const value = headers[name];
       for (const item of Array.isArray(value) ? value : value ? [value] : []) {
-        // Without raw field boundaries, a comma can represent flattened policies.
-        if (item.includes(",")) result.limited = true;
         add(name, item);
       }
     }

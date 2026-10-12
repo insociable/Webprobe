@@ -262,12 +262,14 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
         });
       else if (https && hsts) {
         const ages = [
-          ...hsts.matchAll(/(?:^|;)\s*max-age\s*=\s*(\d+)\s*(?=;|$)/gi),
+          ...hsts.matchAll(
+            /(?:^|;)\s*max-age\s*=\s*(?:"(\d+)"|(\d+))\s*(?=;|$)/gi,
+          ),
         ];
         const declarations = [...hsts.matchAll(/(?:^|;)\s*max-age\s*=/gi)];
         const age =
           ages.length === 1 && declarations.length === 1
-            ? Number(ages[0]![1])
+            ? Number(ages[0]![1] ?? ages[0]![2])
             : NaN;
         if (!Number.isSafeInteger(age) || age < 0)
           findings.push({
@@ -299,7 +301,7 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
           summary: "X-Content-Type-Options non observé.",
           recommendation: "Envisager nosniff sur les réponses pertinentes.",
         });
-      else if (nosniff.trim().toLowerCase() !== "nosniff")
+      else if (nosniff.split(",")[0]?.trim().toLowerCase() !== "nosniff")
         findings.push({
           code: "nosniff-invalid",
           level: "review",
@@ -395,7 +397,13 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
         const value = header(headers, name);
         if (
           value &&
-          !allowed.some((item) => item === value.trim().toLowerCase())
+          !allowed.some(
+            (item) =>
+              item ===
+              (name === "cross-origin-resource-policy"
+                ? value.trim()
+                : value.split(";")[0]?.trim()),
+          )
         )
           findings.push({
             code: name + "-invalid",
@@ -409,7 +417,7 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
       const clearSiteData = header(headers, "clear-site-data");
       if (
         clearSiteData &&
-        !/^(\s*"(?:cache|cookies|storage|executionContexts|\*)"\s*)(,\s*"(?:cache|cookies|storage|executionContexts|\*)"\s*)*$/i.test(
+        !/^(\s*"(?:cache|cookies|storage|executionContexts|prefetchCache|prerenderCache|\*)"\s*)(,\s*"(?:cache|cookies|storage|executionContexts|prefetchCache|prerenderCache|\*)"\s*)*$/i.test(
           clearSiteData,
         )
       )
@@ -580,10 +588,7 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
               (sources) =>
                 sources === null ||
                 (sources.includes(token) &&
-                  !(
-                    sources.includes("'strict-dynamic'") &&
-                    hasNonceOrHash(sources)
-                  )),
+                  !sources.includes("'strict-dynamic'")),
             ) &&
             elementSources.some((sources) => sources?.includes(token))
           )
@@ -602,7 +607,12 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
         );
         if (
           objects.every(
-            (sources) => sources === null || !sources.includes("'none'"),
+            (sources) =>
+              sources === null ||
+              !(
+                sources.length === 0 ||
+                (sources.length === 1 && sources[0] === "'none'")
+              ),
           )
         )
           findings.push({
@@ -615,12 +625,22 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
               "Définir object-src 'none' si aucun plugin n'est requis.",
           });
         if (
-          policies.enforced.every(
-            (policy) => !Object.hasOwn(policy, "base-uri"),
-          )
+          policies.enforced.every((policy) => {
+            const sources = effectiveDirective(policy, "base-uri");
+            return (
+              sources === null ||
+              sources.includes("*") ||
+              sources.includes("http:") ||
+              sources.includes("https:")
+            );
+          })
         )
           findings.push({
-            code: "csp-base-uri-absent",
+            code: policies.enforced.every(
+              (policy) => !Object.hasOwn(policy, "base-uri"),
+            )
+              ? "csp-base-uri-absent"
+              : "csp-base-uri-permissive",
             level: "review",
             summary:
               "base-uri n'est pas restreint par une politique appliquée.",
@@ -628,12 +648,22 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
               "Définir base-uri selon les besoins des éléments base.",
           });
         if (
-          policies.enforced.every(
-            (policy) => !Object.hasOwn(policy, "form-action"),
-          )
+          policies.enforced.every((policy) => {
+            const sources = effectiveDirective(policy, "form-action");
+            return (
+              sources === null ||
+              sources.includes("*") ||
+              sources.includes("http:") ||
+              sources.includes("https:")
+            );
+          })
         )
           findings.push({
-            code: "csp-form-action-absent",
+            code: policies.enforced.every(
+              (policy) => !Object.hasOwn(policy, "form-action"),
+            )
+              ? "csp-form-action-absent"
+              : "csp-form-action-permissive",
             level: "information",
             summary:
               "form-action n'est pas restreint par une politique appliquée.",
@@ -689,7 +719,8 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
         ...((input.browser as BrowserRuntimeObservation | undefined)?.deep
           ?.cookies ?? []),
       ];
-      const cookieCollectionLimited = collected.length > 120;
+      const cookieCollectionLimited =
+        collected.length >= 120 || (http.ok && http.cookies?.length === 40);
       const cookies = [
         ...new Map(
           collected.slice(0, 120).map((item) => [JSON.stringify(item), item]),
@@ -751,7 +782,9 @@ export function createHttpCatalogChecks(): CheckDefinition[] {
             recommendation: "Ajouter Secure.",
           });
         const maxAgeSeconds =
-          cookie.maxAge === null ? NaN : Number(cookie.maxAge);
+          cookie.maxAge !== null && /^-?\d+$/.test(cookie.maxAge)
+            ? Number(cookie.maxAge)
+            : NaN;
         const expiryDays = cookie.expires
           ? (Date.parse(cookie.expires) - Date.now()) / 86_400_000
           : NaN;

@@ -700,3 +700,68 @@ describeRedis("internal Deep BullMQ retry", () => {
     }
   }, 20_000);
 });
+
+describeDatabase("passive-rule coverage persistence", () => {
+  it("persists bounded CSP coverage with v2 evidence and one fixture request", async () => {
+    const f = await fixture();
+    const { db } = getDatabase();
+    let requests = 0;
+    try {
+      await db
+        .update(scans)
+        .set({ status: "running" })
+        .where(eq(scans.id, f.scanId));
+      await runDeepAuditCandidate({
+        scanId: f.scanId,
+        organizationId: f.organizationId,
+        siteId: f.siteId,
+        targetUrl,
+        profile: {
+          ...resolveScanProfile("verified_deep_audit"),
+          allowedChecks: [
+            "deep-http-observation",
+            "deep-security-headers",
+            "deep-csp",
+            "deep-cookies",
+          ],
+        },
+        resolveTxt: async () => [[proof]],
+        resolver: async () => [{ address: "93.184.216.34", family: 4 }],
+        requester: async (_target, _timeout, account) => {
+          requests++;
+          account?.(256);
+          return {
+            statusCode: 200,
+            durationMs: 1,
+            tls: null,
+            headers: { "content-security-policy": "default-src 'self'" },
+            rawHeaders: Array.from({ length: 5 }, () => [
+              "Content-Security-Policy",
+              "default-src 'self'",
+            ]).flat(),
+          };
+        },
+      });
+      expect(requests).toBe(1);
+      const [scan] = await db
+        .select({ summary: scans.summary })
+        .from(scans)
+        .where(eq(scans.id, f.scanId));
+      expect(scan?.summary.v3Coverage).toMatchObject({
+        partial: true,
+        reasons: expect.arrayContaining(["observation-evidence-limited"]),
+      });
+      const runs = await db
+        .select()
+        .from(scanCheckRuns)
+        .where(eq(scanCheckRuns.scanId, f.scanId));
+      expect(runs.find((run) => run.checkId === "deep-csp")).toMatchObject({
+        checkVersion: "2.0.0",
+        status: "completed",
+        evidence: [{ data: { coverage: "limited" } }],
+      });
+    } finally {
+      await f.cleanup();
+    }
+  });
+});

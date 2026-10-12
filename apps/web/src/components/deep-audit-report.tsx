@@ -43,10 +43,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function safeDisplayText(value: string): string {
-  return sanitizeReportHeaderValue(value).replace(
-    /\x27nonce-[^\x27]*\x27/gi,
-    "\x27nonce-[redacted]\x27",
-  );
+  return sanitizeReportHeaderValue(value)
+    .replace(/\x27nonce-[^\x27]*\x27/gi, "\x27nonce-[redacted]\x27")
+    .replace(/(?:\/|\.\.?\/)[^\s;,"\x27<>?#]+[?#][^\s;,"\x27<>]*/g, (url) =>
+      sanitizeReportUrl(url),
+    );
 }
 
 function safeEvidenceText(value: unknown): string {
@@ -54,6 +55,9 @@ function safeEvidenceText(value: unknown): string {
   return text
     .replace(/\x27nonce-[^\x27]*\x27/gi, "\x27nonce-[redacted]\x27")
     .replace(/https?:\/\/[^\s;,"\x27<>]+/gi, (url) => sanitizeReportUrl(url))
+    .replace(/(?:\/|\.\.?\/)[^\s;,"\x27<>?#]+[?#][^\s;,"\x27<>]*/g, (url) =>
+      sanitizeReportUrl(url),
+    )
     .slice(0, 16_384);
 }
 
@@ -119,6 +123,16 @@ const reasonLabels: Record<string, { title: string; detail: string }> = {
   "authorization-unavailable": {
     title: "Autorisation indisponible",
     detail: "L’autorisation Deep n’était plus valide au moment du contrôle.",
+  },
+  "observation-evidence-limited": {
+    title: "Preuves partiellement observées",
+    detail:
+      "Une limite de collecte a tronqué certaines preuves. Les constats disponibles restent visibles ; leur absence ne démontre pas une protection.",
+  },
+  "observation-evidence-unavailable": {
+    title: "Preuves indisponibles",
+    detail:
+      "Une observation nécessaire n’est pas disponible. Ce contrôle ne conclut pas sur les éléments absents.",
   },
   "observation-unavailable": {
     title: "Observation indisponible",

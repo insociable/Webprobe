@@ -214,7 +214,13 @@ describe("versioned Deep evidence in reports", () => {
         coverage: "limited",
         pageUrl: "https://example.com/path?token=secret",
         findings: [],
-        directives: { "script-src": ["'nonce-rawsecret'"] },
+        directives: {
+          "script-src": ["'nonce-rawsecret'"],
+          "report-uri": [
+            "/collect?key=relative-secret",
+            "//user:password@reports.example/collect?key=private",
+          ],
+        },
       }),
       checkVersion: "2.0.0",
     };
@@ -231,5 +237,8 @@ describe("versioned Deep evidence in reports", () => {
     expect(html).not.toContain("Aucun point nécessitant une action");
     expect(html).not.toContain("token=secret");
     expect(html).not.toContain("rawsecret");
+    expect(html).not.toContain("relative-secret");
+    expect(html).not.toContain("user:password");
+    expect(html).not.toContain("key=private");
   });
 });

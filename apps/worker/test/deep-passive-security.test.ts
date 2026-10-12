@@ -58,7 +58,7 @@ function cookie(name: string, extra: Partial<ProbeCookie> = {}): ProbeCookie {
 describe("passive Deep security precision", () => {
   it("treats nonce plus strict-dynamic as effective and keeps report-only separate", async () => {
     const csp =
-      "script-src 'nonce-[redacted]' 'strict-dynamic' 'unsafe-inline' * data: http:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+      "script-src 'nonce-redacted' 'strict-dynamic' 'unsafe-inline' * data: http:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
     const { result, codes } = await analyze({
       ...base,
       headers: {
@@ -102,7 +102,7 @@ describe("passive Deep security precision", () => {
     const first =
       "script-src 'unsafe-inline' *; script-src 'none'; object-src 'none'; base-uri 'self'";
     const second =
-      "script-src-elem 'nonce-[redacted]'; script-src-attr 'none'; object-src 'none'; base-uri 'self'";
+      "script-src-elem 'nonce-redacted'; script-src-attr 'none'; object-src 'none'; base-uri 'self'";
     const { codes, result } = await analyze({
       ...base,
       headers: { "content-security-policy": first },
@@ -174,7 +174,7 @@ describe("passive Deep security precision", () => {
         "referrer-policy": "strict-origin, unknown, unsafe-url",
         "permissions-policy": "geolocation=(*), camera=(self)",
         "strict-transport-security": "max-age=0",
-        "x-content-type-options": "nosniff, nosniff",
+        "x-content-type-options": "invalid, nosniff",
         "cross-origin-embedder-policy": "invalid",
       },
     });
@@ -242,5 +242,106 @@ describe("passive Deep security precision", () => {
         coverage: "unavailable",
       });
     }
+  });
+});
+
+describe("passive rule counterexamples", () => {
+  const protectedCsp =
+    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+  it("distinguishes malformed nonce/hash sources and strict-dynamic behavior", async () => {
+    for (const source of ["'nonce-!!!'", "'sha256-!!!'"]) {
+      const report = await analyze({
+        ...base,
+        headers: {
+          "content-security-policy":
+            "script-src 'unsafe-inline' " + source + "; " + protectedCsp,
+        },
+      });
+      expect(report.codes("deep-csp")).toContain("csp-script-unsafe-inline");
+    }
+    const strict = await analyze({
+      ...base,
+      headers: {
+        "content-security-policy":
+          "script-src 'UNSAFE-INLINE' 'STRICT-DYNAMIC' *; " + protectedCsp,
+      },
+    });
+    expect(strict.codes("deep-csp")).not.toContain("csp-script-unsafe-inline");
+    expect(strict.codes("deep-csp")).not.toContain(
+      "csp-script-wildcard-source",
+    );
+  });
+
+  it("intersects comma-separated policies from a single field", async () => {
+    const report = await analyze({
+      ...base,
+      headers: {
+        "content-security-policy":
+          "script-src 'unsafe-inline' *, script-src 'none'; " + protectedCsp,
+      },
+    });
+    expect(report.result("deep-csp").evidence[0]?.data).toMatchObject({
+      policyCount: 2,
+      coverage: "observed",
+    });
+    expect(report.codes("deep-csp")).not.toContain("csp-script-unsafe-inline");
+    expect(report.codes("deep-csp")).not.toContain(
+      "csp-script-wildcard-source",
+    );
+  });
+
+  it("handles empty frame lists and ignores none when combined with other sources", async () => {
+    const protectedPage = await analyze({
+      ...base,
+      headers: {
+        "content-security-policy":
+          "frame-ancestors; object-src 'none'; base-uri 'none'",
+      },
+    });
+    expect(protectedPage.codes("deep-security-headers")).not.toContain(
+      "framing-protection-review",
+    );
+    const permissive = await analyze({
+      ...base,
+      headers: {
+        "content-security-policy":
+          "script-src 'self'; object-src 'none' *; base-uri *; form-action https:",
+      },
+    });
+    expect(permissive.codes("deep-csp")).toEqual(
+      expect.arrayContaining([
+        "csp-object-src-permissive",
+        "csp-base-uri-permissive",
+        "csp-form-action-permissive",
+      ]),
+    );
+  });
+
+  it("accepts quoted HSTS, repeated nosniff and isolation reporting parameters", async () => {
+    const report = await analyze({
+      ...base,
+      headers: {
+        "strict-transport-security": 'max-age="31536000"; includeSubDomains',
+        "x-content-type-options": "nosniff, nosniff",
+        "cross-origin-opener-policy": 'same-origin; report-to="coop"',
+        "cross-origin-embedder-policy": 'require-corp; report-to="coep"',
+        "clear-site-data": '"prefetchCache", "prerenderCache"',
+        "content-security-policy": "script-src 'self'; " + protectedCsp,
+      },
+    });
+    expect(report.codes("deep-security-headers")).toEqual([]);
+  });
+
+  it("marks saturated cookie observations as limited and does not parse scientific Max-Age", async () => {
+    const report = await analyze({
+      ...base,
+      cookies: Array.from({ length: 40 }, (_, i) =>
+        cookie("prefs" + i, { maxAge: "1e10" }),
+      ),
+    });
+    expect(report.result("deep-cookies").evidence[0]?.data).toMatchObject({
+      coverage: "limited",
+    });
+    expect(report.codes("deep-cookies")).not.toContain("cookie-long-duration");
   });
 });

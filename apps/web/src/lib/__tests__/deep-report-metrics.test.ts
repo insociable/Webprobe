@@ -249,3 +249,49 @@ describe("versioned passive-rule coverage", () => {
     ).toEqual(["csp-policy-limited"]);
   });
 });
+
+describe("historical score stability", () => {
+  it("preserves legacy headers with unavailable HTTP and does not treat v2 as legacy", () => {
+    const historical = completeRuns();
+    historical[2] = {
+      ...historical[2]!,
+      checkVersion: "1.0.0",
+      evidence: [{ data: { httpObserved: false, findings: [] } }],
+    };
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 100,
+      rulesVersion: "1.0.0",
+    });
+    historical[2] = { ...historical[2]!, checkVersion: "2.0.0" };
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 74,
+      rulesVersion: "2.0.0",
+      limitedCoverage: true,
+    });
+  });
+});
+
+describe("known findings under partial v2 coverage", () => {
+  it("retains confirmed findings when cookie observations reach their bound", () => {
+    const current = completeRuns();
+    const cookies = current.findIndex((run) => run.checkId === "deep-cookies");
+    current[cookies] = {
+      ...current[cookies]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            coverage: "limited",
+            httpObserved: true,
+            findings: [{ code: "host-prefix-invalid", level: "risk" }],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(current)).toMatchObject({
+      value: 88,
+      limitedCoverage: true,
+      rulesVersion: "2.0.0",
+    });
+  });
+});

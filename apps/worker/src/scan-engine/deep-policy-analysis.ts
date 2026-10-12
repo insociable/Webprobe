@@ -1,4 +1,8 @@
-import type { HttpProbeSuccess } from "../http-probe.js";
+import {
+  collectCspPolicies,
+  redactCspNonceSources,
+  type HttpProbeSuccess,
+} from "../http-probe.js";
 
 export type CspDirectives = Record<string, string[]>;
 
@@ -13,13 +17,17 @@ export function parseCsp(policy: string): CspDirectives {
       /^[a-z][a-z0-9-]*$/.test(name) &&
       !Object.hasOwn(directives, name)
     ) {
-      directives[name] = tokens
-        .slice(0, 40)
-        .map((token) =>
-          /^\x27nonce-/i.test(token)
-            ? "\x27nonce-[redacted]\x27"
-            : token.replace(/[?#].*$/, ""),
-        );
+      directives[name] = tokens.slice(0, 40).map((token) => {
+        const redacted = redactCspNonceSources(token);
+        if (
+          /^'(?:self|none|unsafe-inline|unsafe-eval|strict-dynamic|unsafe-hashes|report-sample)'$/i.test(
+            redacted,
+          ) ||
+          /^[a-z][a-z0-9+.-]*:$/i.test(redacted)
+        )
+          return redacted.toLowerCase();
+        return redacted.replace(/[?#].*$/, "");
+      });
     }
   }
   return directives;
@@ -30,24 +38,27 @@ export function observedCspPolicies(http: HttpProbeSuccess): {
   reportOnly: CspDirectives[];
   limited: boolean;
 } {
-  const collected = http.cspPolicies;
-  const enforced =
-    collected?.enforced ??
-    (http.headers["content-security-policy"]
-      ? [http.headers["content-security-policy"]]
-      : []);
-  const reportOnly =
-    collected?.reportOnly ??
-    (http.headers["content-security-policy-report-only"]
-      ? [http.headers["content-security-policy-report-only"]]
-      : []);
+  const original = http.cspPolicies;
+  const collected = original
+    ? collectCspPolicies({}, [
+        ...original.enforced
+          .slice(0, 4)
+          .flatMap((value) => ["content-security-policy", value]),
+        ...original.reportOnly
+          .slice(0, 4)
+          .flatMap((value) => ["content-security-policy-report-only", value]),
+      ])
+    : collectCspPolicies(http.headers);
+  const enforced = collected.enforced;
+  const reportOnly = collected.reportOnly;
   return {
     enforced: enforced.map(parseCsp),
     reportOnly: reportOnly.map(parseCsp),
     limited:
-      (collected?.limited ?? false) ||
-      (!collected &&
-        [...enforced, ...reportOnly].some((policy) => policy.includes(","))) ||
+      collected.limited ||
+      (original?.limited ?? false) ||
+      (original !== undefined &&
+        (original.enforced.length > 4 || original.reportOnly.length > 4)) ||
       [...enforced, ...reportOnly].some(
         (policy) =>
           policy.length >= 8192 ||
@@ -71,7 +82,7 @@ export function effectiveDirective(
 
 export function hasNonceOrHash(sources: readonly string[]): boolean {
   return sources.some((item) =>
-    /^'(?:nonce-[^']+|sha(?:256|384|512)-[^']+)'$/i.test(item),
+    /^'(?:nonce-|sha(?:256|384|512)-)[A-Za-z0-9+/_-]+={0,2}'$/i.test(item),
   );
 }
 
@@ -79,12 +90,17 @@ export function hasNonceOrHash(sources: readonly string[]): boolean {
 export function allowsArbitraryInline(
   sources: readonly string[] | null,
 ): boolean {
-  return !!sources?.includes("'unsafe-inline'") && !hasNonceOrHash(sources);
+  return (
+    !!sources?.includes("'unsafe-inline'") &&
+    !sources.includes("'strict-dynamic'") &&
+    !hasNonceOrHash(sources)
+  );
 }
 
 export function restrictsFraming(policy: CspDirectives): boolean {
   const sources = effectiveDirective(policy, "frame-ancestors");
-  if (!sources || sources.length === 0) return false;
+  if (!sources) return false;
+  if (sources.length === 0) return true;
   if (
     sources.includes("*") ||
     sources.some(
@@ -93,9 +109,10 @@ export function restrictsFraming(policy: CspDirectives): boolean {
   )
     return false;
   if (sources.length === 1 && sources[0] === "'none'") return true;
-  return sources.every(
-    (item) => item === "'self'" || /^https?:\/\/[^*\s]+$/i.test(item),
-  );
+  // 'none' is ignored when combined with another source.
+  return sources
+    .filter((item) => item !== "'none'")
+    .every((item) => item === "'self'" || /^https?:\/\/[^*\s]+$/i.test(item));
 }
 
 const knownReferrerPolicies = new Set([

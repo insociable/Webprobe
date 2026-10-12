@@ -127,9 +127,8 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       run?.status !== "completed" ||
       !data ||
       !Array.isArray(data.findings) ||
-      data.httpObserved === false ||
-      data.coverage === "limited" ||
-      data.coverage === "unavailable" ||
+      (run.checkVersion?.startsWith("2.") &&
+        (data.httpObserved === false || data.coverage === "unavailable")) ||
       (checkId === "deep-csp" &&
         (typeof data.applied !== "boolean" ||
           data.httpObserved === false ||
@@ -139,9 +138,14 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       else missingOther = true;
       continue;
     }
+    const limitedEvidence =
+      run.checkVersion?.startsWith("2.") && data.coverage === "limited";
     const consent =
       checkId === "deep-cookies" ? record(data.cookieConsent) : null;
-    if (consent && consent.status !== "observed") missingOther = true;
+    if (limitedEvidence) {
+      if (rule.critical) missingCritical = true;
+      else missingOther = true;
+    } else if (consent && consent.status !== "observed") missingOther = true;
     else completedControls++;
     const checkPenalty = deepFindings(
       run,
