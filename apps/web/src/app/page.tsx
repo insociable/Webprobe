@@ -87,6 +87,22 @@ export default function Home() {
               Vérifier la plateforme
             </a>
           </div>
+          <p className="mt-8 max-w-2xl border-l-2 border-[var(--line-strong)] pl-4 text-sm leading-6 text-[var(--muted-strong)]">
+            <span className="font-semibold text-[var(--foreground)]">
+              Services tiers / RGPD.
+            </span>{" "}
+            WebProbe détecte des indices techniques. Après confirmation humaine,{" "}
+            <a
+              href="https://stacklegal.eu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[var(--accent-strong)] underline decoration-2 underline-offset-4 hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-strong)]"
+            >
+              StackLégal
+            </a>{" "}
+            fournit les informations réglementaires sur ces services. La
+            détection ne vaut pas qualification juridique.
+          </p>
         </div>
 
         <div className="am-panel overflow-hidden">
@@ -100,7 +116,7 @@ export default function Home() {
                 Données fictives de démonstration
               </p>
             </div>
-            <span className="rounded-md border border-[#31435a] bg-[#0a1720] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#68d7ff]">
+            <span className="rounded-md border border-[#31435a] bg-[#0a1720] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--accent-strong)]">
               Scan terminé
             </span>
           </div>

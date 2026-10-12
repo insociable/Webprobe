@@ -28,13 +28,36 @@ function render(row: ThirdPartyRow) {
 }
 
 describe("third-party site panel", () => {
+  it("keeps attribution and guidance visible without detected services", () => {
+    const html = renderToStaticMarkup(
+      <ThirdPartyPanel
+        rows={[]}
+        organizationId="00000000-0000-4000-8000-000000000001"
+        siteId="00000000-0000-4000-8000-000000000002"
+        canManage={false}
+      />,
+    );
+    expect(html).toContain("Aucun service tiers détecté");
+    expect(html).toContain("Aucune fiche réglementaire à afficher");
+    expect(html).toContain("Données réglementaires :");
+    expect(html).toContain('href="https://stacklegal.eu"');
+    expect(html).toContain("qualification juridique");
+  });
+
   it("shows technical evidence, confidence, confirmation and attribution", () => {
     const html = render(base);
     expect(html).toContain("Header CF-Ray observé");
+    expect(html).toContain("Indices techniques relevés par WebProbe");
     expect(html).toContain("Confiance élevée");
+    expect(html).toContain("à confirmer avant l’enrichissement réglementaire");
+    expect(html).not.toContain(
+      "Informations réglementaires fournies par StackLégal",
+    );
     expect(html).toContain("Confirmer");
     expect(html).toContain("Ignorer");
-    expect(html).toContain("https://stacklegal.eu");
+    expect(html).toContain("Données réglementaires :");
+    expect(html).toContain('href="https://stacklegal.eu"');
+    expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain("ne constitue pas une qualification juridique");
   });
 
@@ -60,6 +83,9 @@ describe("third-party site panel", () => {
         aliases: [],
       },
     });
+    expect(html).toContain(
+      "Informations réglementaires fournies par StackLégal",
+    );
     expect(html).toContain("Informations partielles");
     expect(html).toContain("Mécanisme de transfert");
     expect(html).toContain("Non renseigné");
