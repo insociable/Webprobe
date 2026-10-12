@@ -22,7 +22,123 @@ function checkRun(
   };
 }
 
+function completedDeepRuns() {
+  return [
+    "deep-http-observation",
+    "deep-browser-observation",
+    "deep-tls",
+    "deep-browser-meta",
+    "deep-security-headers",
+    "deep-csp",
+    "deep-cookies",
+    "deep-resources",
+    "deep-endpoints",
+    "deep-forms",
+  ]
+    .map((id) => ({
+      ...checkRun(id, {
+        findings: [],
+        ...(id === "deep-csp" ? { applied: true } : {}),
+        ...(id === "deep-csp" ||
+        id === "deep-security-headers" ||
+        id === "deep-cookies"
+          ? { coverage: "observed" }
+          : {}),
+      }),
+      checkVersion:
+        id === "deep-csp" ||
+        id === "deep-security-headers" ||
+        id === "deep-cookies"
+          ? "2.0.0"
+          : "1.0.0",
+    }))
+    .concat([
+      checkRun("deep-performance", {
+        metricVersion: "2.0.0",
+        coverage: "limited",
+        pageUrl: "https://example.test/",
+        metrics: { ttfbMs: { value: 103 }, cls: { value: 0 } },
+        reasons: ["blocked-resources"],
+        resources: { observedCount: 4, blockedCount: 1 },
+      }),
+    ]);
+}
+
 describe("Deep audit report rendering", () => {
+  it("keeps performance-only coverage limits local, for historical Deep reports too", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {
+          v3Coverage: {
+            totalChecks: 11,
+            completedChecks: 11,
+            skippedChecks: 0,
+            failedChecks: 0,
+            reasons: ["observation-evidence-limited"],
+          },
+        },
+        checkRuns: completedDeepRuns(),
+      }),
+    );
+    expect(html).toContain("Contrôles exécutés · Performance partielle");
+    expect(html).toContain("Mesures partielles");
+    expect(html).toContain("Limites des ressources observées");
+    expect(html).toContain("11");
+    expect(html).not.toContain("Certaines limites ont réduit la couverture");
+    expect(html).not.toContain("Preuves partiellement observées");
+    expect(html).not.toContain("Couverture complète du périmètre");
+  });
+
+  it("preserves global coverage warnings if security evidence is also limited", () => {
+    const runs = completedDeepRuns().map((run) =>
+      run.checkId === "deep-csp"
+        ? {
+            ...run,
+            evidence: [
+              {
+                data: {
+                  coverage: "limited",
+                  applied: true,
+                  findings: [],
+                },
+              },
+            ],
+          }
+        : run,
+    );
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {
+          v3Coverage: {
+            reasons: ["observation-evidence-limited"],
+          },
+        },
+        checkRuns: runs,
+      }),
+    );
+    expect(html).toContain("Couverture à vérifier");
+    expect(html).toContain("Certaines limites ont réduit la couverture");
+    expect(html).toContain("Preuves partiellement observées");
+  });
+
+  it("retains independent network and budget warnings despite partial performance", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {
+          v3Coverage: {
+            reasons: ["observation-evidence-limited", "budget-time"],
+          },
+        },
+        checkRuns: completedDeepRuns(),
+      }),
+    );
+    expect(html).toContain("Couverture à vérifier");
+    expect(html).toContain("Temps d’analyse maximal atteint");
+    expect(html).not.toContain("Preuves partiellement observées");
+  });
   it("shows neutral partial performance coverage without the generic Deep warning", () => {
     const html = renderToStaticMarkup(
       createElement(DeepAuditReport, {

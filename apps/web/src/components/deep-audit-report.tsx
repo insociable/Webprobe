@@ -249,6 +249,31 @@ export function DeepAuditReport({
         (item): item is string => typeof item === "string",
       )
     : [];
+  // The persisted summary aggregates limits from every check. A partial
+  // Performance observation must remain visible in its own section, but does
+  // not by itself imply that the security diagnostics were incomplete.
+  const performanceLimited = checkRuns.some(
+    (run) =>
+      run.checkId === "deep-performance" &&
+      run.evidence.some(
+        (evidence) => asRecord(evidence.data)?.coverage === "limited",
+      ),
+  );
+  const otherV2EvidenceLimited = checkRuns.some(
+    (run) =>
+      run.checkId !== "deep-performance" &&
+      run.checkVersion.startsWith("2.") &&
+      run.evidence.some(
+        (evidence) => asRecord(evidence.data)?.coverage === "limited",
+      ),
+  );
+  const performanceOnlyEvidenceLimit =
+    performanceLimited && !otherV2EvidenceLimited;
+  const summaryReasons = reasons.filter(
+    (reason) =>
+      reason !== "observation-evidence-limited" ||
+      !performanceOnlyEvidenceLimit,
+  );
   const completed = checkRuns.filter(
     (run) => run.status === "completed",
   ).length;
@@ -269,6 +294,14 @@ export function DeepAuditReport({
     reasons.length === 0 &&
     failed === 0 &&
     !score.limitedCoverage;
+  const performanceOnlySummaryLimit =
+    status === "completed" &&
+    performanceOnlyEvidenceLimit &&
+    reasons.includes("observation-evidence-limited") &&
+    summaryReasons.length === 0 &&
+    skipped === 0 &&
+    failed === 0 &&
+    !score.limitedCoverage;
 
   return (
     <section className="border-b border-[#242d40] py-10">
@@ -287,7 +320,9 @@ export function DeepAuditReport({
         <span className="rounded-md border border-[#39445d] bg-[#111827] px-3 py-2 text-sm text-[#b6c0d1]">
           {coverageComplete
             ? "Couverture complète du périmètre"
-            : "Couverture à vérifier"}
+            : performanceOnlySummaryLimit
+              ? "Contrôles exécutés · Performance partielle"
+              : "Couverture à vérifier"}
         </span>
       </div>
 
@@ -358,13 +393,13 @@ export function DeepAuditReport({
         </div>
       ) : null}
 
-      {reasons.length > 0 ? (
+      {summaryReasons.length > 0 ? (
         <div className="mt-5 border-l-2 border-amber-300/70 bg-amber-200/[0.05] p-5">
           <p className="text-base font-semibold text-amber-100">
             Certaines limites ont réduit la couverture
           </p>
           <div className="mt-3 space-y-3">
-            {reasons.map((reason) => {
+            {summaryReasons.map((reason) => {
               const copy = reasonLabels[reason] ?? {
                 title: "Limite technique rencontrée",
                 detail:
