@@ -35,6 +35,7 @@ export type PerformanceContext = {
   measuredAt: string;
   viewport: { width: number; height: number };
   cacheState: "cold" | "unknown";
+  networkPolicy: "standard" | "deep";
   excludedThirdPartyRequests: number;
   resourcesTruncated: boolean;
   observedResourceCount?: number;
@@ -422,7 +423,9 @@ export function analyzeObservedPerformance(input: {
       blockingDefinition:
         "Somme de max(0, durée − 50 ms) des tâches longues, navigation → fin d’observation ; pas TBT Lighthouse.",
       network:
-        "Proxy gardé, origine canonique autorisée, tiers hors périmètre bloqués ; VM et proxy influencent les mesures.",
+        input.context.networkPolicy === "deep"
+          ? "Proxy gardé, origine canonique autorisée, tiers hors périmètre bloqués ; VM et proxy influencent les mesures."
+          : "Scan standard : les ressources tierces peuvent être chargées par le navigateur ; les mesures peuvent les inclure. Le réseau et la VM influencent les résultats.",
     },
     metrics,
     findings,

@@ -71,6 +71,7 @@ const context = {
   measuredAt: "2026-10-12T16:00:00Z",
   viewport: { width: 1280, height: 720 },
   cacheState: "cold" as const,
+  networkPolicy: "deep" as const,
   excludedThirdPartyRequests: 0,
   resourcesTruncated: false,
 };
@@ -135,6 +136,26 @@ describe("observed performance semantics", () => {
         delete process.env.WEBPROBE_PERFORMANCE_COLLECTION;
       else process.env.WEBPROBE_PERFORMANCE_COLLECTION = before;
     }
+  });
+
+  it("distinguishes standard third-party traffic from Deep network restrictions", () => {
+    const standard = analyzeObservedPerformance({
+      snapshot: snapshot(),
+      resources: [resource({ url: "https://cdn.example.test/library.js" })],
+      context: { ...context, networkPolicy: "standard" },
+    });
+    const deep = analyzeObservedPerformance({
+      snapshot: snapshot(),
+      resources: [resource()],
+      context,
+    });
+    expect(standard.context.network).toContain(
+      "ressources tierces peuvent être chargées",
+    );
+    expect(standard.context.network).not.toContain(
+      "tiers hors périmètre bloqués",
+    );
+    expect(deep.context.network).toContain("tiers hors périmètre bloqués");
   });
 
   it("keeps unknown or chained encodings non-evaluable and preserves raw-header privacy", () => {

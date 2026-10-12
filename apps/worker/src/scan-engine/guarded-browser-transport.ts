@@ -465,6 +465,7 @@ export async function observeGuardedBrowserTarget(
             measuredAt: new Date().toISOString(),
             viewport: page.viewportSize?.() ?? { width: 1280, height: 720 },
             cacheState: "cold",
+            networkPolicy: "deep",
             excludedThirdPartyRequests,
             resourcesTruncated: performanceResourcesTruncated,
             observedResourceCount,

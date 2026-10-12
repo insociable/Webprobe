@@ -170,6 +170,7 @@ export function createLabPerformanceObservation(input: {
               measuredAt: input.context.measuredAt,
               viewport: input.context.viewport,
               cacheState: "unknown",
+              networkPolicy: "standard",
               excludedThirdPartyRequests: 0,
               resourcesTruncated: input.collectionLimited === true,
             },
