@@ -1,5 +1,6 @@
 export type DeepRunData = {
   checkId: string;
+  checkVersion?: string;
   status: string;
   evidence: ReadonlyArray<Record<string, unknown>>;
 };
@@ -59,6 +60,7 @@ export function deepFindings(
   if (
     run.checkId === "deep-csp" &&
     data?.applied === false &&
+    data.coverage !== "limited" &&
     data.httpObserved !== false &&
     !httpObservationFailed &&
     !findings.some((finding) => finding.code === "csp-absent")
@@ -97,6 +99,7 @@ export type DeepScore = {
   completedControls: number;
   expectedControls: number;
   limitedCoverage: boolean;
+  rulesVersion: "1.0.0" | "2.0.0";
 };
 
 export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
@@ -104,6 +107,14 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
     (run) => run.checkId === "deep-csp" && run.status === "completed",
   );
   const httpObservationFailed = deepHttpObservationFailed(runs);
+  const rulesVersion = runs.some(
+    (run) =>
+      ["deep-security-headers", "deep-csp", "deep-cookies"].includes(
+        run.checkId,
+      ) && run.checkVersion?.startsWith("2."),
+  )
+    ? "2.0.0"
+    : "1.0.0";
   let penalty = 0;
   let completedControls = 0;
   let missingCritical = false;
@@ -116,6 +127,8 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       run?.status !== "completed" ||
       !data ||
       !Array.isArray(data.findings) ||
+      (run.checkVersion?.startsWith("2.") &&
+        (data.httpObserved === false || data.coverage === "unavailable")) ||
       (checkId === "deep-csp" &&
         (typeof data.applied !== "boolean" ||
           data.httpObserved === false ||
@@ -125,9 +138,14 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       else missingOther = true;
       continue;
     }
+    const limitedEvidence =
+      run.checkVersion?.startsWith("2.") && data.coverage === "limited";
     const consent =
       checkId === "deep-cookies" ? record(data.cookieConsent) : null;
-    if (consent && consent.status !== "observed") missingOther = true;
+    if (limitedEvidence) {
+      if (rule.critical) missingCritical = true;
+      else missingOther = true;
+    } else if (consent && consent.status !== "observed") missingOther = true;
     else completedControls++;
     const checkPenalty = deepFindings(
       run,
@@ -151,6 +169,7 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
       completedControls,
       expectedControls: Object.keys(controls).length,
       limitedCoverage: true,
+      rulesVersion,
     };
 
   const raw = Math.max(0, Math.min(100, 100 - penalty));
@@ -170,5 +189,6 @@ export function scoreDeepAudit(runs: readonly DeepRunData[]): DeepScore {
     completedControls,
     expectedControls: Object.keys(controls).length,
     limitedCoverage: missingCritical || missingOther,
+    rulesVersion,
   };
 }

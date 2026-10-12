@@ -66,6 +66,14 @@ export async function persistDeepCheckRuns(input: {
       run.skipReason !== "not-applicable"
     )
       reasons.add(run.skipReason ?? "check-failed");
+    for (const item of run.evidence) {
+      if (
+        run.checkVersion.startsWith("2.") &&
+        (item.data.coverage === "limited" ||
+          item.data.coverage === "unavailable")
+      )
+        reasons.add("observation-evidence-" + item.data.coverage);
+    }
     if (
       !Number.isSafeInteger(run.durationMs) ||
       run.durationMs < 0 ||

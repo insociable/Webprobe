@@ -71,6 +71,12 @@ export type HttpProbeSuccess = {
   durationMs: number;
   redirects: ProbeRedirect[];
   headers: Record<string, string>;
+  /** Bounded, redacted CSP header fields from the final response. */
+  cspPolicies?: {
+    enforced: string[];
+    reportOnly: string[];
+    limited: boolean;
+  };
   securityHeaders: SecurityHeaderObservation[];
   tls: ProbeTlsInfo | null;
   cookies?: ProbeCookie[];
@@ -91,6 +97,7 @@ export type HttpProbeResult = HttpProbeSuccess | HttpProbeFailure;
 type RawProbeResponse = {
   statusCode: number;
   headers: IncomingHttpHeaders;
+  rawHeaders?: string[];
   durationMs: number;
   tls: ProbeTlsInfo | null;
 };
@@ -103,6 +110,7 @@ export type HttpRequester = (
 ) => Promise<RawProbeResponse>;
 const reportHeaderNames = [
   "cache-control",
+  "clear-site-data",
   "content-security-policy",
   "content-security-policy-report-only",
   "content-type",
@@ -138,13 +146,111 @@ function reportSafeUrl(input: URL): string {
   return safeUrl.toString();
 }
 
+export function redactCspNonceSources(value: string): string {
+  return value.replace(/'nonce-[^\s;,'"]*'?/gi, (source) =>
+    /^'nonce-[A-Za-z0-9+/_-]+={0,2}'$/i.test(source)
+      ? "'nonce-redacted'"
+      : "'nonce-[invalid]'",
+  );
+}
+
+export function safeHeaderValue(name: string, value: string): string {
+  const bounded = (
+    name.startsWith("content-security-policy")
+      ? redactCspNonceSources(value)
+      : value
+  ).slice(0, 8192);
+  if (!name.startsWith("content-security-policy")) return bounded;
+  return bounded
+    .replace(/'nonce-[^\s;,\'"]*\'?/gi, (source) =>
+      redactCspNonceSources(source),
+    )
+    .replace(/https?:\/\/[^\s;]+/gi, (source) => {
+      try {
+        return reportSafeUrl(new URL(source));
+      } catch {
+        return source.split(/[?#]/, 1)[0] ?? "";
+      }
+    })
+    .replace(/(^|[\s;])((?:\/|\.\.?\/)[^\s;?#]+)[?#][^\s;]*/g, "$1$2")
+    .replace(
+      /(\breport-uri\s+)([^;]*)/gi,
+      (_match, prefix: string, values: string) =>
+        prefix +
+        values
+          .split(/\s+/)
+          .map((source) => {
+            if (source.startsWith("//")) {
+              try {
+                return reportSafeUrl(new URL("https:" + source)).slice(6);
+              } catch {
+                /* redact below */
+              }
+            }
+            return source.split(/[?#]/, 1)[0] ?? "";
+          })
+          .join(" "),
+    );
+}
+
 function reportHeaders(headers: IncomingHttpHeaders): Record<string, string> {
   return Object.fromEntries(
     reportHeaderNames.flatMap((name) => {
       const value = firstHeaderValue(headers, name);
-      return value === null ? [] : [[name, value.slice(0, 8192)]];
+      return value === null ? [] : [[name, safeHeaderValue(name, value)]];
     }),
   );
+}
+
+/** Preserve CSP field boundaries before Node flattens them, without storing raw nonces. */
+export function collectCspPolicies(
+  headers: IncomingHttpHeaders,
+  rawHeaders?: readonly string[],
+): NonNullable<HttpProbeSuccess["cspPolicies"]> {
+  const result = {
+    enforced: [] as string[],
+    reportOnly: [] as string[],
+    limited: false,
+  };
+  const add = (name: string, value: string) => {
+    const target =
+      name === "content-security-policy"
+        ? result.enforced
+        : name === "content-security-policy-report-only"
+          ? result.reportOnly
+          : null;
+    if (!target) return;
+    if (target.length >= 4 || value.length > 8192) {
+      result.limited = true;
+      if (target.length >= 4) return;
+    }
+    // CSP fields contain a comma-separated policy list. Each policy is enforced.
+    for (const policy of value.slice(0, 8192).split(",")) {
+      if (!policy.trim()) continue;
+      if (target.length >= 4) {
+        result.limited = true;
+        break;
+      }
+      target.push(safeHeaderValue(name, policy.trim()));
+    }
+  };
+  if (rawHeaders) {
+    if (rawHeaders.length > 400) result.limited = true;
+    for (let i = 0; i + 1 < Math.min(rawHeaders.length, 400); i += 2) {
+      add(rawHeaders[i]!.toLowerCase(), rawHeaders[i + 1]!);
+    }
+  } else {
+    for (const name of [
+      "content-security-policy",
+      "content-security-policy-report-only",
+    ]) {
+      const value = headers[name];
+      for (const item of Array.isArray(value) ? value : value ? [value] : []) {
+        add(name, item);
+      }
+    }
+  }
+  return result;
 }
 
 export function observeCookies(headers: IncomingHttpHeaders): ProbeCookie[] {
@@ -195,7 +301,7 @@ export function inspectSecurityHeaders(
       name,
       expected: name !== "strict-transport-security" || protocol === "https:",
       present: value !== null,
-      value,
+      value: value === null ? null : safeHeaderValue(name, value),
     };
   });
 }
@@ -331,6 +437,7 @@ export const requestPinnedTarget: HttpRequester = async (
         const result: RawProbeResponse = {
           statusCode: response.statusCode ?? 0,
           headers: response.headers,
+          rawHeaders: response.rawHeaders,
           durationMs: Math.round(performance.now() - startedAt),
           tls,
         };
@@ -723,6 +830,14 @@ export async function probeHttpTarget(
       durationMs: totalDurationMs,
       redirects,
       headers: reportHeaders(response.headers),
+      ...(options.collectDeepMetadata
+        ? {
+            cspPolicies: collectCspPolicies(
+              response.headers,
+              response.rawHeaders,
+            ),
+          }
+        : {}),
       securityHeaders: inspectSecurityHeaders(response.headers, protocol),
       tls: response.tls,
       ...(options.collectDeepMetadata ? { cookies: observedCookies } : {}),

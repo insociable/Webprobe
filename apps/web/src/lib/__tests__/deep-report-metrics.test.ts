@@ -193,3 +193,105 @@ describe("Cookie consent coverage in Deep scores", () => {
     expect(scoreDeepAudit(completeRuns()).value).toBe(100);
   });
 });
+
+describe("versioned passive-rule coverage", () => {
+  it("keeps historical evidence on v1 and caps incomplete v2 CSP", () => {
+    const historical = completeRuns();
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 100,
+      rulesVersion: "1.0.0",
+    });
+    const current = completeRuns();
+    current[1] = {
+      ...current[1]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            applied: true,
+            httpObserved: true,
+            coverage: "limited",
+            findings: [{ code: "csp-policy-limited", level: "information" }],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(current)).toMatchObject({
+      value: 74,
+      rulesVersion: "2.0.0",
+      limitedCoverage: true,
+    });
+    const missingHttp = completeRuns();
+    missingHttp[2] = {
+      ...missingHttp[2]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            httpObserved: false,
+            coverage: "unavailable",
+            findings: [],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(missingHttp)).toMatchObject({
+      value: 74,
+      limitedCoverage: true,
+    });
+    const partialWithoutCsp = run(
+      "deep-csp",
+      [{ code: "csp-policy-limited", level: "information" }],
+      { applied: false, coverage: "limited", httpObserved: true },
+    );
+    expect(
+      deepFindings(partialWithoutCsp, true).map((item) => item.code),
+    ).toEqual(["csp-policy-limited"]);
+  });
+});
+
+describe("historical score stability", () => {
+  it("preserves legacy headers with unavailable HTTP and does not treat v2 as legacy", () => {
+    const historical = completeRuns();
+    historical[2] = {
+      ...historical[2]!,
+      checkVersion: "1.0.0",
+      evidence: [{ data: { httpObserved: false, findings: [] } }],
+    };
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 100,
+      rulesVersion: "1.0.0",
+    });
+    historical[2] = { ...historical[2]!, checkVersion: "2.0.0" };
+    expect(scoreDeepAudit(historical)).toMatchObject({
+      value: 74,
+      rulesVersion: "2.0.0",
+      limitedCoverage: true,
+    });
+  });
+});
+
+describe("known findings under partial v2 coverage", () => {
+  it("retains confirmed findings when cookie observations reach their bound", () => {
+    const current = completeRuns();
+    const cookies = current.findIndex((run) => run.checkId === "deep-cookies");
+    current[cookies] = {
+      ...current[cookies]!,
+      checkVersion: "2.0.0",
+      evidence: [
+        {
+          data: {
+            coverage: "limited",
+            httpObserved: true,
+            findings: [{ code: "host-prefix-invalid", level: "risk" }],
+          },
+        },
+      ],
+    };
+    expect(scoreDeepAudit(current)).toMatchObject({
+      value: 88,
+      limitedCoverage: true,
+      rulesVersion: "2.0.0",
+    });
+  });
+});

@@ -202,3 +202,43 @@ describe("Cookies before interaction in Deep reports", () => {
     expect(historical).toContain("Aucun cookie déclaré");
   });
 });
+
+describe("versioned Deep evidence in reports", () => {
+  it("shows partial coverage, source and version without leaking historical tokens", () => {
+    const current = {
+      ...checkRun("deep-csp", {
+        title: "Politique CSP",
+        summary:
+          "Politique partielle sur https://example.com/path?token=secret",
+        applied: true,
+        coverage: "limited",
+        pageUrl: "https://example.com/path?token=secret",
+        findings: [],
+        directives: {
+          "script-src": ["'nonce-rawsecret'"],
+          "report-uri": [
+            "/collect?key=relative-secret",
+            "//user:password@reports.example/collect?key=private",
+          ],
+        },
+      }),
+      checkVersion: "2.0.0",
+    };
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: [current],
+      }),
+    );
+    expect(html).toContain("Couverture partielle");
+    expect(html).toContain("règles v2.0.0");
+    expect(html).toContain("Page observée");
+    expect(html).not.toContain("Aucun point nécessitant une action");
+    expect(html).not.toContain("token=secret");
+    expect(html).not.toContain("rawsecret");
+    expect(html).not.toContain("relative-secret");
+    expect(html).not.toContain("user:password");
+    expect(html).not.toContain("key=private");
+  });
+});

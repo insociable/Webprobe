@@ -46,12 +46,13 @@ function finiteNumber(value: unknown): number | null {
 
 export function sanitizeReportUrl(value: string): string {
   try {
-    const url = new URL(value);
+    const relativeProtocol = value.startsWith("//");
+    const url = new URL(relativeProtocol ? "https:" + value : value);
     url.username = "";
     url.password = "";
     url.search = "";
     url.hash = "";
-    return url.toString();
+    return relativeProtocol ? url.toString().slice(6) : url.toString();
   } catch {
     const withoutFragment = value.split("#", 1)[0] ?? "";
     return (withoutFragment.split("?", 1)[0] ?? "").slice(0, 2048);
