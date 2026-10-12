@@ -47,13 +47,27 @@ export function ThirdPartyPanel({
       <h2 id="third-parties-title" className="mt-2 text-2xl font-semibold">
         Services tiers / RGPD
       </h2>
-      <p className="mt-3 max-w-3xl text-base text-[#9aa6ba]">
-        Une détection technique ne constitue pas une qualification juridique.
-        Vérifiez les services réellement utilisés.
+      <p className="mt-3 max-w-3xl text-base leading-7 text-[#9aa6ba]">
+        WebProbe détecte des indices techniques de services tiers. Vous
+        confirmez les services réellement utilisés avant que StackLégal
+        fournisse leurs informations réglementaires. Une détection technique ne
+        constitue pas une qualification juridique.
+      </p>
+      <p className="mt-5 rounded-lg border border-[#303a50] bg-[#111827] px-4 py-3 text-sm font-medium text-[#c0cadb]">
+        Données réglementaires :{" "}
+        <a
+          href="https://stacklegal.eu"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[var(--accent-strong)] underline decoration-2 underline-offset-4 hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--accent-strong)]"
+        >
+          StackLégal
+        </a>
       </p>
       {rows.length === 0 ? (
         <p className="mt-5 text-[#9aa6ba]">
-          Aucun service tiers détecté lors du dernier scan.
+          Aucun service tiers détecté lors du dernier scan. Aucune fiche
+          réglementaire à afficher.
         </p>
       ) : (
         <div className="mt-6 grid gap-4">
@@ -76,7 +90,7 @@ export function ThirdPartyPanel({
               </div>
               {row.evidence.length > 0 ? (
                 <div className="mt-3 text-sm text-[#aeb9cc]">
-                  <p>Preuves techniques :</p>
+                  <p>Indices techniques relevés par WebProbe :</p>
                   <ul className="ml-5 mt-1 list-disc">
                     {row.evidence.map((evidence) => (
                       <li key={evidence}>{evidence}</li>
@@ -87,7 +101,7 @@ export function ThirdPartyPanel({
               <p className="mt-3 text-sm text-[#aeb9cc]">
                 Décision :{" "}
                 {row.status === "pending"
-                  ? "à confirmer"
+                  ? "à confirmer avant l’enrichissement réglementaire"
                   : row.status === "confirmed"
                     ? "confirmé par votre organisation"
                     : "ignoré par votre organisation"}
@@ -221,17 +235,6 @@ export function ThirdPartyPanel({
           ))}
         </div>
       )}
-      <p className="mt-5 text-xs text-[#7f8a9f]">
-        Données réglementaires :{" "}
-        <a
-          href="https://stacklegal.eu"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          StackLégal
-        </a>
-      </p>
     </section>
   );
 }
