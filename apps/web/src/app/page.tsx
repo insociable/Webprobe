@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductMark } from "@/components/product-mark";
+import { BitcoinDonation } from "./bitcoin-donation";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -249,6 +250,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <BitcoinDonation />
 
       <footer className="mx-auto flex w-[min(1240px,calc(100%-32px))] flex-col gap-2 border-t border-[#242d40] py-6 font-mono text-[10px] uppercase tracking-[0.1em] text-[#556176] sm:flex-row sm:items-center sm:justify-between">
         <p>WebProbe — audit et monitoring technique</p>
