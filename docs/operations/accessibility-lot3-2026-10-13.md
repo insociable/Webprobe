@@ -64,3 +64,16 @@ Les nouvelles couleurs affectent plusieurs écrans ; une comparaison visuelle de
 - `apps/web/src/components/workspace-nav-link.tsx`
 - `docs/operations/accessibility-lot3-2026-10-13.md`
 - `pnpm-lock.yaml`
+
+## Revue indépendante complémentaire
+
+- Les six sélecteurs CSS préexistants de texte atténué en thème clair avaient une spécificité supérieure au correctif générique. Ils utilisent désormais la variable --muted (5,98:1 sur fond blanc), au lieu de rapports de 1,90:1 à 3,75:1 sur fond blanc. Vérification sur pages privées encore nécessaire.
+- La navigation ne signale plus abusivement la rubrique Sites comme active depuis une page générale de l organisation ; test ajouté.
+
+### Validation indépendante (13 octobre 2026)
+
+- Relecture des 25 fichiers du candidat et correction des deux anomalies détaillées ci-dessus.
+- Nouvelle exécution de Prettier, lint et TypeScript ; build de production complet réussi avec secrets et services fictifs de compilation (aucun envoi d'e-mail, aucun scan externe).
+- Suite Web complète exécutée avec RUN_DB_INTEGRATION=1 après migrations sur une base PostgreSQL temporaire distincte de la préproduction : **49 fichiers, 175 tests réussis, 0 échec, 0 test ignoré**. Redis et SMTP dirigés vers des ports locaux inaccessibles ; la base temporaire a été supprimée.
+- Parcours Chromium relancés sur un serveur local du candidat : accueil et connexion, deux thèmes, quatre largeurs, lien d'évitement, clavier, tests axe aux deux largeurs extrêmes et OTP simulé ; succès.
+- À poursuivre : parcours authentifiés avec données de test, rapport partagé et impression, zoom 200 %/400 % et vérification manuelle par lecteur d'écran. Ces contrôles ne sont pas réputés réussis.

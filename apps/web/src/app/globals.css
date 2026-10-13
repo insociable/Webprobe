@@ -488,22 +488,22 @@ select {
     color: var(--text-65) !important;
   }
   html[data-theme="light"] [class~="text-white/55"] {
-    color: var(--text-55) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/50"] {
-    color: var(--text-50) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/45"] {
-    color: var(--text-45) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/40"] {
-    color: var(--text-40) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/35"] {
-    color: var(--text-35) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/30"] {
-    color: var(--text-30) !important;
+    color: var(--muted) !important;
   }
 
   html[data-theme="light"] [class~="text-[#e9edf6]"],

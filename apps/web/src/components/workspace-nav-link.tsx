@@ -16,7 +16,8 @@ export function WorkspaceNavLink({
   const pathname = usePathname() ?? "";
   const exact = pathname === href;
   const inSection =
-    (href === "/sites" && pathname.startsWith("/organizations/")) ||
+    (href === "/sites" &&
+      /^\/organizations\/[^/]+\/sites(?:\/|$)/.test(pathname)) ||
     pathname.startsWith(href + "/");
 
   return (

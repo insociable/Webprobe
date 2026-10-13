@@ -21,6 +21,13 @@ describe("workspace navigation", () => {
         <WorkspaceNavLink href="/sites">Sites</WorkspaceNavLink>,
       ),
     ).toContain('aria-current="location"');
+    currentPath = "/organizations/org";
+    expect(
+      renderToStaticMarkup(
+        <WorkspaceNavLink href="/sites">Sites</WorkspaceNavLink>,
+      ),
+    ).not.toContain("aria-current");
+
     expect(
       renderToStaticMarkup(
         <WorkspaceNavLink href="/guide">Guide</WorkspaceNavLink>,
