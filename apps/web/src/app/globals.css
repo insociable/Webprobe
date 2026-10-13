@@ -487,6 +487,13 @@ select {
   html[data-theme="light"] [class~="text-white/65"] {
     color: var(--text-65) !important;
   }
+  html[data-theme="light"] [class~="text-white/60"] {
+    color: var(--muted) !important;
+  }
+
+  html[data-theme="light"] .am-performance-coverage {
+    background-color: var(--surface-2) !important;
+  }
   html[data-theme="light"] [class~="text-white/55"] {
     color: var(--muted) !important;
   }
