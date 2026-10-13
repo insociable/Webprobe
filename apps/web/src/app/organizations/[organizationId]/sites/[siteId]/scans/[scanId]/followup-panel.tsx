@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { updateFindingFollowupAction } from "./followup-actions";
 
 const labels: Record<string, string> = {
@@ -53,14 +53,26 @@ export function FollowupPanel({
   events: Event[];
   canManage: boolean;
 }) {
+  const [note, setNote] = useState("");
   const [state, action, pending] = useActionState(
-    updateFindingFollowupAction.bind(
-      null,
-      organizationId,
-      siteId,
-      scanId,
-      fingerprint,
-    ),
+    async (
+      previousState: { error: string | null; saved: boolean },
+      formData: FormData,
+    ) => {
+      const result = await updateFindingFollowupAction(
+        organizationId,
+        siteId,
+        scanId,
+        fingerprint,
+        previousState,
+        formData,
+      );
+      if (result.saved) {
+        const submittedNote = formData.get("note");
+        setNote((current) => (current === submittedNote ? "" : current));
+      }
+      return result;
+    },
     { error: null, saved: false },
   );
   const [status, setStatus] = useState(followup?.status ?? "todo");
@@ -68,7 +80,6 @@ export function FollowupPanel({
   const [due, setDue] = useState(
     followup?.dueAt?.toISOString().slice(0, 10) ?? "",
   );
-  const [note, setNote] = useState("");
   const errorId = `followup-error-${fingerprint}`;
   const memberName = (id: string | null) =>
     members.find((member) => member.id === id)?.name ??
@@ -134,6 +145,12 @@ export function FollowupPanel({
         {canManage ? (
           <form
             action={action}
+            onSubmit={(event) => {
+              event.preventDefault();
+              const formData = new FormData(event.currentTarget);
+              // Avoid the native reset of controlled selects after an action response.
+              startTransition(() => action(formData));
+            }}
             className="grid gap-3 border-t border-[#303a50] pt-4 sm:grid-cols-2"
           >
             <label>
