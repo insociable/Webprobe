@@ -92,12 +92,16 @@ export default async function PublicReportPage({
         </div>
       </header>
 
-      <div className="report-print-scope mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14">
+      <div
+        id="contenu-principal"
+        tabIndex={-1}
+        className="report-print-scope mx-auto w-[min(1120px,calc(100%-32px))] py-10 lg:py-14"
+      >
         <section className="grid gap-8 border-b border-[#242d40] pb-10 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
             <p
-              className="font-mono text-[11px] font-semibold uppercase tracking-[0.16em]"
-              style={{ color: report.branding.accentColor }}
+              className="border-l-2 pl-3 font-mono text-sm font-semibold uppercase tracking-[0.12em] text-[#dfe5f2]"
+              style={{ borderColor: report.branding.accentColor }}
             >
               {report.branding.name}
             </p>

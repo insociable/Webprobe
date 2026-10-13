@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateFindingFollowupAction } from "./followup-actions";
 
 const labels: Record<string, string> = {
@@ -63,6 +63,13 @@ export function FollowupPanel({
     ),
     { error: null, saved: false },
   );
+  const [status, setStatus] = useState(followup?.status ?? "todo");
+  const [assignee, setAssignee] = useState(followup?.assigneeUserId ?? "");
+  const [due, setDue] = useState(
+    followup?.dueAt?.toISOString().slice(0, 10) ?? "",
+  );
+  const [note, setNote] = useState("");
+  const errorId = `followup-error-${fingerprint}`;
   const memberName = (id: string | null) =>
     members.find((member) => member.id === id)?.name ??
     "Système / membre retiré";
@@ -134,7 +141,16 @@ export function FollowupPanel({
               <select
                 name="status"
                 className="am-field mt-1"
-                defaultValue={followup?.status ?? "todo"}
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                aria-invalid={
+                  !!state.error && state.error.startsWith("Statut invalide")
+                }
+                aria-describedby={
+                  state.error?.startsWith("Statut invalide")
+                    ? errorId
+                    : undefined
+                }
               >
                 {Object.entries(labels).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -148,7 +164,16 @@ export function FollowupPanel({
               <select
                 name="assignee"
                 className="am-field mt-1"
-                defaultValue={followup?.assigneeUserId ?? ""}
+                value={assignee}
+                onChange={(event) => setAssignee(event.target.value)}
+                aria-invalid={
+                  !!state.error && state.error.startsWith("Responsable hors")
+                }
+                aria-describedby={
+                  state.error?.startsWith("Responsable hors")
+                    ? errorId
+                    : undefined
+                }
               >
                 <option value="">Non attribué</option>
                 {members.map((member) => (
@@ -164,7 +189,16 @@ export function FollowupPanel({
                 name="due"
                 type="date"
                 className="am-field mt-1"
-                defaultValue={followup?.dueAt?.toISOString().slice(0, 10) ?? ""}
+                value={due}
+                onChange={(event) => setDue(event.target.value)}
+                aria-invalid={
+                  !!state.error && state.error.startsWith("Échéance invalide")
+                }
+                aria-describedby={
+                  state.error?.startsWith("Échéance invalide")
+                    ? errorId
+                    : undefined
+                }
               />
             </label>
             <label className="sm:col-span-2">
@@ -172,6 +206,16 @@ export function FollowupPanel({
               <textarea
                 name="note"
                 maxLength={2000}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                aria-invalid={
+                  !!state.error && state.error.startsWith("Une justification")
+                }
+                aria-describedby={
+                  state.error?.startsWith("Une justification")
+                    ? errorId
+                    : undefined
+                }
                 className="am-field mt-1 min-h-20"
                 placeholder="Obligatoire pour « risque accepté »"
               />
@@ -180,7 +224,7 @@ export function FollowupPanel({
               Enregistrer le suivi
             </button>
             {state.error ? (
-              <p role="alert" className="text-red-200">
+              <p id={errorId} role="alert" className="text-red-200">
                 {state.error}
               </p>
             ) : state.saved ? (

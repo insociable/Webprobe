@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:a11y:smoke": "node scripts/accessibility-smoke.mjs"
   },
   "dependencies": {
     "@agency-saas/contracts": "workspace:*",
@@ -24,6 +25,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24.10.1",
     "@types/nodemailer": "8.0.2",
@@ -31,6 +33,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
+    "playwright": "1.63.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "5.0.1"

@@ -46,11 +46,11 @@ html[data-theme="light"] {
   --line: #d6deeb;
   --line-strong: #bcc8da;
   --foreground: #172033;
-  --muted: #66738a;
+  --muted: #56647c;
   --muted-strong: #44526a;
   --accent: #5264e8;
   --accent-strong: #4054df;
-  --signal: #087fa7;
+  --signal: #066f91;
   --success: #167c5a;
   --warning: #a85d09;
   --danger: #c2344a;
@@ -157,7 +157,7 @@ select {
   gap: 0.55rem;
   border: 1px solid rgba(141, 152, 255, 0.55);
   border-radius: 7px;
-  background: linear-gradient(135deg, #7280ff, #5968ed);
+  background: linear-gradient(135deg, #4b5bd8, #5264e8);
   padding: 0.68rem 1rem;
   color: #ffffff;
   font-size: 0.875rem;
@@ -167,7 +167,7 @@ select {
 
 .am-button-primary:hover {
   border-color: rgba(179, 187, 255, 0.85);
-  background: linear-gradient(135deg, #8290ff, #6876f6);
+  background: linear-gradient(135deg, #5264e8, #5a6ae2);
 }
 
 .am-button-secondary {
@@ -370,7 +370,7 @@ select {
 }
 
 .am-theme-choice {
-  min-height: 32px;
+  min-height: 42px;
   border-radius: 6px;
   padding: 0.35rem 0.55rem;
   color: var(--muted);
@@ -1036,5 +1036,86 @@ select {
 
   .report-action-plan {
     break-before: auto;
+  }
+}
+
+/* Keyboard entry, contrast and reflow for the existing interface. */
+.am-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  border: 2px solid var(--accent-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  padding: 0.75rem 1rem;
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.am-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent-strong) !important;
+  outline-offset: 3px;
+}
+
+@media screen {
+  [class~="text-white/55"],
+  [class~="text-white/50"],
+  [class~="text-white/45"],
+  [class~="text-white/40"],
+  [class~="text-white/35"],
+  [class~="text-white/30"] {
+    color: var(--muted) !important;
+  }
+
+  html[data-theme="dark"] [class~="text-[#59647a]"],
+  html[data-theme="dark"] [class~="text-[#56627a]"],
+  html[data-theme="dark"] [class~="text-[#58647a]"],
+  html[data-theme="dark"] [class~="text-[#556176]"],
+  html[data-theme="dark"] [class~="text-[#627087]"],
+  html[data-theme="dark"] [class~="text-[#657188]"] {
+    color: var(--muted) !important;
+  }
+
+  .am-content :is(h1, h2, h3, p, a),
+  .report-print-scope :is(h1, h2, h3, p, a) {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .am-skip-link {
+    display: none !important;
+  }
+}
+
+@media screen {
+  .am-rail nav a[aria-current],
+  .am-mobile-nav a[aria-current] {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.35em;
+  }
+
+  .am-rail nav a[aria-current] {
+    border-color: var(--accent-strong);
+    background: var(--surface-3);
   }
 }

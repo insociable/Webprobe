@@ -3,6 +3,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { WorkspaceAccountMenu } from "@/components/workspace-account-menu";
 import { ProductMark } from "@/components/product-mark";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { WorkspaceNavLink } from "@/components/workspace-nav-link";
 
 type TrailItem = {
   label: string;
@@ -39,14 +40,17 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
           </p>
           <nav className="mt-3 space-y-1" aria-label="Navigation principale">
             {navigation.map((item) => (
-              <Link
+              <WorkspaceNavLink
                 key={item.href}
                 href={item.href}
                 className="flex items-center gap-3 rounded-md border border-transparent px-3 py-2.5 text-sm text-[#aab5c9] transition hover:border-[#29344a] hover:bg-[#101622] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8793ff]"
               >
-                <span className={"size-1.5 rounded-sm " + item.tone} />
+                <span
+                  aria-hidden="true"
+                  className={"size-1.5 rounded-sm " + item.tone}
+                />
                 {item.label}
-              </Link>
+              </WorkspaceNavLink>
             ))}
           </nav>
         </div>
@@ -66,7 +70,10 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
           <Link href="/dashboard" className="lg:hidden">
             <ProductMark />
           </Link>
-          <div className="hidden min-w-0 items-center gap-2 text-xs text-[#738097] lg:flex">
+          <nav
+            aria-label="Fil d’Ariane"
+            className="hidden min-w-0 items-center gap-2 text-xs text-[#738097] lg:flex"
+          >
             <span className="font-mono uppercase tracking-[0.12em]">
               Portail
             </span>
@@ -75,7 +82,9 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
                 key={item.label}
                 className="flex min-w-0 items-center gap-2"
               >
-                <span className="text-[#3f4b61]">/</span>
+                <span aria-hidden="true" className="text-[#3f4b61]">
+                  /
+                </span>
                 {item.href ? (
                   <Link
                     href={item.href}
@@ -84,13 +93,16 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
                     {item.label}
                   </Link>
                 ) : (
-                  <span className="max-w-48 truncate text-[#aab5c9]">
+                  <span
+                    aria-current="page"
+                    className="max-w-48 truncate text-[#aab5c9]"
+                  >
                     {item.label}
                   </span>
                 )}
               </span>
             ))}
-          </div>
+          </nav>
           <div className="flex items-center gap-3">
             <div className="lg:hidden">
               <ThemeToggle compact />
@@ -106,12 +118,38 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
         </header>
         <nav aria-label="Navigation mobile" className="am-mobile-nav lg:hidden">
           {navigation.map((item) => (
-            <Link key={item.href} href={item.href}>
+            <WorkspaceNavLink key={item.href} href={item.href}>
               {item.label}
-            </Link>
+            </WorkspaceNavLink>
           ))}
         </nav>
-        <main className="am-content">{children}</main>
+        {trail.length > 0 ? (
+          <nav
+            aria-label="Fil d’Ariane"
+            className="border-b border-[#242d40] px-4 py-2 text-xs text-[#aab5c9] lg:hidden"
+          >
+            <ol className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <li>
+                <Link href="/dashboard">Portail</Link>
+              </li>
+              {trail.map((item) => (
+                <li key={item.label} className="min-w-0 break-words">
+                  <span aria-hidden="true" className="mr-2">
+                    /
+                  </span>
+                  {item.href ? (
+                    <Link href={item.href}>{item.label}</Link>
+                  ) : (
+                    <span aria-current="page">{item.label}</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </nav>
+        ) : null}
+        <main id="contenu-principal" tabIndex={-1} className="am-content">
+          {children}
+        </main>
       </div>
     </div>
   );

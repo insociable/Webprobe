@@ -62,7 +62,11 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-12 py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24">
+      <section
+        id="contenu-principal"
+        tabIndex={-1}
+        className="mx-auto grid w-[min(1240px,calc(100%-32px))] gap-12 py-16 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-24"
+      >
         <div>
           <p className="am-kicker">Audit et monitoring web</p>
           <h1 className="mt-6 max-w-4xl text-5xl font-semibold leading-[0.96] tracking-[-0.055em] text-[#f7f9ff] sm:text-6xl lg:text-[4.9rem]">
