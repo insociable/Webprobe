@@ -248,6 +248,23 @@ select {
   backdrop-filter: blur(16px);
 }
 
+@media (max-width: 639px) {
+  .am-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .am-topbar-brand,
+  .am-topbar-actions {
+    width: 100%;
+  }
+
+  .am-topbar-actions {
+    justify-content: space-between;
+  }
+}
+
 .am-content {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
@@ -486,6 +503,18 @@ select {
   }
   html[data-theme="light"] [class~="text-white/65"] {
     color: var(--text-65) !important;
+  }
+  html[data-theme="light"] [class~="text-white/60"] {
+    color: var(--muted) !important;
+  }
+
+  html[data-theme="light"] .am-performance-coverage {
+    background-color: var(--surface-2) !important;
+  }
+
+  html[data-theme="light"] .report-finding-card [class~="bg-black/15"],
+  html[data-theme="light"] .am-followup-panel {
+    background-color: var(--surface-2) !important;
   }
   html[data-theme="light"] [class~="text-white/55"] {
     color: var(--muted) !important;
@@ -856,6 +885,7 @@ select {
   }
 
   :is(.am-content, .report-print-scope) .report-finding-card {
+    /* Longer findings may span sheets; avoid splitting their semantic blocks. */
     break-inside: auto !important;
     page-break-inside: auto !important;
     border: 1px solid #cbd5e1 !important;
@@ -865,9 +895,21 @@ select {
     padding: 5mm !important;
   }
 
+  :is(.am-content, .report-print-scope) .report-finding-card > .grid,
+  :is(.am-content, .report-print-scope) .report-finding-card > dl {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  /* The interactive follow-up summary must remain legible in print.
+     Its screen theme color is intentionally much lighter. */
+  :is(.am-content, .report-print-scope) .am-followup-panel > summary {
+    color: #27316f !important;
+  }
+
   :is(.am-content, .report-print-scope) .report-remediation {
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
     border: 1px solid #d8daf8 !important;
     border-left: 3px solid #6d7cff !important;
     border-radius: 4px !important;

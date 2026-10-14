@@ -67,7 +67,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
 
       <div className="am-workspace-main">
         <header className="am-topbar">
-          <Link href="/dashboard" className="lg:hidden">
+          <Link href="/dashboard" className="am-topbar-brand lg:hidden">
             <ProductMark />
           </Link>
           <nav
@@ -77,7 +77,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
             <span className="font-mono uppercase tracking-[0.12em]">
               Portail
             </span>
-            {trail.map((item) => (
+            {trail.map((item, index) => (
               <span
                 key={item.label}
                 className="flex min-w-0 items-center gap-2"
@@ -88,13 +88,18 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
                 {item.href ? (
                   <Link
                     href={item.href}
+                    aria-current={
+                      index === trail.length - 1 ? "page" : undefined
+                    }
                     className="max-w-48 truncate text-[#aab5c9] hover:text-white"
                   >
                     {item.label}
                   </Link>
                 ) : (
                   <span
-                    aria-current="page"
+                    aria-current={
+                      index === trail.length - 1 ? "page" : undefined
+                    }
                     className="max-w-48 truncate text-[#aab5c9]"
                   >
                     {item.label}
@@ -103,7 +108,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
               </span>
             ))}
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="am-topbar-actions flex items-center gap-3">
             <div className="lg:hidden">
               <ThemeToggle compact />
             </div>
@@ -132,15 +137,28 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
               <li>
                 <Link href="/dashboard">Portail</Link>
               </li>
-              {trail.map((item) => (
+              {trail.map((item, index) => (
                 <li key={item.label} className="min-w-0 break-words">
                   <span aria-hidden="true" className="mr-2">
                     /
                   </span>
                   {item.href ? (
-                    <Link href={item.href}>{item.label}</Link>
+                    <Link
+                      href={item.href}
+                      aria-current={
+                        index === trail.length - 1 ? "page" : undefined
+                      }
+                    >
+                      {item.label}
+                    </Link>
                   ) : (
-                    <span aria-current="page">{item.label}</span>
+                    <span
+                      aria-current={
+                        index === trail.length - 1 ? "page" : undefined
+                      }
+                    >
+                      {item.label}
+                    </span>
                   )}
                 </li>
               ))}

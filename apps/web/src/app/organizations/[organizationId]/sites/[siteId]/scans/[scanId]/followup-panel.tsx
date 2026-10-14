@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useRef, useState } from "react";
 import { updateFindingFollowupAction } from "./followup-actions";
 
 const labels: Record<string, string> = {
@@ -53,14 +53,40 @@ export function FollowupPanel({
   events: Event[];
   canManage: boolean;
 }) {
+  const [note, setNote] = useState("");
+  const noteRevision = useRef(0);
+  const submittedRevision = useRef<number | null>(null);
+  const submitting = useRef(false);
   const [state, action, pending] = useActionState(
-    updateFindingFollowupAction.bind(
-      null,
-      organizationId,
-      siteId,
-      scanId,
-      fingerprint,
-    ),
+    async (
+      previousState: { error: string | null; saved: boolean },
+      formData: FormData,
+    ) => {
+      let result: { error: string | null; saved: boolean };
+      try {
+        result = await updateFindingFollowupAction(
+          organizationId,
+          siteId,
+          scanId,
+          fingerprint,
+          previousState,
+          formData,
+        );
+      } catch {
+        result = {
+          error:
+            "Mise à jour impossible. Vérifiez votre connexion et réessayez.",
+          saved: false,
+        };
+      }
+      if (result.saved && noteRevision.current === submittedRevision.current) {
+        noteRevision.current += 1;
+        setNote("");
+      }
+      submittedRevision.current = null;
+      submitting.current = false;
+      return result;
+    },
     { error: null, saved: false },
   );
   const [status, setStatus] = useState(followup?.status ?? "todo");
@@ -68,7 +94,6 @@ export function FollowupPanel({
   const [due, setDue] = useState(
     followup?.dueAt?.toISOString().slice(0, 10) ?? "",
   );
-  const [note, setNote] = useState("");
   const errorId = `followup-error-${fingerprint}`;
   const memberName = (id: string | null) =>
     members.find((member) => member.id === id)?.name ??
@@ -80,7 +105,7 @@ export function FollowupPanel({
       timeZone: "Europe/Paris",
     }).format(date);
   return (
-    <details className="mt-5 rounded-lg border border-[#303a50] bg-[#101724] p-4">
+    <details className="am-followup-panel mt-5 rounded-lg border border-[#303a50] bg-[#101724] p-4">
       <summary className="cursor-pointer font-semibold text-[#aab2ff]">
         Suivi de remédiation · {labels[followup?.status ?? "todo"]}
       </summary>
@@ -134,6 +159,16 @@ export function FollowupPanel({
         {canManage ? (
           <form
             action={action}
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (submitting.current || pending) return;
+              submitting.current = true;
+              submittedRevision.current = noteRevision.current;
+              const formData = new FormData(event.currentTarget);
+              // Dispatch without the native form reset; keep drafts on refusal.
+              startTransition(() => action(formData));
+            }}
+            aria-busy={pending}
             className="grid gap-3 border-t border-[#303a50] pt-4 sm:grid-cols-2"
           >
             <label>
@@ -207,7 +242,10 @@ export function FollowupPanel({
                 name="note"
                 maxLength={2000}
                 value={note}
-                onChange={(event) => setNote(event.target.value)}
+                onChange={(event) => {
+                  noteRevision.current += 1;
+                  setNote(event.target.value);
+                }}
                 aria-invalid={
                   !!state.error && state.error.startsWith("Une justification")
                 }
@@ -221,7 +259,7 @@ export function FollowupPanel({
               />
             </label>
             <button disabled={pending} className="am-button-secondary w-fit">
-              Enregistrer le suivi
+              {pending ? "Enregistrement…" : "Enregistrer le suivi"}
             </button>
             {state.error ? (
               <p id={errorId} role="alert" className="text-red-200">
