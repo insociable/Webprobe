@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createInitialOrganizationAction,
   type OnboardingActionState,
@@ -17,6 +17,7 @@ export function OrganizationForm({
     createInitialOrganizationAction,
     initialState,
   );
+  const [displayName, setDisplayName] = useState(initialDisplayName);
 
   return (
     <form action={formAction} className="mt-8 space-y-5">
@@ -30,11 +31,21 @@ export function OrganizationForm({
           minLength={2}
           maxLength={80}
           name="displayName"
-          defaultValue={initialDisplayName}
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          aria-invalid={!!state.error && state.error.startsWith("Le nom")}
+          aria-describedby={
+            state.error
+              ? "onboarding-name-help onboarding-form-error"
+              : "onboarding-name-help"
+          }
           placeholder="Alex Martin"
           className="am-field"
         />
-        <span className="mt-2 block text-xs leading-5 text-white/35">
+        <span
+          id="onboarding-name-help"
+          className="mt-2 block text-xs leading-5 text-white/35"
+        >
           Utilisé dans l’interface. Vous pourrez le modifier ensuite.
         </span>
       </label>
@@ -48,7 +59,8 @@ export function OrganizationForm({
 
       {state.error ? (
         <p
-          aria-live="polite"
+          id="onboarding-form-error"
+          role="alert"
           className="rounded-xl border border-red-300/20 bg-red-300/[0.06] px-4 py-3 text-sm text-red-100"
         >
           {state.error}

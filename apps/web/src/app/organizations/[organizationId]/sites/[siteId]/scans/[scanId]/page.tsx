@@ -300,7 +300,7 @@ export default async function ScanPage({
         },
       ]}
     >
-      <ScanStatusRefresher active={pending} />
+      <ScanStatusRefresher active={pending} status={details.scan.status} />
 
       <div className="print-only am-print-brand" aria-hidden="true">
         <div>
@@ -392,12 +392,14 @@ export default async function ScanPage({
 
         {pending ? (
           <div
-            aria-live="polite"
             aria-busy="true"
             className="mt-6 border-l-2 border-[#39c7ff] bg-[#0b141d] p-5"
           >
             <div className="flex items-center gap-3">
-              <span className="size-2.5 animate-pulse rounded-sm bg-[#39c7ff]" />
+              <span
+                aria-hidden="true"
+                className="size-2.5 animate-pulse rounded-sm bg-[#39c7ff]"
+              />
               <p className="font-semibold text-[#dff7ff]">
                 {details.scan.status === "queued"
                   ? "Scan en attente de démarrage"

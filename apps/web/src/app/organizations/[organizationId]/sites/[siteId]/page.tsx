@@ -208,7 +208,10 @@ export default async function SitePage({
 
   return (
     <WorkspaceShell trail={[{ label: history.site.name }]}>
-      <ScanStatusRefresher active={activeScan} />
+      <ScanStatusRefresher
+        active={activeScan}
+        status={activeScanEntry?.status ?? latestScan?.status ?? "none"}
+      />
 
       <section className="grid gap-7 border-b border-[#242d40] pb-9 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>

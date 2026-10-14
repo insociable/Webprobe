@@ -81,7 +81,7 @@ export function PerformanceReport({ observation }: { observation: unknown }) {
         .
       </p>
       {partial ? (
-        <div className="rounded-md border border-[#303a50] bg-[#111827]/50 p-3">
+        <div className="am-performance-coverage rounded-md border border-[#303a50] bg-[#111827]/50 p-3">
           <p className="text-sm font-medium text-white/80">
             Mesures partielles
           </p>

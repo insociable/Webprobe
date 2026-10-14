@@ -46,11 +46,11 @@ html[data-theme="light"] {
   --line: #d6deeb;
   --line-strong: #bcc8da;
   --foreground: #172033;
-  --muted: #66738a;
+  --muted: #56647c;
   --muted-strong: #44526a;
   --accent: #5264e8;
   --accent-strong: #4054df;
-  --signal: #087fa7;
+  --signal: #066f91;
   --success: #167c5a;
   --warning: #a85d09;
   --danger: #c2344a;
@@ -157,7 +157,7 @@ select {
   gap: 0.55rem;
   border: 1px solid rgba(141, 152, 255, 0.55);
   border-radius: 7px;
-  background: linear-gradient(135deg, #7280ff, #5968ed);
+  background: linear-gradient(135deg, #4b5bd8, #5264e8);
   padding: 0.68rem 1rem;
   color: #ffffff;
   font-size: 0.875rem;
@@ -167,7 +167,7 @@ select {
 
 .am-button-primary:hover {
   border-color: rgba(179, 187, 255, 0.85);
-  background: linear-gradient(135deg, #8290ff, #6876f6);
+  background: linear-gradient(135deg, #5264e8, #5a6ae2);
 }
 
 .am-button-secondary {
@@ -246,6 +246,23 @@ select {
   background: var(--chrome-soft);
   padding: 0 24px;
   backdrop-filter: blur(16px);
+}
+
+@media (max-width: 639px) {
+  .am-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .am-topbar-brand,
+  .am-topbar-actions {
+    width: 100%;
+  }
+
+  .am-topbar-actions {
+    justify-content: space-between;
+  }
 }
 
 .am-content {
@@ -370,7 +387,7 @@ select {
 }
 
 .am-theme-choice {
-  min-height: 32px;
+  min-height: 42px;
   border-radius: 6px;
   padding: 0.35rem 0.55rem;
   color: var(--muted);
@@ -487,23 +504,35 @@ select {
   html[data-theme="light"] [class~="text-white/65"] {
     color: var(--text-65) !important;
   }
+  html[data-theme="light"] [class~="text-white/60"] {
+    color: var(--muted) !important;
+  }
+
+  html[data-theme="light"] .am-performance-coverage {
+    background-color: var(--surface-2) !important;
+  }
+
+  html[data-theme="light"] .report-finding-card [class~="bg-black/15"],
+  html[data-theme="light"] .am-followup-panel {
+    background-color: var(--surface-2) !important;
+  }
   html[data-theme="light"] [class~="text-white/55"] {
-    color: var(--text-55) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/50"] {
-    color: var(--text-50) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/45"] {
-    color: var(--text-45) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/40"] {
-    color: var(--text-40) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/35"] {
-    color: var(--text-35) !important;
+    color: var(--muted) !important;
   }
   html[data-theme="light"] [class~="text-white/30"] {
-    color: var(--text-30) !important;
+    color: var(--muted) !important;
   }
 
   html[data-theme="light"] [class~="text-[#e9edf6]"],
@@ -856,6 +885,7 @@ select {
   }
 
   :is(.am-content, .report-print-scope) .report-finding-card {
+    /* Longer findings may span sheets; avoid splitting their semantic blocks. */
     break-inside: auto !important;
     page-break-inside: auto !important;
     border: 1px solid #cbd5e1 !important;
@@ -865,9 +895,21 @@ select {
     padding: 5mm !important;
   }
 
+  :is(.am-content, .report-print-scope) .report-finding-card > .grid,
+  :is(.am-content, .report-print-scope) .report-finding-card > dl {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  /* The interactive follow-up summary must remain legible in print.
+     Its screen theme color is intentionally much lighter. */
+  :is(.am-content, .report-print-scope) .am-followup-panel > summary {
+    color: #27316f !important;
+  }
+
   :is(.am-content, .report-print-scope) .report-remediation {
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
     border: 1px solid #d8daf8 !important;
     border-left: 3px solid #6d7cff !important;
     border-radius: 4px !important;
@@ -1036,5 +1078,86 @@ select {
 
   .report-action-plan {
     break-before: auto;
+  }
+}
+
+/* Keyboard entry, contrast and reflow for the existing interface. */
+.am-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  border: 2px solid var(--accent-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  padding: 0.75rem 1rem;
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.am-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--accent-strong) !important;
+  outline-offset: 3px;
+}
+
+@media screen {
+  [class~="text-white/55"],
+  [class~="text-white/50"],
+  [class~="text-white/45"],
+  [class~="text-white/40"],
+  [class~="text-white/35"],
+  [class~="text-white/30"] {
+    color: var(--muted) !important;
+  }
+
+  html[data-theme="dark"] [class~="text-[#59647a]"],
+  html[data-theme="dark"] [class~="text-[#56627a]"],
+  html[data-theme="dark"] [class~="text-[#58647a]"],
+  html[data-theme="dark"] [class~="text-[#556176]"],
+  html[data-theme="dark"] [class~="text-[#627087]"],
+  html[data-theme="dark"] [class~="text-[#657188]"] {
+    color: var(--muted) !important;
+  }
+
+  .am-content :is(h1, h2, h3, p, a),
+  .report-print-scope :is(h1, h2, h3, p, a) {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .am-skip-link {
+    display: none !important;
+  }
+}
+
+@media screen {
+  .am-rail nav a[aria-current],
+  .am-mobile-nav a[aria-current] {
+    color: var(--foreground);
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.35em;
+  }
+
+  .am-rail nav a[aria-current] {
+    border-color: var(--accent-strong);
+    background: var(--surface-3);
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { createSiteAction, type CreateSiteActionState } from "./actions";
 
 const initialState: CreateSiteActionState = { error: null };
@@ -8,6 +8,8 @@ const initialState: CreateSiteActionState = { error: null };
 export function SiteForm({ organizationId }: { organizationId: string }) {
   const action = createSiteAction.bind(null, organizationId);
   const [state, formAction, pending] = useActionState(action, initialState);
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
 
   return (
     <form action={formAction} className="mt-7 space-y-5">
@@ -20,10 +22,19 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
           required
           inputMode="url"
           name="canonicalUrl"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          aria-invalid={!!state.error && /URL|site existe/i.test(state.error)}
+          aria-describedby={
+            state.error ? "site-url-help site-form-error" : "site-url-help"
+          }
           placeholder="https://entreprise.example"
           className="am-field text-base"
         />
-        <span className="mt-2 block text-xs leading-5 text-white/35">
+        <span
+          id="site-url-help"
+          className="mt-2 block text-xs leading-5 text-white/35"
+        >
           Analyse non intrusive des éléments publiquement accessibles.
         </span>
       </label>
@@ -41,6 +52,8 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
               minLength={2}
               maxLength={160}
               name="name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
               placeholder="Par défaut : nom de domaine"
               className="am-field"
             />
@@ -62,7 +75,8 @@ export function SiteForm({ organizationId }: { organizationId: string }) {
 
       {state.error ? (
         <p
-          aria-live="polite"
+          id="site-form-error"
+          role="alert"
           className="rounded-lg border border-red-300/20 bg-red-300/[0.06] px-4 py-3 text-sm text-red-100"
         >
           {state.error}

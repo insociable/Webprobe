@@ -39,6 +39,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
       className={
         "am-theme-toggle " + (compact ? "am-theme-toggle-compact" : "")
       }
+      role="group"
       aria-label="Thème de l’interface"
     >
       <button
@@ -47,7 +48,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         onClick={() => choose("dark")}
         className="am-theme-choice"
       >
-        Dark
+        Sombre
       </button>
       <button
         type="button"
@@ -55,7 +56,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         onClick={() => choose("light")}
         className="am-theme-choice"
       >
-        Light
+        Clair
       </button>
     </div>
   );

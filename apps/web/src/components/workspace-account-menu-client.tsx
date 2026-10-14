@@ -57,12 +57,18 @@ export function WorkspaceAccountMenuClient({
       </summary>
 
       <div className="mt-2 rounded-lg border border-[#2a354d] bg-[#0b1019] p-3 shadow-2xl">
-        <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#59647a]">
+        <label
+          htmlFor="display-name-input"
+          className="block font-mono text-xs uppercase tracking-[0.14em] text-[#aab5c9]"
+        >
           Nom affiché
-        </p>
+        </label>
         <form action={formAction} className="mt-2 space-y-2">
           <input
+            id="display-name-input"
             name="displayName"
+            aria-invalid={!!state.error}
+            aria-describedby={state.error ? "display-name-error" : undefined}
             required
             minLength={2}
             maxLength={80}
@@ -79,12 +85,16 @@ export function WorkspaceAccountMenuClient({
         </form>
 
         {state.error ? (
-          <p aria-live="polite" className="mt-2 text-[11px] text-amber-200">
+          <p
+            id="display-name-error"
+            role="alert"
+            className="mt-2 text-sm text-amber-200"
+          >
             {state.error}
           </p>
         ) : null}
         {state.message ? (
-          <p aria-live="polite" className="mt-2 text-[11px] text-emerald-200">
+          <p role="status" className="mt-2 text-sm text-emerald-200">
             {state.message}
           </p>
         ) : null}

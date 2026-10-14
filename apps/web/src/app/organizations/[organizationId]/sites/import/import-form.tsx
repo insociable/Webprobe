@@ -36,20 +36,26 @@ export function ImportForm({ organizationId }: { organizationId: string }) {
             name="file"
             accept=".csv,text/csv"
             required
+            aria-invalid={
+              !!state.error && /CSV|fichier|Guillemet/i.test(state.error)
+            }
+            aria-describedby={
+              state.error ? "csv-instructions csv-error" : "csv-instructions"
+            }
           />
         </label>
-        <p className="text-xs leading-5 text-[#8793a8]">
+        <p id="csv-instructions" className="text-xs leading-5 text-[#8793a8]">
           Modèle : première ligne <code>url,name</code>, puis une URL HTTP(S)
           par ligne et un nom facultatif. Exemple :{" "}
           <code>https://exemple.fr,Site principal</code>. 500 lignes et 512 Ko
           maximum. Aucun scan ni suivi n’est lancé par cet import.
         </p>
         <button className="am-button-primary" disabled={pending}>
-          Prévisualiser
+          {pending ? "Prévisualisation…" : "Prévisualiser"}
         </button>
       </form>
       {state.error && (
-        <p role="alert" className="text-sm text-red-200">
+        <p id="csv-error" role="alert" className="text-sm text-red-200">
           {state.error}
         </p>
       )}
@@ -65,14 +71,30 @@ export function ImportForm({ organizationId }: { organizationId: string }) {
           <p className="mt-2 text-sm text-[#8793a8]">
             {ready} à importer · {state.rows.length - ready} ignorée(s)
           </p>
-          <div className="mt-5 max-h-[34rem] overflow-auto">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Aperçu CSV, défilement horizontal possible"
+            className="mt-5 max-h-[34rem] overflow-auto"
+          >
             <table className="w-full min-w-[38rem] text-left text-sm">
+              <caption className="sr-only">
+                Lignes du fichier CSV et décision d’import
+              </caption>
               <thead>
                 <tr className="border-b border-[#303a50]">
-                  <th className="p-2">Ligne</th>
-                  <th className="p-2">URL</th>
-                  <th className="p-2">Nom</th>
-                  <th className="p-2">Décision</th>
+                  <th scope="col" className="p-2">
+                    Ligne
+                  </th>
+                  <th scope="col" className="p-2">
+                    URL
+                  </th>
+                  <th scope="col" className="p-2">
+                    Nom
+                  </th>
+                  <th scope="col" className="p-2">
+                    Décision
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -109,7 +131,9 @@ export function ImportForm({ organizationId }: { organizationId: string }) {
               className="am-button-primary"
               disabled={pending || invalid || ready === 0}
             >
-              Confirmer l’ajout de {ready} site(s)
+              {pending
+                ? "Enregistrement…"
+                : `Confirmer l’ajout de ${ready} site(s)`}
             </button>
           </form>
         </section>

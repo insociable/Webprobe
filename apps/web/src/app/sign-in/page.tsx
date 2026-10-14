@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ProductMark } from "@/components/product-mark";
@@ -14,7 +14,17 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageKind, setMessageKind] = useState<"error" | "status">("status");
   const [pending, setPending] = useState(false);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const otpInputRef = useRef<HTMLInputElement>(null);
+  const previousStep = useRef(step);
+
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    (step === "otp" ? otpInputRef : emailInputRef).current?.focus();
+  }, [step]);
 
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -30,12 +40,14 @@ export default function SignInPage() {
     setPending(false);
 
     if (error) {
+      setMessageKind("error");
       setMessage("Impossible d’envoyer le code pour le moment.");
       return;
     }
 
     setEmail(normalizedEmail);
     setStep("otp");
+    setMessageKind("status");
     setMessage("Un code à 6 chiffres vient de vous être envoyé.");
   }
 
@@ -52,6 +64,7 @@ export default function SignInPage() {
     setPending(false);
 
     if (error) {
+      setMessageKind("error");
       setMessage("Code invalide ou expiré.");
       return;
     }
@@ -68,9 +81,9 @@ export default function SignInPage() {
         </Link>
         <div className="my-auto max-w-xl py-16">
           <p className="am-kicker">Accès sécurisé</p>
-          <h1 className="mt-5 text-5xl font-semibold leading-[1.02] tracking-[-0.05em]">
+          <p className="mt-5 text-5xl font-semibold leading-[1.02] tracking-[-0.05em]">
             Reprenez le contrôle de votre parc web.
-          </h1>
+          </p>
           <p className="mt-6 text-lg leading-8 text-[#8995aa]">
             Une session suffit pour retrouver vos sites, les scans en cours, les
             régressions et les rapports à partager.
@@ -97,18 +110,25 @@ export default function SignInPage() {
         </p>
       </section>
 
-      <section className="grid place-items-center px-6 py-10">
+      <section
+        id="contenu-principal"
+        tabIndex={-1}
+        className="grid place-items-center px-6 py-10"
+      >
         <div className="w-full max-w-md">
           <Link href="/" className="mb-12 inline-flex lg:hidden">
             <ProductMark />
           </Link>
           <p className="am-kicker">Connexion à WebProbe</p>
-          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
+          <h1 className="mt-4 text-3xl font-semibold tracking-[-0.035em]">
             {step === "email"
               ? "Connexion ou création de compte"
               : "Vérifiez votre e-mail"}
-          </h2>
-          <p className="mt-3 leading-7 text-[#8793a8]">
+          </h1>
+          <p
+            id={step === "otp" ? "otp-instructions" : undefined}
+            className="mt-3 leading-7 text-[#8793a8]"
+          >
             {step === "email"
               ? "Saisissez votre adresse e-mail. WebProbe utilise une connexion sans mot de passe : un code temporaire à usage unique vous est envoyé à chaque connexion."
               : "Entrez le code à 6 chiffres reçu par e-mail."}
@@ -133,8 +153,12 @@ export default function SignInPage() {
                   Adresse e-mail
                 </span>
                 <input
+                  ref={emailInputRef}
                   autoComplete="email"
-                  autoFocus
+                  aria-invalid={messageKind === "error" && !!message}
+                  aria-describedby={
+                    message && step === "email" ? "signin-feedback" : undefined
+                  }
                   required
                   type="email"
                   value={email}
@@ -160,8 +184,14 @@ export default function SignInPage() {
                   Code à 6 chiffres
                 </span>
                 <input
+                  ref={otpInputRef}
                   autoComplete="one-time-code"
-                  autoFocus
+                  aria-invalid={messageKind === "error" && !!message}
+                  aria-describedby={
+                    message
+                      ? "otp-instructions signin-feedback"
+                      : "otp-instructions"
+                  }
                   inputMode="numeric"
                   maxLength={6}
                   minLength={6}
@@ -198,7 +228,8 @@ export default function SignInPage() {
 
           {message ? (
             <p
-              aria-live="polite"
+              id="signin-feedback"
+              role={messageKind === "error" ? "alert" : "status"}
               className="mt-5 border-l-2 border-[#6d7cff] bg-[#0f1421] px-4 py-3 text-sm text-[#aab5c9]"
             >
               {message}

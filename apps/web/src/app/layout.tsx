@@ -58,7 +58,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <a className="am-skip-link" href="#contenu-principal">
+          Aller au contenu principal
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

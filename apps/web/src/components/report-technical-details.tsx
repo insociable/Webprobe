@@ -9,7 +9,7 @@ export function ReportTechnicalDetails({ summary }: { summary: unknown }) {
       <details className="rounded-lg border border-[#242d40] bg-[#0a0f18]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.13em] text-[#647188]">
+            <p className="font-mono text-[10px] uppercase tracking-[0.13em] text-[#8d98ad]">
               Niveau technique
             </p>
             <h2 className="mt-1 text-lg font-semibold">Détails techniques</h2>
@@ -52,7 +52,7 @@ export function ReportTechnicalDetails({ summary }: { summary: unknown }) {
                   ["Valide jusqu’au", details.http.tls.validTo],
                 ].map(([label, value]) => (
                   <div key={label} className="border-t border-[#242d40] pt-3">
-                    <dt className="text-xs text-[#647188]">{label}</dt>
+                    <dt className="text-xs text-[#8d98ad]">{label}</dt>
                     <dd className="mt-1 break-all text-sm text-[#b7c0d1]">
                       {value ?? "Non disponible"}
                     </dd>
@@ -64,7 +64,7 @@ export function ReportTechnicalDetails({ summary }: { summary: unknown }) {
 
           <div className="mt-7">
             <h3 className="font-semibold">Headers HTTP</h3>
-            <p className="mt-2 max-w-3xl text-xs leading-5 text-[#647188]">
+            <p className="mt-2 max-w-3xl text-xs leading-5 text-[#8d98ad]">
               Seuls les headers explicitement autorisés pour le rapport sont
               affichés. Cookies, Authorization, credentials et paramètres de
               requête ne sont jamais exposés ici.
