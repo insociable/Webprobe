@@ -67,7 +67,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
 
       <div className="am-workspace-main">
         <header className="am-topbar">
-          <Link href="/dashboard" className="lg:hidden">
+          <Link href="/dashboard" className="am-topbar-brand lg:hidden">
             <ProductMark />
           </Link>
           <nav
@@ -108,7 +108,7 @@ export function WorkspaceShell({ children, trail = [] }: WorkspaceShellProps) {
               </span>
             ))}
           </nav>
-          <div className="flex items-center gap-3">
+          <div className="am-topbar-actions flex items-center gap-3">
             <div className="lg:hidden">
               <ThemeToggle compact />
             </div>

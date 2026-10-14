@@ -248,6 +248,23 @@ select {
   backdrop-filter: blur(16px);
 }
 
+@media (max-width: 639px) {
+  .am-topbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .am-topbar-brand,
+  .am-topbar-actions {
+    width: 100%;
+  }
+
+  .am-topbar-actions {
+    justify-content: space-between;
+  }
+}
+
 .am-content {
   width: min(1180px, calc(100% - 32px));
   margin: 0 auto;
@@ -492,6 +509,11 @@ select {
   }
 
   html[data-theme="light"] .am-performance-coverage {
+    background-color: var(--surface-2) !important;
+  }
+
+  html[data-theme="light"] .report-finding-card [class~="bg-black/15"],
+  html[data-theme="light"] .am-followup-panel {
     background-color: var(--surface-2) !important;
   }
   html[data-theme="light"] [class~="text-white/55"] {

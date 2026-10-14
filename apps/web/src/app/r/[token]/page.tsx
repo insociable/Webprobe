@@ -86,7 +86,7 @@ export default async function PublicReportPage({
       <header className="border-b border-[#242d40] bg-[#090c13]/90">
         <div className="mx-auto flex w-[min(1120px,calc(100%-32px))] items-center justify-between py-5">
           <ProductMark />
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#647188]">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#8d98ad]">
             Rapport partagé · lecture seule
           </span>
         </div>
@@ -191,13 +191,13 @@ export default async function PublicReportPage({
                     </p>
                     <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs">
                       <div>
-                        <dt className="text-[#647188]">Intervention</dt>
+                        <dt className="text-[#8d98ad]">Intervention</dt>
                         <dd className="mt-1 text-[#b8c1d0]">
                           {businessContext.intervention}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-[#647188]">Effort estimé</dt>
+                        <dt className="text-[#8d98ad]">Effort estimé</dt>
                         <dd className="mt-1 text-[#b8c1d0]">
                           {businessContext.effort}
                         </dd>
@@ -239,7 +239,7 @@ export default async function PublicReportPage({
                   key={label}
                   className="border-b border-[#242d40] p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"
                 >
-                  <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#647188]">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#8d98ad]">
                     {label}
                   </p>
                   <p className="mt-2 text-xl font-semibold">{value}</p>
@@ -282,7 +282,7 @@ export default async function PublicReportPage({
               <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em]">
                 Problèmes distincts
               </h2>
-              <p className="mt-2 text-sm text-[#6f7b91]">
+              <p className="mt-2 text-sm text-[#8d98ad]">
                 {findingGroups.length} problème
                 {findingGroups.length > 1 ? "s" : ""} distinct
                 {findingGroups.length > 1 ? "s" : ""} · {findings.length}{" "}
@@ -318,7 +318,7 @@ export default async function PublicReportPage({
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <div>
-                        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#647188]">
+                        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#8d98ad]">
                           {finding.category}
                         </p>
                         <h3 className="mt-2 font-semibold">
@@ -330,7 +330,7 @@ export default async function PublicReportPage({
                             pageUrls={group.pageUrls}
                           />
                         ) : finding.pageUrl ? (
-                          <p className="mt-2 break-all text-sm text-[#6f7b91]">
+                          <p className="mt-2 break-all text-sm text-[#8d98ad]">
                             {finding.pageUrl}
                           </p>
                         ) : null}
@@ -348,7 +348,7 @@ export default async function PublicReportPage({
 
                     <dl className="mt-5 grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
                       <div className="bg-black/15 px-4 py-3">
-                        <dt className="text-xs text-[#647188]">
+                        <dt className="text-xs text-[#8d98ad]">
                           Impact concret
                         </dt>
                         <dd className="mt-1 text-sm leading-6 text-[#aeb7c8]">
@@ -356,13 +356,13 @@ export default async function PublicReportPage({
                         </dd>
                       </div>
                       <div className="bg-black/15 px-4 py-3">
-                        <dt className="text-xs text-[#647188]">Intervention</dt>
+                        <dt className="text-xs text-[#8d98ad]">Intervention</dt>
                         <dd className="mt-1 text-sm text-[#aeb7c8]">
                           {businessContext.intervention}
                         </dd>
                       </div>
                       <div className="bg-black/15 px-4 py-3">
-                        <dt className="text-xs text-[#647188]">
+                        <dt className="text-xs text-[#8d98ad]">
                           Effort estimé
                         </dt>
                         <dd className="mt-1 text-sm text-[#aeb7c8]">
@@ -379,13 +379,13 @@ export default async function PublicReportPage({
                         <h4 className="mt-2 font-semibold text-[#eef1ff]">
                           {remediation.title}
                         </h4>
-                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#647188]">
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#8d98ad]">
                           Ce que cela signifie
                         </p>
                         <p className="mt-1 text-sm leading-6 text-[#8f9aaf]">
                           {remediation.summary}
                         </p>
-                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#647188]">
+                        <p className="mt-4 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-[#8d98ad]">
                           Plan de correction
                         </p>
                         <ol className="mt-4 space-y-2 text-sm leading-6 text-[#aeb7c8]">

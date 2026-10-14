@@ -105,7 +105,7 @@ export function FollowupPanel({
       timeZone: "Europe/Paris",
     }).format(date);
   return (
-    <details className="mt-5 rounded-lg border border-[#303a50] bg-[#101724] p-4">
+    <details className="am-followup-panel mt-5 rounded-lg border border-[#303a50] bg-[#101724] p-4">
       <summary className="cursor-pointer font-semibold text-[#aab2ff]">
         Suivi de remédiation · {labels[followup?.status ?? "todo"]}
       </summary>
