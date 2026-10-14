@@ -18,6 +18,8 @@ import { AlertPreferencePanel } from "../../alert-preference-panel";
 import { ReportBrandingPanel } from "../../report-branding-panel";
 import { getThirdPartyOverview } from "@/lib/third-party-service";
 import { ThirdPartyPanel } from "./third-party-panel";
+import { DeepCrawlConsentPanel } from "./deep-crawl-consent-panel";
+import { getDeepCrawlConsent } from "@/lib/deep-crawl-consents";
 
 type SitePageProps = {
   params: Promise<{
@@ -142,6 +144,17 @@ export default async function SitePage({
     latestScan.status === "failed" ||
     latestScan.status === "cancelled";
   const canManage = history.access.role !== "member";
+  // Inactive in every environment unless explicitly enabled for a dedicated
+  // review. Existing Deep scans remain single-document in all cases.
+  const crawlConsentUiEnabled =
+    process.env.WEBPROBE_DEEP_MULTIPAGE_CONSENT_UI === "enabled";
+  const crawlConsent = crawlConsentUiEnabled
+    ? await getDeepCrawlConsent({
+        userId: session.user.id,
+        organizationId,
+        siteId,
+      })
+    : null;
   const ownershipCurrent = hasCurrentSiteOwnershipProof(history.site);
   const monitoringState = getMonitoringState({
     status: history.site.status,
@@ -397,6 +410,26 @@ export default async function SitePage({
         siteId={siteId}
         canManage={canManage}
       />
+
+      {crawlConsentUiEnabled ? (
+        <DeepCrawlConsentPanel
+          organizationId={organizationId}
+          siteId={siteId}
+          canManage={canManage}
+          consent={
+            crawlConsent
+              ? {
+                  maxPages: crawlConsent.maxPages,
+                  allowedPathPrefixes: crawlConsent.allowedPathPrefixes,
+                  expiresAt: crawlConsent.expiresAt.toISOString(),
+                  revokedAt: crawlConsent.revokedAt?.toISOString() ?? null,
+                  revision: crawlConsent.revision,
+                  isActive: crawlConsent.isActive,
+                }
+              : null
+          }
+        />
+      ) : null}
 
       <div className="py-10">
         <SiteVulnerabilityOverview
