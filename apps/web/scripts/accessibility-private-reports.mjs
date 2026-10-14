@@ -162,6 +162,70 @@ try {
         checks += 1;
       }
       if (isReport) {
+        // CSS print checks complement axe, which audits screen rendering only.
+        await page.emulateMedia({ media: "print" });
+        const printed = await page.evaluate(() => {
+          const cards = Array.from(
+            document.querySelectorAll(".report-finding-card"),
+          );
+          const followup = document.querySelector(
+            ".am-followup-panel > summary",
+          );
+          return {
+            cards: cards.map((card) => ({
+              sections: Array.from(
+                card.querySelectorAll(
+                  ":scope > .grid, :scope > dl, :scope > .report-remediation",
+                ),
+              ).map((section) => getComputedStyle(section).breakInside),
+            })),
+            followupColor: followup ? getComputedStyle(followup).color : null,
+          };
+        });
+        if (name !== "deep") {
+          assert.ok(
+            printed.cards.length > 0,
+            `${name}: fixture finding missing`,
+          );
+          assert.ok(
+            printed.cards.every(
+              (card) =>
+                card.sections.length >= 2 &&
+                card.sections.every(
+                  (value) => value === "avoid" || value === "avoid-page",
+                ),
+            ),
+            `${name}: finding details/remediation may break across print pages`,
+          );
+        }
+        if (printed.followupColor) {
+          // The follow-up control is printed on an almost-white surface.
+          const rgb = printed.followupColor
+            .match(/\d+(?:\.\d+)?/g)
+            ?.slice(0, 3)
+            .map(Number);
+          assert.ok(
+            rgb && rgb.length === 3,
+            `${name}: print color unavailable`,
+          );
+          const relativeLuminance = rgb
+            .map((value) => value / 255)
+            .map((value) =>
+              value <= 0.04045
+                ? value / 12.92
+                : ((value + 0.055) / 1.055) ** 2.4,
+            )
+            .reduce(
+              (sum, value, index) =>
+                sum + value * [0.2126, 0.7152, 0.0722][index],
+              0,
+            );
+          const contrastAgainstWhite = 1.05 / (relativeLuminance + 0.05);
+          assert.ok(
+            contrastAgainstWhite >= 4.5,
+            `${name}: insufficient print summary contrast ${contrastAgainstWhite.toFixed(2)}`,
+          );
+        }
         const pdf = await page.pdf({ format: "A4", printBackground: true });
         assert.ok(pdf.length > 10000, `${name}: PDF is empty`);
         await writeFile(
@@ -171,6 +235,7 @@ try {
             mode: 0o600,
           },
         );
+        await page.emulateMedia({ media: "screen" });
       }
       console.log(`PASS ${name} ${theme}: 320/375/640/768/1280 px`);
     }
@@ -272,11 +337,33 @@ try {
         !wasOpen,
       );
     }
+    await shared.emulateMedia({ media: "print" });
+    const sharedBreaks = await shared
+      .locator(".report-finding-card")
+      .evaluateAll((cards) =>
+        cards.map((card) =>
+          Array.from(
+            card.querySelectorAll(
+              ":scope > .grid, :scope > dl, :scope > .report-remediation",
+            ),
+          ).map((section) => getComputedStyle(section).breakInside),
+        ),
+      );
+    assert.ok(sharedBreaks.length > 0, "Shared report fixture finding missing");
+    assert.ok(
+      sharedBreaks.every(
+        (parts) =>
+          parts.length >= 2 &&
+          parts.every((value) => value === "avoid" || value === "avoid-page"),
+      ),
+      "Shared report: finding details/remediation may break across print pages",
+    );
     const pdf = await shared.pdf({ format: "A4", printBackground: true });
     assert.ok(pdf.length > 10000, "Shared PDF is empty");
     await writeFile(path.join(fixtureDir, `codex-shared-${theme}.pdf`), pdf, {
       mode: 0o600,
     });
+    await shared.emulateMedia({ media: "screen" });
     console.log(
       `PASS shared ${theme}: 320/375/640/768/1280 px, PDF ${pdf.length} bytes`,
     );
