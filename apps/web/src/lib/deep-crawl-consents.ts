@@ -226,5 +226,10 @@ export async function getDeepCrawlConsent(input: ConsentContext) {
       ),
     )
     .limit(1);
-  return row ?? null;
+  return row
+    ? {
+        ...row,
+        isActive: !row.revokedAt && row.expiresAt.getTime() > Date.now(),
+      }
+    : null;
 }
