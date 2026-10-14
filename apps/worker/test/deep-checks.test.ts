@@ -6,6 +6,67 @@ import { runChecks } from "../src/scan-engine/engine.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
 import { ScopeGuard } from "../src/scan-engine/scope-guard.js";
 
+describe("Deep browser navigation evidence", () => {
+  it("records discovered destinations without interpreting them as visited pages", async () => {
+    const profile = {
+      ...resolveScanProfile("verified_deep_audit"),
+      allowedChecks: ["deep-browser-observation"],
+    };
+    const runs = await runChecks({
+      profile,
+      registry: createDeepCheckRegistry(),
+      ledger: new BudgetLedger(profile.budget, Date.now()),
+      scope: new ScopeGuard("https://example.com/"),
+      authorization: { allowed: true, level: "deep" },
+      targetUrl: "https://example.com/",
+      observations: {
+        browser: {
+          finalUrl: "https://example.com/",
+          statusCode: 200,
+          pageCount: 1,
+          durationMs: 17,
+          deep: {
+            resources: [],
+            endpoints: [],
+            forms: [],
+            meta: [],
+            iframeSandboxes: [],
+            sri: [],
+            pageErrors: [],
+            consoleWarnings: [],
+            excludedThirdPartyRequests: 0,
+            documentLinks: {
+              sampled: 100,
+              inScopeDistinct: 30,
+              externalDistinct: 4,
+              truncated: true,
+            },
+          },
+        },
+      },
+    });
+    expect(
+      runs.find((run) => run.checkId === "deep-browser-observation"),
+    ).toMatchObject({
+      status: "completed",
+      evidence: [
+        {
+          data: {
+            pageCount: 1,
+            navigationScope: "entry-document-only",
+            documentLinks: {
+              sampled: 100,
+              inScopeDistinct: 30,
+              externalDistinct: 4,
+              truncated: true,
+            },
+          },
+        },
+      ],
+    });
+  });
+});
+
 describe("deep check registry", () => {
   it("keeps completed HTTP evidence when browser collection stops on bytes", async () => {
     const profile = {

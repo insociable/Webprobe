@@ -77,6 +77,8 @@ export function createDeepCheckRegistry(): CheckRegistry {
           data: {
             statusCode: browser.statusCode,
             pageCount: browser.pageCount,
+            navigationScope: "entry-document-only",
+            documentLinks: browser.deep?.documentLinks ?? null,
           },
         }),
       ];

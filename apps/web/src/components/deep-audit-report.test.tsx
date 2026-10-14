@@ -64,6 +64,70 @@ function completedDeepRuns() {
     ]);
 }
 
+describe("Deep navigation coverage transparency", () => {
+  it("distinguishes executed controls from site-wide coverage", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: completedDeepRuns().map((run) =>
+          run.checkId === "deep-browser-observation"
+            ? {
+                ...run,
+                evidence: [
+                  {
+                    data: {
+                      pageCount: 1,
+                      navigationScope: "entry-document-only",
+                      documentLinks: {
+                        sampled: 100,
+                        inScopeDistinct: 14,
+                        externalDistinct: 2,
+                        truncated: true,
+                      },
+                    },
+                  },
+                ],
+              }
+            : run,
+        ),
+      }),
+    );
+    expect(html).toContain("Portée réelle de l’observation navigateur");
+    expect(html).toContain("14");
+    expect(html).toContain("Échantillon limité aux 100 premiers liens");
+    expect(html).not.toContain("Couverture complète du périmètre");
+    expect(html).toContain("Il ne suit pas automatiquement les liens");
+  });
+
+  it("does not call checks complete when a non-scored check was skipped", () => {
+    const runs = completedDeepRuns().map((run) =>
+      run.checkId === "deep-performance" ? { ...run, status: "skipped" } : run,
+    );
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: runs,
+      }),
+    );
+    expect(html).toContain("Couverture à vérifier");
+    expect(html).not.toContain("Contrôles Deep exécutés");
+  });
+
+  it("keeps the limitation visible for historical evidence with no link counts", () => {
+    const html = renderToStaticMarkup(
+      createElement(DeepAuditReport, {
+        status: "completed",
+        summary: {},
+        checkRuns: completedDeepRuns(),
+      }),
+    );
+    expect(html).toContain("Portée réelle de l’observation navigateur");
+    expect(html).not.toContain("Échantillon de 0");
+  });
+});
+
 describe("Deep audit report rendering", () => {
   it("keeps performance-only coverage limits local, for historical Deep reports too", () => {
     const html = renderToStaticMarkup(

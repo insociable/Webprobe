@@ -497,7 +497,9 @@ export async function observeGuardedBrowserTarget(
                   ),
                   type: element.tagName.toLowerCase(),
                 }));
-              const links = Array.from(document.querySelectorAll("a[href]"))
+              const linkElements = document.querySelectorAll("a[href]");
+              const linksTruncated = linkElements.length > 100;
+              const links = Array.from(linkElements)
                 .slice(0, 100)
                 .map((element) => absolute(element.getAttribute("href") ?? ""));
               const forms = Array.from(document.forms)
@@ -566,7 +568,15 @@ export async function observeGuardedBrowserTarget(
                   integrityPresent: element.hasAttribute("integrity"),
                   crossorigin: element.getAttribute("crossorigin"),
                 }));
-              return { resources, links, forms, meta, iframeSandboxes, sri };
+              return {
+                resources,
+                links,
+                linksTruncated,
+                forms,
+                meta,
+                iframeSandboxes,
+                sri,
+              };
             }),
             input.signal,
             Math.max(1, Math.min(2_000, input.ledger.remainingDurationMs())),
@@ -592,6 +602,19 @@ export async function observeGuardedBrowserTarget(
           inScope,
           statusCode: null,
         });
+    }
+    const entryUrl = safeObservedUrl(finalUrl);
+    const distinctInternalLinks = new Set<string>();
+    const distinctExternalLinks = new Set<string>();
+    for (const raw of dom?.links ?? []) {
+      const normalized = safeObservedUrl(raw);
+      if (normalized && normalized !== entryUrl) {
+        if (input.scope.allows(raw).allowed) {
+          distinctInternalLinks.add(normalized);
+        } else {
+          distinctExternalLinks.add(normalized);
+        }
+      }
     }
     for (const raw of dom?.links ?? []) {
       const url = safeObservedUrl(raw);
@@ -625,6 +648,14 @@ export async function observeGuardedBrowserTarget(
       pageCount: session.pageCount(),
       durationMs: Date.now() - startedAt,
       deep: {
+        documentLinks: dom
+          ? {
+              sampled: dom.links.length,
+              inScopeDistinct: distinctInternalLinks.size,
+              externalDistinct: distinctExternalLinks.size,
+              truncated: dom.linksTruncated === true,
+            }
+          : null,
         performanceCollectionEnabled: collectionEnabled,
         ...(performance ? { performance } : {}),
         resources: [...resources.values()],

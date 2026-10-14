@@ -26,6 +26,13 @@ export type BrowserRuntimeObservation = {
   deep?: {
     performance?: ReturnType<typeof analyzeObservedPerformance>;
     performanceCollectionEnabled?: boolean;
+    /** Observation passive de liens sur le seul document ouvert. Aucun crawl. */
+    documentLinks?: {
+      sampled: number;
+      inScopeDistinct: number;
+      externalDistinct: number;
+      truncated: boolean;
+    } | null;
     resources: Array<{
       url: string;
       type: string;

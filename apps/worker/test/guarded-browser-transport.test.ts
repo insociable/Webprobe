@@ -67,7 +67,14 @@ describe("candidate guarded browser transport", () => {
             type: "script",
           },
         ],
-        links: ["https://example.com/api?token=secret"],
+        links: [
+          "https://example.com/api?token=secret",
+          "https://example.com/api?other=private",
+          "https://example.com/#fragment-secret",
+          "https://cdn.example.net/page?token=secret",
+          "javascript:alert(1)",
+        ],
+        linksTruncated: true,
         forms: [
           {
             action: "https://example.com/login?token=secret",
@@ -156,6 +163,12 @@ describe("candidate guarded browser transport", () => {
     expect(observation.deep?.forms).toMatchObject([
       { csrfHint: true, passwordFields: 1 },
     ]);
+    expect(observation.deep?.documentLinks).toEqual({
+      sampled: 5,
+      inScopeDistinct: 1,
+      externalDistinct: 1,
+      truncated: true,
+    });
     expect(observation.deep?.cookies).toMatchObject([
       { name: "session", secure: true, httpOnly: true, sameSite: "Lax" },
     ]);
