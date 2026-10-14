@@ -394,3 +394,8 @@ export function hasCurrentSiteOwnershipProof(
     return false;
   }
 }
+
+export {
+  classifyDeepCrawlPath,
+  validDeepCrawlConsentPrefix,
+} from "./deep-crawl-paths.js";

@@ -8,6 +8,7 @@ import { Resolver } from "node:dns/promises";
 import {
   deepAuditAuthorizations,
   deepAuditChallenges,
+  deepCrawlConsents,
   memberships,
   scanAttempts,
   scans,
@@ -176,6 +177,19 @@ export async function issueDeepAuditChallenge(input: {
       .update(deepAuditAuthorizations)
       .set({ revokedAt: now, revalidatedAt: null })
       .where(eq(deepAuditAuthorizations.siteId, input.siteId));
+    await tx
+      .update(deepCrawlConsents)
+      .set({
+        revokedAt: now,
+        revision: sql`${deepCrawlConsents.revision} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(deepCrawlConsents.siteId, input.siteId),
+          sql`${deepCrawlConsents.revokedAt} is null`,
+        ),
+      );
     await fenceRunningDeepAttempts(tx, input.siteId, now);
     return { recordName: name, token, expiresAt };
   });
@@ -296,6 +310,19 @@ export async function revokeDeepAuditGrant(input: {
         and(
           eq(deepAuditChallenges.siteId, input.siteId),
           eq(deepAuditChallenges.organizationId, input.organizationId),
+        ),
+      );
+    await tx
+      .update(deepCrawlConsents)
+      .set({
+        revokedAt: now,
+        revision: sql`${deepCrawlConsents.revision} + 1`,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(deepCrawlConsents.siteId, input.siteId),
+          sql`${deepCrawlConsents.revokedAt} is null`,
         ),
       );
     await fenceRunningDeepAttempts(tx, input.siteId, now);

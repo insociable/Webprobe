@@ -1,3 +1,7 @@
+import {
+  classifyDeepCrawlPath,
+  validDeepCrawlConsentPrefix,
+} from "@agency-saas/security";
 import { classifyCrawlCandidate } from "../scanner-v2/crawl.js";
 import {
   isRobotsPathAllowed,
@@ -16,6 +20,9 @@ export type DeepCrawlConsent = Readonly<{
   organizationId: string;
   siteId: string;
   canonicalUrl: string;
+  /** Binds the consent to the exact currently-verified DNS generations. */
+  ownershipGeneration: string;
+  deepGenerationId: string;
   maxPages: number;
   /** Exact, explicit paths or subtree prefixes ending in /. Never root /. */
   allowedPathPrefixes: readonly string[];
@@ -70,79 +77,6 @@ export type DeepCrawlPlanResult =
 
 export const HARD_MAX_DEEP_CRAWL_PAGES = 5;
 export const MAX_DEEP_CRAWL_LINK_SAMPLE = 100;
-const MAX_CRAWL_PATH_LENGTH = 256;
-const MAX_PATH_SEGMENT_LENGTH = 64;
-const SENSITIVE_SEGMENTS = new Set([
-  "account",
-  "admin",
-  "api",
-  "auth",
-  "billing",
-  "cart",
-  "checkout",
-  "confirm",
-  "dashboard",
-  "delete",
-  "destroy",
-  "edit",
-  "email",
-  "export",
-  "forgot-password",
-  "invite",
-  "invoices",
-  "login",
-  "logout",
-  "manage",
-  "oauth",
-  "order",
-  "orders",
-  "password",
-  "payment",
-  "payments",
-  "profile",
-  "publish",
-  "register",
-  "remove",
-  "retry",
-  "reset",
-  "restart",
-  "save",
-  "send",
-  "session",
-  "sessions",
-  "settings",
-  "sign-in",
-  "sign-out",
-  "signin",
-  "signout",
-  "start",
-  "stop",
-  "submit",
-  "subscribe",
-  "token",
-  "trigger",
-  "unsubscribe",
-  "update",
-  "upload",
-  "user",
-  "users",
-  "wp-admin",
-  "wp-json",
-  "wp-login.php",
-]);
-
-function validConsentPathPrefix(raw: string): boolean {
-  return (
-    typeof raw === "string" &&
-    raw.startsWith("/") &&
-    raw !== "/" &&
-    raw.length <= MAX_CRAWL_PATH_LENGTH &&
-    /^[a-zA-Z0-9_./~-]+$/.test(raw) &&
-    !raw.includes("//") &&
-    classifyPath(new URL(raw, "https://example.invalid/")) === null
-  );
-}
-
 function pathWithinConsent(path: string, prefixes: readonly string[]): boolean {
   return prefixes.some(
     (prefix) =>
@@ -203,6 +137,11 @@ export function verifyDeepCrawlGate(input: {
     consent.siteId !== input.siteId ||
     consent.organizationId !== input.organizationId ||
     !sameUrl(consent.canonicalUrl, input.canonicalUrl) ||
+    !consent.ownershipGeneration ||
+    !consent.deepGenerationId ||
+    consent.ownershipGeneration !==
+      authorization.grantIdentity.ownershipGeneration ||
+    consent.deepGenerationId !== authorization.grantIdentity.generationId ||
     !Number.isSafeInteger(consent.maxPages) ||
     consent.maxPages < 2 ||
     consent.maxPages > HARD_MAX_DEEP_CRAWL_PAGES ||
@@ -212,7 +151,7 @@ export function verifyDeepCrawlGate(input: {
     consent.allowedPathPrefixes.length > 10 ||
     new Set(consent.allowedPathPrefixes).size !==
       consent.allowedPathPrefixes.length ||
-    !consent.allowedPathPrefixes.every(validConsentPathPrefix) ||
+    !consent.allowedPathPrefixes.every(validDeepCrawlConsentPrefix) ||
     !(input.now instanceof Date) ||
     !Number.isFinite(input.now.getTime()) ||
     !(consent.grantedAt instanceof Date) ||
@@ -232,43 +171,6 @@ export function verifyDeepCrawlGate(input: {
     return { allowed: false, reason: "robots-unavailable" };
   }
   return { allowed: true, maxPages: consent.maxPages };
-}
-
-/**
- * No ambiguity is permitted for unattended GET navigations. Sensitive paths,
- * query strings, encoded separators, non-HTML targets and URLs that might
- * trigger state-changing routes are excluded; false negatives are intentional.
- */
-function classifyPath(url: URL): DeepCrawlRejection | null {
-  if (url.search) return "query-parameters";
-  const path = url.pathname;
-  if (
-    path.length > MAX_CRAWL_PATH_LENGTH ||
-    !/^[a-zA-Z0-9_./~-]*$/.test(path) ||
-    path.includes("//")
-  ) {
-    return "sensitive-path";
-  }
-  const segments = path.split("/").filter(Boolean);
-  for (const segment of segments) {
-    const lower = segment.toLowerCase();
-    if (
-      segment.length > MAX_PATH_SEGMENT_LENGTH ||
-      segment.startsWith(".") ||
-      SENSITIVE_SEGMENTS.has(lower) ||
-      /^(?:admin|auth|delete|edit|login|logout|reset|token|user)[-_.]/.test(
-        lower,
-      ) ||
-      /(?:^|[-_.])(?:token|secret|password|key)(?:$|[-_.])/.test(lower) ||
-      /^[0-9a-f]{24,}$/i.test(segment) ||
-      /^[a-z0-9_-]{32,}$/i.test(segment)
-    ) {
-      return "sensitive-path";
-    }
-  }
-  const tail = segments.at(-1) ?? "";
-  if (tail.includes(".") && !/\.html?$/i.test(tail)) return "non-document";
-  return null;
 }
 
 function rejected(
@@ -303,7 +205,7 @@ export function planDeepCrawlLinks(
       current.origin !== canonical.origin ||
       current.username ||
       current.password ||
-      classifyPath(current)
+      classifyDeepCrawlPath(current)
     ) {
       return {
         allowed: false,
@@ -358,7 +260,7 @@ export function planDeepCrawlLinks(
       continue;
     }
     const url = new URL(outcome.candidate.navigationUrl);
-    const unsafe = classifyPath(url);
+    const unsafe = classifyDeepCrawlPath(url);
     if (unsafe) {
       reject(unsafe);
       continue;
