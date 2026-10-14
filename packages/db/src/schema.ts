@@ -342,6 +342,56 @@ export const deepAuditAuthorizations = pgTable(
   ],
 );
 
+/** Explicitly disabled-by-default consent to navigate beyond the Deep entry page.
+ * Stored per site and tied to BOTH independently verified DNS generations.
+ */
+export const deepCrawlConsents = pgTable(
+  "deep_crawl_consents",
+  {
+    siteId: uuid("site_id")
+      .primaryKey()
+      .references(() => sites.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    canonicalUrl: text("canonical_url").notNull(),
+    ownershipGeneration: uuid("ownership_generation").notNull(),
+    deepGenerationId: uuid("deep_generation_id").notNull(),
+    allowedPathPrefixes: jsonb("allowed_path_prefixes")
+      .$type<string[]>()
+      .notNull(),
+    maxPages: integer("max_pages").notNull(),
+    grantedBy: uuid("granted_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revision: integer("revision").default(1).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("deep_crawl_consents_organization_idx").on(table.organizationId),
+    check(
+      "deep_crawl_consents_max_pages_valid",
+      sql`${table.maxPages} between 2 and 5`,
+    ),
+    check("deep_crawl_consents_revision_valid", sql`${table.revision} > 0`),
+    check(
+      "deep_crawl_consents_expiry_valid",
+      sql`${table.expiresAt} > ${table.grantedAt} and ${table.expiresAt} <= ${table.grantedAt} + interval '24 hours'`,
+    ),
+    check(
+      "deep_crawl_consents_path_list_valid",
+      sql`jsonb_typeof(${table.allowedPathPrefixes}) = 'array' and jsonb_array_length(${table.allowedPathPrefixes}) between 1 and 10`,
+    ),
+  ],
+);
+
 export const deepAuditChallenges = pgTable(
   "deep_audit_challenges",
   {

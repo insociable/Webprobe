@@ -14,6 +14,7 @@ const siteId = "site-1";
 const organizationId = "org-1";
 const canonicalUrl = "https://example.com/";
 const identity = {
+  generationId: "deep-generation-1",
   canonicalUrl,
   siteVerifiedAt: now,
   ownershipGeneration: "generation-1",
@@ -31,6 +32,8 @@ const consent: DeepCrawlConsent = {
   organizationId,
   siteId,
   canonicalUrl,
+  ownershipGeneration: "generation-1",
+  deepGenerationId: "deep-generation-1",
   maxPages: 3,
   allowedPathPrefixes: ["/blog/", "/news/", "/contact", "/public", "/about"],
   grantedAt: new Date("2026-10-14T13:00:00Z"),
@@ -116,6 +119,8 @@ describe("Deep multi-page consent gate: fail-closed, offline", () => {
       { siteId: "site-2" },
       { organizationId: "org-2" },
       { canonicalUrl: "https://other.example/" },
+      { ownershipGeneration: "old-generation" },
+      { deepGenerationId: "rotated-generation" },
       { maxPages: 1 },
       { maxPages: 6 },
       { maxPages: 40 },

@@ -183,6 +183,13 @@
       "when": 1791559777948,
       "tag": "0025_superb_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791994033830,
+      "tag": "0026_slim_salo",
+      "breakpoints": true
     }
   ]
 }
