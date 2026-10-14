@@ -25,8 +25,28 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false"
 
+  accepted-dev-advisory:
+    name: Verify accepted dev-only advisory
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.17.1 --activate
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check scoped exception and production dependency graph
+        run: node scripts/security/check-braces-exception.mjs
+
   dependencies:
     name: OSV dependency scan
+    needs: accepted-dev-advisory
     if: ${{ github.event_name != 'pull_request' }}
     permissions:
       actions: read
