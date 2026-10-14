@@ -244,6 +244,22 @@ export function DeepAuditReport({
   });
   const coverage = asRecord(summary.v3Coverage);
   const budget = coverage ? asRecord(coverage.budgetUsed) : null;
+  const browserRun = checkRuns.find(
+    (run) =>
+      run.checkId === "deep-browser-observation" && run.status === "completed",
+  );
+  const browserEvidence = asRecord(browserRun?.evidence[0]?.data);
+  const documentLinks = asRecord(browserEvidence?.documentLinks);
+  const boundedLinkCount = (value: unknown): number | null =>
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 100
+      ? value
+      : null;
+  const sampledLinks = boundedLinkCount(documentLinks?.sampled);
+  const inScopeLinks = boundedLinkCount(documentLinks?.inScopeDistinct);
+  const externalLinks = boundedLinkCount(documentLinks?.externalDistinct);
   const reasons = Array.isArray(coverage?.reasons)
     ? coverage.reasons.filter(
         (item): item is string => typeof item === "string",
@@ -292,6 +308,7 @@ export function DeepAuditReport({
   const coverageComplete =
     status === "completed" &&
     reasons.length === 0 &&
+    skipped === 0 &&
     failed === 0 &&
     !score.limitedCoverage;
   const performanceOnlySummaryLimit =
@@ -319,7 +336,7 @@ export function DeepAuditReport({
         </div>
         <span className="rounded-md border border-[#39445d] bg-[#111827] px-3 py-2 text-sm text-[#b6c0d1]">
           {coverageComplete
-            ? "Couverture complète du périmètre"
+            ? "Contrôles Deep exécutés"
             : performanceOnlySummaryLimit
               ? "Contrôles exécutés · Performance partielle"
               : "Couverture à vérifier"}
@@ -350,6 +367,36 @@ export function DeepAuditReport({
           certification. Les contrôles détaillés font foi. Comparez uniquement
           des scans utilisant la même version de règles.
         </p>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-[#39445d] bg-[#111827] p-5">
+        <h3 className="text-base font-semibold text-white/90">
+          Portée réelle de l’observation navigateur
+        </h3>
+        <p className="mt-2 text-sm leading-6 text-white/75">
+          L’audit Deep ouvre le document d’entrée et observe les ressources
+          qu’il charge. Il ne suit pas automatiquement les liens vers d’autres
+          pages : un budget autorisant plusieurs pages ne signifie pas qu’elles
+          ont été visitées. Une couverture complète des contrôles ne signifie
+          donc pas un audit de toutes les pages du site.
+        </p>
+        {sampledLinks !== null &&
+        inScopeLinks !== null &&
+        externalLinks !== null ? (
+          <p className="mt-2 text-sm leading-6 text-white/75">
+            Échantillon de {sampledLinks} lien{sampledLinks > 1 ? "s" : ""} du
+            document : {inScopeLinks} destination
+            {inScopeLinks > 1 ? "s" : ""} interne
+            {inScopeLinks > 1 ? "s" : ""} distincte
+            {inScopeLinks > 1 ? "s" : ""} non parcourue
+            {inScopeLinks > 1 ? "s" : ""} et {externalLinks} destination
+            {externalLinks > 1 ? "s" : ""} externe
+            {externalLinks > 1 ? "s" : ""}.
+            {documentLinks?.truncated === true
+              ? " Échantillon limité aux 100 premiers liens : le total du site est inconnu."
+              : " Ce relevé ne constitue pas un inventaire exhaustif du site."}
+          </p>
+        ) : null}
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
