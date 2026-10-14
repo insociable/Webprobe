@@ -18,6 +18,7 @@ import { BudgetLedger } from "./budget-ledger.js";
 import { ScopeGuard } from "./scope-guard.js";
 import type { ScanProfile } from "./types.js";
 import { abortable, cancellableDnsResolver, throwIfAborted } from "./abort.js";
+import type { createDeepNavigationGuard } from "./deep-navigation-guard.js";
 import { observeCookiesBeforeInteraction } from "./cookie-consent-observation.js";
 import {
   installLabPerformanceObserver,
@@ -88,6 +89,8 @@ export async function createGuardedBrowserSession(input: {
   signal?: AbortSignal;
   beforeNetwork?: () => Promise<void>;
   onExcludedUrl?: (url: string) => void;
+  /** Optional and fail-closed; not provided by the live Deep dispatch. */
+  navigationGuard?: ReturnType<typeof createDeepNavigationGuard>;
 }): Promise<IsolatedBrowserSession> {
   throwIfAborted(input.signal);
   const { authorization, ledger, profile, scope } = input;
@@ -132,6 +135,9 @@ export async function createGuardedBrowserSession(input: {
     maxPages: profile.budget.pages,
     maxRequests: profile.budget.httpRequests,
     maxRequestsPerHostname: profile.budget.maxRequestsPerHostname,
+    ...(input.navigationGuard
+      ? { requestPolicy: input.navigationGuard.authorizeRequest }
+      : {}),
     networkGuard: {
       ...(input.signal ? { signal: input.signal } : {}),
       maxTransferredBytes: profile.budget.bytesTransferred,
@@ -145,6 +151,7 @@ export async function createGuardedBrowserSession(input: {
       async allowRequest(request) {
         try {
           await input.beforeNetwork?.();
+          await input.navigationGuard?.assertCurrent();
         } catch {
           return false;
         }
@@ -169,6 +176,7 @@ export async function createGuardedBrowserSession(input: {
       async allowProxyTarget(url) {
         try {
           await input.beforeNetwork?.();
+          await input.navigationGuard?.assertCurrent();
         } catch {
           return false;
         }
@@ -185,6 +193,7 @@ export async function createGuardedBrowserSession(input: {
       async allowProxyConnection(url) {
         try {
           await input.beforeNetwork?.();
+          await input.navigationGuard?.assertCurrent();
         } catch {
           return false;
         }
@@ -409,11 +418,18 @@ export async function observeGuardedBrowserTarget(
               : null;
       if (category) consoleWarnings.push(category);
     });
-    const response = await abortable(
+    // A future opted-in multi-page crawl must arm *each* page.goto. The
+    // currently active single-page scanner has no navigationGuard, preserving
+    // its established runtime behavior.
+    const navigateEntry = () =>
       page.goto(input.targetUrl, {
         waitUntil: "domcontentloaded",
         timeout: input.profile.navigationTimeoutMs,
-      }),
+      });
+    const response = await abortable(
+      input.navigationGuard
+        ? input.navigationGuard.withNavigation(input.targetUrl, navigateEntry)
+        : navigateEntry(),
       input.signal,
     );
     throwIfAborted(input.signal);

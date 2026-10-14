@@ -79,6 +79,8 @@ export type BrowserRequestPolicyInput = {
   method: string;
   resourceType: string;
   isNavigationRequest: boolean;
+  /** False for iframes and when the main frame cannot be established. */
+  isMainFrameNavigation?: boolean;
   redirectedFromUrl: string | null;
 };
 
@@ -358,11 +360,21 @@ export async function createIsolatedBrowserSession(
         return;
       }
 
+      let isMainFrameNavigation = false;
+      if (request.isNavigationRequest()) {
+        try {
+          const frame = request.frame();
+          isMainFrameNavigation = frame === frame.page().mainFrame();
+        } catch {
+          // Unknown or service-worker-owned frames are rejected by strict guards.
+        }
+      }
       const requestInput: BrowserRequestPolicyInput = {
         url: request.url(),
         method: request.method(),
         resourceType: request.resourceType(),
         isNavigationRequest: request.isNavigationRequest(),
+        isMainFrameNavigation,
         redirectedFromUrl: request.redirectedFrom()?.url() ?? null,
       };
       if (options.networkGuard) {

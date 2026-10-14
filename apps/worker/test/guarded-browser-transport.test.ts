@@ -8,6 +8,7 @@ import {
   observeGuardedBrowserTarget,
 } from "../src/scan-engine/guarded-browser-transport.js";
 import { resolveScanProfile } from "../src/scan-engine/profiles.js";
+import { createDeepNavigationGuard } from "../src/scan-engine/deep-navigation-guard.js";
 import { ScopeGuard } from "../src/scan-engine/scope-guard.js";
 
 function rawConnect(port: number, authority: string): Promise<string> {
@@ -284,6 +285,102 @@ describe("candidate guarded browser transport", () => {
       expect(ledger.snapshot().used.httpRequests).toBe(2);
       expect(ledger.snapshot().reasons).not.toContain("scope-denied");
       expect(ledger.snapshot().reasons).toContain("budget-host-requests");
+    } finally {
+      await session.close();
+    }
+  });
+
+  it("enforces armed document routes and revocation at browser and proxy boundaries", async () => {
+    let routeHandler: ((route: any) => Promise<void>) | undefined;
+    let revoked = false;
+    const resolver = vi.fn<DnsResolver>(async () => [
+      { address: "93.184.216.34", family: 4 },
+    ]);
+    const mainFrame: any = {};
+    mainFrame.page = () => ({ mainFrame: () => mainFrame });
+    const fakeContext = {
+      setDefaultNavigationTimeout: () => undefined,
+      setDefaultTimeout: () => undefined,
+      on: () => fakeContext,
+      route: async (
+        _pattern: string,
+        handler: (route: any) => Promise<void>,
+      ) => {
+        routeHandler = handler;
+      },
+      routeWebSocket: async () => undefined,
+      close: async () => undefined,
+    } as unknown as BrowserContext;
+    const fakeBrowser = {
+      newContext: async () => fakeContext,
+      close: async () => undefined,
+    } as unknown as Browser;
+    const guard = createDeepNavigationGuard({
+      canonicalUrl: "https://example.com/",
+      allowedPathPrefixes: ["/blog/"],
+      maxPages: 3,
+      assertCurrent: async () => {
+        if (revoked) throw new Error("Consent revoked");
+      },
+    });
+    const profile = resolveScanProfile("verified_deep_audit");
+    const session = await createGuardedBrowserSession({
+      profile,
+      authorization: { allowed: true, level: "deep" },
+      scope: new ScopeGuard("https://example.com/"),
+      ledger: new BudgetLedger(profile.budget, Date.now()),
+      signal: new AbortController().signal,
+      beforeNetwork: async () => undefined,
+      resolver,
+      launchBrowser: async () => fakeBrowser,
+      navigationGuard: guard,
+    });
+    const invoke = async (url: string, parent: string | null = null) => {
+      const abort = vi.fn();
+      const cont = vi.fn();
+      await routeHandler?.({
+        request: () => ({
+          url: () => url,
+          method: () => "GET",
+          resourceType: () => "document",
+          isNavigationRequest: () => true,
+          frame: () => mainFrame,
+          redirectedFrom: () => (parent ? { url: () => parent } : null),
+        }),
+        abort,
+        continue: cont,
+      });
+      return {
+        allowed: cont.mock.calls.length,
+        denied: abort.mock.calls.length,
+      };
+    };
+    try {
+      expect(await invoke("https://example.com/")).toEqual({
+        allowed: 0,
+        denied: 1,
+      });
+      await guard.withNavigation("https://example.com/blog/post", async () => {
+        expect(await invoke("https://example.com/blog/post")).toEqual({
+          allowed: 1,
+          denied: 0,
+        });
+        expect(
+          await invoke(
+            "https://example.com/logout",
+            "https://example.com/blog/post",
+          ),
+        ).toEqual({ allowed: 0, denied: 1 });
+        revoked = true;
+        expect(await invoke("https://example.com/blog/post")).toEqual({
+          allowed: 0,
+          denied: 1,
+        });
+      });
+      expect(await rawConnect(session.proxy.port, "example.com:443")).toContain(
+        "403 Forbidden",
+      );
+      expect(resolver).not.toHaveBeenCalled();
     } finally {
       await session.close();
     }
